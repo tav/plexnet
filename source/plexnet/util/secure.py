@@ -232,7 +232,7 @@ def secure_python():
 
     # monkeypatch modules which require ``func_code``
     patch_mod = 'secure%s' % ''.join(map(str, sys.version_info[:2]))
-    __import__('bootstrap.util.%s' % patch_mod, {}, {}, [patch_mod])
+    __import__('plexnet.util.%s' % patch_mod, {}, {}, [patch_mod])
 
 secure_python._initialised = None
 
