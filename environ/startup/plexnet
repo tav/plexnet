@@ -1,0 +1,16 @@
+#! /usr/bin/env python2.6
+
+import sys
+
+import plexnetenv
+import plexnet
+
+if '--test' in sys.argv:
+
+    while '--test' in sys.argv:
+        sys.argv.remove('--test')
+
+    from plexnet.tool.testing import run_tests
+    sys.exit(run_tests())
+
+plexnet.setup(debug=0)
