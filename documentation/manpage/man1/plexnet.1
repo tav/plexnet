@@ -1,0 +1,164 @@
+.\" -*- nroff -*-
+.\"
+.\" Author: tav <tav@espians.com>
+.\" License: public domain
+.\"
+.\" To view this file while editing, run it through nroff/groff:
+.\"
+.\"   nroff -Tascii -man kalati.1 | less
+.\"
+.\" or, if your terminal can handle it:
+.\"
+.\"   nroff -Tutf8 -man kalati.1 | less
+.\"
+.\" ----------------------------------------------------------------------------
+.\" quick guide to the man macro package
+.\" ----------------------------------------------------------------------------
+.\"
+.\" bp : starts new page
+.\" sp : lines of blank space : default 1
+.\" ls : set line spacing to the argument : default 1
+.\" ce : centre : enable .ce N : disable .ce 0
+.\"
+.\" PD : adjust the empty space before a new paragraph/section
+.\"
+.\" P/PP : line break followed by a vertical space downward and restore margin
+.\"
+.\" br : line break with no vertical space following it
+.\"
+.\" HP : paragraph with hanging left indentation
+.\"
+.\" RS : move left margin to the right
+.\" RE : move left margin to the left
+.\"
+.\" B : bold
+.\" I : italics
+.\" R : roman
+.\"
+.\" BI : alternates arguments as bold, italic
+.\" IB : alternates arguments as italic, bold
+.\"
+.\" similarly: RI / IR / BR / RB (alternative with roman)
+.\"
+.\" SM : one point smaller than the default font
+.\" SB : bold face and one point smaller then the default font
+.\"
+.\" TH : title section
+.\"
+.\" SH : heading
+.\" SS : subheading
+.\"
+.\" IP : indented paragraph with first argument to mark its beginning and
+.\"      second argument to denote indentation level
+.\"
+.\"      e.g. to start a para with bullets: .IP \(bu 4
+.\"
+.\" TP : indented paragraph with label
+.\"
+.\" \fB ... \fP : like the html <b> ... </b>
+.\" \fI ... \fP : like the html <i> ... </i>
+.\"
+.\" ----------------------------------------------------------------------------
+.\" header
+.\" ----------------------------------------------------------------------------
+.\"
+.TH PLEXNET "1" "Oct 27th, 2008" "" "Help Page"
+.\"
+.\" ----------------------------------------------------------------------------
+.\" set single line spacing
+.\" ----------------------------------------------------------------------------
+.\"
+.ls 1
+.\"
+.\" ----------------------------------------------------------------------------
+.\" title/name
+.\" ----------------------------------------------------------------------------
+.\"
+.SH NAME
+plexnet \-\- a peer-to-peer, network-based, high-level platform.
+.\"
+.\" ----------------------------------------------------------------------------
+.\" command line options overview
+.\" ----------------------------------------------------------------------------
+.\"
+.SH SYNOPSIS
+.B plexnet
+{
+.B \-s
+|
+.B \-c
+}
+[
+.B \-h
+|
+.I options
+]
+.\"
+.\" ----------------------------------------------------------------------------
+.\" description
+.\" ----------------------------------------------------------------------------
+.\"
+.SH DESCRIPTION
+Plexnet is an implementation of a set of Open Web standards centred around:
+.PP
+.RS
+* Providing a high-level Internet operating system.
+.br
+* Enabling the Espian Ecology.
+.br
+* Creating a decentralised network.
+.RE
+.PP
+You can verify that the code base is valid by using the \fB--test\fP flag.
+.\"
+.\" ----------------------------------------------------------------------------
+.\" the various command line options
+.\" ----------------------------------------------------------------------------
+.\"
+.SH COMMAND LINE OPTIONS
+.TP
+.B \-s
+Start or stop a Plexnet node.
+.TP
+.B \-c
+Start a low-level interactive client.
+.TP
+.B \-h
+Display the builtin help.
+.\"
+.\" ----------------------------------------------------------------------------
+.\" authors (general credits)
+.\" ----------------------------------------------------------------------------
+.\"
+.SH AUTHORS
+The Plexnet was originally conceived and released by tav@espians.com. Several
+talented hackers have since joined the effort. You can find a complete list of
+the Plexnet Authors in the "documentation/CREDITS.txt" file.
+.PP
+In the interests of making the best use of existing work done by others and
+avoiding the Not Invented Here (NIH) Syndrome, existing open works have been
+used wherever possible and appropriate.
+.\"
+.\" ----------------------------------------------------------------------------
+.\" external resources
+.\" ----------------------------------------------------------------------------
+.\"
+.SH INTERNET RESOURCES
+IRC channels:  \fIirc.freenode.net #esp\fP
+.br
+Main website:  http://www.plexnet.org
+.br
+Mailing list:  developers@plexnet.org
+.br
+.\"
+.\" ----------------------------------------------------------------------------
+.\" copyright/licensing info
+.\" ----------------------------------------------------------------------------
+.\"
+.SH LICENSING
+All code by the Plexnet Authors is released as \fIPublic Domain\fP in the hopes
+of enriching the polysphere. You may use it however you like.
+.PP
+The Plexnet makes use of many works authored by third-parties. These works come
+with their own separate copyright and licensing terms. Please see the
+"documentation/LICENSE.txt" file for further info.

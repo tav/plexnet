@@ -1,0 +1,92 @@
+=======================
+Copyright and Licensing
+=======================
+
+:X-Created: [2008-11-04, 03:30]
+
+All work in this repository by the `Espians <credits.html#authors>`_ is hereby
+released into the `Public Domain
+<http://creativecommons.org/licenses/publicdomain>`_. To view a copy of the
+`Public Domain Dedication`_ see below or visit::
+
+  Creative Commons
+  559 Nathan Abbott Way
+  Stanford
+  California 94305
+  USA
+
+All included works authored by third-parties are understood by the Espians to be
+distributable under comparable terms -- that is, as freely distributable works.
+Their specific copyright and licensing information is documented in the
+`Third-Party Intellectual Property`_ section below.
+
+All trademarks and registered trademarks mentioned herein are the property of
+their respective owners. And, finally, with regards to warranty:
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+  EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+  OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+  NONINFRINGEMENT OF THIRD PARTY RIGHTS. IN NO EVENT SHALL ANYONE
+  BE LIABLE FOR ANY CLAIM, OR ANY SPECIAL INDIRECT OR CONSEQUENTIAL
+  DAMAGES, OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE,
+  DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
+  OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE
+  USE OR PERFORMANCE OF THIS SOFTWARE.
+
+In other words, if as a result of reading or using any of this, your cat dies
+and your wife runs away with the milkman, the Espians are not responsible in any
+way.
+
+------------------------
+Public Domain Dedication
+------------------------
+
+The person or persons who have associated work with this document (the
+"Dedicator" or "Certifier") hereby either:
+
+  (a) certifies that, to the best of their knowledge, the work of authorship
+      identified is in the public domain of the country from which the work is
+      published,
+
+      or
+
+  (b) hereby dedicates whatever copyright the dedicators holds in the work of
+      authorship identified below (the "Work") to the public domain.
+
+A Certifier, morever, dedicates any copyright interest he may have in the
+associated work, and for these purposes, is described as a "Dedicator" below.
+
+A Certifier has taken reasonable steps to verify the copyright status of this
+work. Certifier recognizes that their good faith efforts may not shield them
+from liability if in fact the work certified is not in the public domain.
+
+A Dedicator makes this dedication for the benefit of the public at large and to
+the detriment of the Dedicator's heirs and successors. Dedicators intend this
+dedication to be an overt act of relinquishment in perpetuity of all present and
+future rights under copyright law, whether vested or contingent, in the Work.
+
+Dedicator understand that such relinquishment of all rights includes the
+relinquishment of all rights to enforce (by lawsuit or otherwise) those
+copyrights in the Work.
+
+Dedicator recognizes that, once placed in the public domain, the Work may be
+freely reproduced, distributed, transmitted, used, modified, built upon, or
+otherwise exploited by anyone for any purpose, commercial or non-commercial, and
+in any way, including by methods that have not yet been invented or conceived.
+
+---------------------------------
+Third-Party Intellectual Property
+---------------------------------
+
+Use is made of many works authored by third-parties. These works come with their
+own copyright and licensing terms and, as such, are exempt from the above
+`Public Domain Dedication`_. Some of the terms of these works are listed below:
+
+* The ``unicode`` data files:
+
+  - Copyright (c) 1991-2008 Unicode, Inc. All rights reserved.
+  - Distributed under the Terms of Use in http://www.unicode.org/copyright.html.
+
+The specific ``LICENSE.txt`` files for third-party works are included in the
+directory enclosing the respective source files within the top level
+``third_party`` directory.

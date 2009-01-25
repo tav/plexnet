@@ -1,0 +1,60 @@
+=======
+Credits
+=======
+
+:X-Created: [2008-11-04, 03:30]
+
+
+Authors
+=======
+
+* **evangineer**
+
+  * Mamading Ceesay
+  * mamading@gmail.com
+  * http://evangineer.agoraworx.com/blog/
+
+* **Killarny**
+
+  * \H. Lucas Graybill
+  * killarny@gmail.com
+  * http://killarny-site.appspot.com/
+
+* **olasofia**
+
+  * Sofia Bustamante
+  * sofia@turnupthecourage.com
+  * http://www.turnupthecourage.com/
+
+* **oierw**
+
+  * Mathew Ryden
+  * mathew.ryden@gmail.com
+  * http://www.oierw.net/
+
+* **sbp**
+
+  * Sean B. Palmer
+  * sean@miscoranda.com
+  * http://inamidst.com/sbp/
+
+* **tav**
+
+  * tav (Vageesan Sivapathasundaram)
+  * tav@espians.com
+  * http://tav.espians.com/
+
+.. # end
+
+
+Additional Credits
+==================
+
+mo
+
+* Patched pyOpenSSL to support verify()-ing x509 certificates.
+
+habnabit <Aaron Gallagher>
+
+* Helped identify the cause of crashes caused by the initial C implementation of
+  ``capbase.Namespace``.

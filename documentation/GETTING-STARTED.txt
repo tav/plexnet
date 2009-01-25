@@ -1,0 +1,98 @@
+===============
+Getting Started
+===============
+
+:X-Created: [2008-12-11, 14:47]
+
+------------------
+Installing Plexnet
+------------------
+
+First install the dependencies for your platform according to the sections
+below. Then run the following in a terminal::
+
+  git clone git://plexnet.org/plexnet.git
+  ./plexnet/environ/startup/redpill init
+  
+There will be some output on the terminal which will ask you to copy some lines
+into your ``~/.bash_profile`` file. This is an optional step, but it is highly
+recommended that you do this.
+
+You are now set to go -- enjoy the Plexnet!!
+
+------------------------
+Dependencies on Mac OS X
+------------------------
+
+Install Git:
+
+* `Git Installer 1.6.0.5 -- OS X Leopard (Intel)
+  <http://git-osx-installer.googlecode.com/files/git-1.6.0.5-intel-leopard.dmg>`_
+
+* `Git Installer 1.5.4.5 -- OS X Leopard (PPC)
+  <http://git-osx-installer.googlecode.com/files/git-1.5.4.5-osx-leopard-ppc.mpkg.dmg>`_
+
+Install Xcode [the latest iPhone version]:
+
+* http://developer.apple.com/technology/xcode.html
+
+Apple force you to sign up to the `Apple Developer Connect
+<https://connect.apple.com/>`_ program in order to download Xcode. This is free
+and takes just a minute...
+
+It is also recommended that you install and use iTerm (or something better)
+instead of the default Terminal app that comes with OS X:
+
+* `iTerm.zip <http://iterm.sourceforge.net/iTerm_0.9.6.1021.zip>`_
+
+-----------------------------------
+Dependencies on Debian/Ubuntu Linux
+-----------------------------------
+
+Run the following command::
+
+  sudo apt-get install autoconf automake gcc git libltdl3 libtool lsof make openssl
+
+---------------------------------
+Dependencies on Microsoft Windows
+---------------------------------
+
+Install Python 2.6 if you don't have it:
+
+* `python-2.6.msi <http://www.python.org/ftp/python/2.6/python-2.6.msi>`_
+* `python-2.6.amd64.msi <http://www.python.org/ftp/python/2.6/python-2.6.amd64.msi>`_
+
+Install Visual C++ 2008 Express Edition if you don't have it:
+
+* http://www.microsoft.com/express/download/default.aspx
+
+Install Cygwin:
+
+* `setup.exe <http://release.plexnet.org/files/cygwin/setup.exe>`_
+
+Make sure to install the following packages using Cygwin:
+
+* gcc
+
+It is also recommended that you install and use Console (or something better)
+as your terminal:
+
+* `Console.zip
+  <http://downloads.sourceforge.net/console/Console-2.00b140-Beta.zip>`_
+
+------------------------------------
+Dependencies on Other Unix Platforms
+------------------------------------
+
+Install the following dependencies either from source or using your system's
+package management system (e.g. apt-get, port, etc.):
+
+* autoconf
+* automake
+* `gcc <http://gcc.gnu.org/>`_
+* git
+* libltdl
+* libtool
+* lsof
+* `make <http://www.gnu.org/software/make/>`_
+* openssl
