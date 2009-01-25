@@ -1,0 +1,10 @@
+INFO = {
+  'site_url': 'http://www.plexnet.org',
+  'site_title': "Plexnet",
+  'site_nick': 'plexnet',
+  'site_description': "The Open Web Platform",
+  'site_analytics_code': 'UA-90176-5',
+  'site_author': 'tav',
+  'site_author_nick': 'tav',
+  'site_context': 'plexnet'
+}
