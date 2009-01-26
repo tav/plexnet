@@ -1,0 +1,3 @@
+Assumed to be the same license as Freeswitch, i.e. MPL.
+
+See ../freeswitch/LICENSE.txt for more information.

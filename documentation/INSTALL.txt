@@ -1,17 +1,13 @@
-===============
-Getting Started
-===============
+==================
+Installing Plexnet
+==================
 
 :X-Created: [2008-12-11, 14:47]
-
-------------------
-Installing Plexnet
-------------------
 
 First install the dependencies for your platform according to the sections
 below. Then run the following in a terminal::
 
-  git clone git://plexnet.org/plexnet.git
+  git clone git://github.com/tav/plexnet.git
   ./plexnet/environ/startup/redpill init
   
 There will be some output on the terminal which will ask you to copy some lines
@@ -26,11 +22,14 @@ Dependencies on Mac OS X
 
 Install Git:
 
-* `Git Installer 1.6.0.5 -- OS X Leopard (Intel)
-  <http://git-osx-installer.googlecode.com/files/git-1.6.0.5-intel-leopard.dmg>`_
+* `Git Installer 1.6.1 -- OS X Leopard (Intel)
+  <http://git-osx-installer.googlecode.com/files/git-1.6.1-intel-leopard.dmg>`_
 
 * `Git Installer 1.5.4.5 -- OS X Leopard (PPC)
   <http://git-osx-installer.googlecode.com/files/git-1.5.4.5-osx-leopard-ppc.mpkg.dmg>`_
+
+* `Git Installer 1.5.4.3 -- OS X Tiger
+  <http://metastatic.org/source/git-1.5.4.3-1.mpkg.zip>`_
 
 Install Xcode [the latest iPhone version]:
 
@@ -51,7 +50,7 @@ Dependencies on Debian/Ubuntu Linux
 
 Run the following command::
 
-  sudo apt-get install autoconf automake gcc git libltdl3 libtool lsof make openssl
+  sudo apt-get install autoconf automake curl gcc git libltdl3 libtool lsof make openssl
 
 ---------------------------------
 Dependencies on Microsoft Windows
@@ -89,6 +88,7 @@ package management system (e.g. apt-get, port, etc.):
 
 * autoconf
 * automake
+* curl
 * `gcc <http://gcc.gnu.org/>`_
 * git
 * libltdl
