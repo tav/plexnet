@@ -1,0 +1,17 @@
+--- /Users/tav/xavier/python/Python-2.6/Makefile.pre.in	2008-09-05 23:59:17.000000000 +0100
++++ Makefile.pre.in	2008-11-29 08:17:08.000000000 +0000
+@@ -1047,10 +1047,12 @@
+ 
+ # This installs the IDE, the Launcher and other apps into /Applications
+ frameworkinstallapps:
+-	cd Mac && $(MAKE) installapps DESTDIR="$(DESTDIR)"
++	echo "Skipping installation of Apps into /Applications"
++	# cd Mac && $(MAKE) installapps DESTDIR="$(DESTDIR)"
+ 
+ frameworkinstallapps4way:
+-	cd Mac && $(MAKE) installapps4way DESTDIR="$(DESTDIR)"
++	echo "Skipping installation of Apps into /Applications"
++	# cd Mac && $(MAKE) installapps4way DESTDIR="$(DESTDIR)"
+ 
+ # This install the unix python and pythonw tools in /usr/local/bin
+ frameworkinstallunixtools:

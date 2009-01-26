@@ -1,0 +1,47 @@
+--- Makefile.am	2008-11-21 02:05:02.000000000 +0000
++++ Makefile.am.plexnet	2008-12-07 18:35:44.000000000 +0000
+@@ -207,30 +207,31 @@
+ 	$(INSTALL) -m 644 conf/lang/en/vm/* $(DESTDIR)$(prefix)/conf/lang/en/vm
+ 
+ samples-conf:
+-	test -d $(DESTDIR)$(prefix)/conf || $(mkinstalldirs) $(DESTDIR)$(prefix)/conf
++	test -d $(DESTDIR)$(prefix)/etc/freeswitch/conf || $(mkinstalldirs) $(DESTDIR)$(prefix)/etc/freeswitch/conf
+ 	for conffile in `find conf -name \*.xml && find conf -name \*.conf && find conf -name \*.tpl  && find conf -name \*.ttml && find conf -name mime.types` ; do \
+ 		dir=`echo $$conffile | sed -e 's|/[^/]*$$||'`; \
+ 		filename=`echo $$conffile | sed -e 's|^.*/||'`; \
+-		test -d $(DESTDIR)$(PREFIX)/$$dir || $(mkinstalldirs) $(DESTDIR)$(prefix)/$$dir ; \
+-		test -f $(DESTDIR)$(PREFIX)/$$dir/$$filename || \
+-		test -f $(DESTDIR)$(PREFIX)/$$dir/$$filename.noload || \
+-			$(INSTALL) -m 644 $$dir/$$filename $(DESTDIR)$(PREFIX)/$$dir; \
++		test -d $(DESTDIR)$(PREFIX)/etc/freeswitch/$$dir || $(mkinstalldirs) $(DESTDIR)$(prefix)/etc/freeswitch/$$dir ; \
++		test -f $(DESTDIR)$(PREFIX)/etc/freeswitch/$$dir/$$filename || \
++		test -f $(DESTDIR)$(PREFIX)/etc/freeswitch/$$dir/$$filename.noload || \
++			$(INSTALL) -m 644 $$dir/$$filename $(DESTDIR)$(PREFIX)/etc/freeswitch/$$dir; \
+ 	done
+ 
+ samples-htdocs: 
+-	test -d $(DESTDIR)$(prefix)/htdocs || $(mkinstalldirs) $(DESTDIR)$(prefix)/htdocs
+-	for htdocsfile in `find htdocs -name \* | grep -v .svn` ; do \
+-		dir=`echo $$htdocsfile | sed -e 's|/[^/]*$$||'`; \
+-		filename=`echo $$htdocsfile | sed -e 's|^.*/||'`; \
+-		test -d $(DESTDIR)$(PREFIX)/$$dir || $(mkinstalldirs) $(DESTDIR)$(prefix)/$$dir ; \
+-		test -f $(DESTDIR)$(PREFIX)/$$dir/$$filename || $(INSTALL) -m 644 $$dir/$$filename $(DESTDIR)$(PREFIX)/$$dir 2>/dev/null;  \
+-	done
++	@echo "Skipping install of htdocs"
++	#test -d $(DESTDIR)$(prefix)/htdocs || $(mkinstalldirs) $(DESTDIR)$(prefix)/htdocs
++	#for htdocsfile in `find htdocs -name \* | grep -v .svn` ; do \
++	#	dir=`echo $$htdocsfile | sed -e 's|/[^/]*$$||'`; \
++	#	filename=`echo $$htdocsfile | sed -e 's|^.*/||'`; \
++	#	test -d $(DESTDIR)$(PREFIX)/$$dir || $(mkinstalldirs) $(DESTDIR)$(prefix)/$$dir ; \
++	#	test -f $(DESTDIR)$(PREFIX)/$$dir/$$filename || $(INSTALL) -m 644 $$dir/$$filename $(DESTDIR)$(PREFIX)/$$dir 2>/dev/null;  \
++	#done
+ 
+ samples: samples-conf samples-htdocs
+ 
+ install-data-local:
+ 	@echo Installing $(NAME)
+-	@for x in mod db log log/xml_cdr bin scripts grammar recordings ; do \
++	@for x in mod var var/freeswitch var/freeswitch/db var/freeswitch/log var/freeswitch/log/xml_cdr var/freeswitch/grammar var/freeswitch/scripts var/freeswitch/sounds bin ; do \
+ 		$(mkinstalldirs) $(DESTDIR)$(prefix)/$$x ; \
+ 	 done
+ 	$(mkinstalldirs) $(DESTDIR)@modinstdir@

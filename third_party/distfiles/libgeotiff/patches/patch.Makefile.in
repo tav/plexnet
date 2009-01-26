@@ -1,0 +1,11 @@
+--- Makefile.in	2003-01-20 07:11:03.000000000 +0000
++++ Makefile.in.plexnet	2008-12-21 23:25:54.000000000 +0000
+@@ -53,7 +53,7 @@
+ CONF_LIBRARY=\
+ 	${NULL}
+ COPTS	= @CFLAGS@ -DCSV_DATA_DIR=\"$(datadir)\"
+-CFLAGS  = ${COPTS} ${IPATH} ${CONF_LIBRARY}
++CFLAGS  = -fpic -fPIC ${COPTS} ${IPATH} ${CONF_LIBRARY}
+ #
+ SRCS    = \
+ 	${NULL}

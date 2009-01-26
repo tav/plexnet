@@ -1,0 +1,91 @@
+--- conf/Makefile.in	2008-09-16 16:23:25.000000000 +0100
++++ conf/Makefile.in.plexnet	2008-12-04 20:26:11.000000000 +0000
+@@ -114,23 +114,25 @@
+ 
+ 
+ install-sysconfDATA: $(sysconf_DATA)
+-	@$(NORMAL_INSTALL)
+-	$(mkinstalldirs) $(DESTDIR)$(sysconfdir)
+-	@list='$(sysconf_DATA)'; for p in $$list; do \
+-	  if test -f $(srcdir)/$$p; then \
+-	    echo " $(INSTALL_DATA) $(srcdir)/$$p $(DESTDIR)$(sysconfdir)/$$p"; \
+-	    $(INSTALL_DATA) $(srcdir)/$$p $(DESTDIR)$(sysconfdir)/$$p; \
+-	  else if test -f $$p; then \
+-	    echo " $(INSTALL_DATA) $$p $(DESTDIR)$(sysconfdir)/$$p"; \
+-	    $(INSTALL_DATA) $$p $(DESTDIR)$(sysconfdir)/$$p; \
+-	  fi; fi; \
+-	done
++	@echo "Skipping installation of GeoIP conf files."
++# 	@$(NORMAL_INSTALL)
++# 	$(mkinstalldirs) $(DESTDIR)$(sysconfdir)
++# 	@list='$(sysconf_DATA)'; for p in $$list; do \
++# 	  if test -f $(srcdir)/$$p; then \
++# 	    echo " $(INSTALL_DATA) $(srcdir)/$$p $(DESTDIR)$(sysconfdir)/$$p"; \
++# 	    $(INSTALL_DATA) $(srcdir)/$$p $(DESTDIR)$(sysconfdir)/$$p; \
++# 	  else if test -f $$p; then \
++# 	    echo " $(INSTALL_DATA) $$p $(DESTDIR)$(sysconfdir)/$$p"; \
++# 	    $(INSTALL_DATA) $$p $(DESTDIR)$(sysconfdir)/$$p; \
++# 	  fi; fi; \
++# 	done
+ 
+ uninstall-sysconfDATA:
+-	@$(NORMAL_UNINSTALL)
+-	list='$(sysconf_DATA)'; for p in $$list; do \
+-	  rm -f $(DESTDIR)$(sysconfdir)/$$p; \
+-	done
++	@echo "Skipping installation of GeoIP conf files."
++# 	@$(NORMAL_UNINSTALL)
++# 	list='$(sysconf_DATA)'; for p in $$list; do \
++# 	  rm -f $(DESTDIR)$(sysconfdir)/$$p; \
++# 	done
+ tags: TAGS
+ TAGS:
+ 
+@@ -140,16 +142,17 @@
+ subdir = conf
+ 
+ distdir: $(DISTFILES)
+-	@for file in $(DISTFILES); do \
+-	  d=$(srcdir); \
+-	  if test -d $$d/$$file; then \
+-	    cp -pr $$d/$$file $(distdir)/$$file; \
+-	  else \
+-	    test -f $(distdir)/$$file \
+-	    || ln $$d/$$file $(distdir)/$$file 2> /dev/null \
+-	    || cp -p $$d/$$file $(distdir)/$$file || :; \
+-	  fi; \
+-	done
++	@echo "Skipping installation of GeoIP conf files."
++# 	@for file in $(DISTFILES); do \
++# 	  d=$(srcdir); \
++# 	  if test -d $$d/$$file; then \
++# 	    cp -pr $$d/$$file $(distdir)/$$file; \
++# 	  else \
++# 	    test -f $(distdir)/$$file \
++# 	    || ln $$d/$$file $(distdir)/$$file 2> /dev/null \
++# 	    || cp -p $$d/$$file $(distdir)/$$file || :; \
++# 	  fi; \
++# 	done
+ info-am:
+ info: info-am
+ dvi-am:
+@@ -216,12 +219,13 @@
+ 
+ 
+ install-data-hook: install-sysconfDATA
+-	@if test -f $(DESTDIR)$(DEFAULT_CONFIG_FILE) ; then \
+-	        echo "$@ will not overwrite existing $(DESTDIR)$(DEFAULT_CONFIG_FILE)" ; \
+-	else \
+-	        echo "$(INSTALL_DATA) GeoIP.conf.default $(DESTDIR)$(DEFAULT_CONFIG_FILE)"; \
+-	        $(INSTALL_DATA) GeoIP.conf.default $(DESTDIR)$(DEFAULT_CONFIG_FILE); \
+-	fi
++	@echo "Skipping installation of GeoIP conf files."
++# 	@if test -f $(DESTDIR)$(DEFAULT_CONFIG_FILE) ; then \
++# 	        echo "$@ will not overwrite existing $(DESTDIR)$(DEFAULT_CONFIG_FILE)" ; \
++# 	else \
++# 	        echo "$(INSTALL_DATA) GeoIP.conf.default $(DESTDIR)$(DEFAULT_CONFIG_FILE)"; \
++# 	        $(INSTALL_DATA) GeoIP.conf.default $(DESTDIR)$(DEFAULT_CONFIG_FILE); \
++# 	fi
+ 
+ # Tell versions [3.59,3.63) of GNU make to not export all variables.
+ # Otherwise a system limit (for SysV at least) may be exceeded.

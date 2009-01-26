@@ -1,0 +1,11 @@
+--- configure	2005-07-11 21:11:57.000000000 +0100
++++ configure.plexnet	2008-12-09 11:39:20.000000000 +0000
+@@ -29,7 +29,7 @@
+ exec_prefix=${exec_prefix-'${prefix}'}
+ libdir=${libdir-'${exec_prefix}/lib'}
+ includedir=${includedir-'${prefix}/include'}
+-mandir=${mandir-'${prefix}/share/man'}
++mandir=${mandir-'${prefix}/man'}
+ shared_ext='.so'
+ shared=0
+ gcc=0

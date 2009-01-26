@@ -1,0 +1,25 @@
+--- conf/autoload_configs/modules.conf.xml	2008-11-21 01:52:16.000000000 +0000
++++ conf/autoload_configs/modules.conf.xml.plexnet	2008-12-07 18:36:39.000000000 +0000
+@@ -53,7 +53,7 @@
+     <!-- Dialplan Interfaces -->
+     <!-- <load module="mod_dialplan_directory"/> -->
+     <load module="mod_dialplan_xml"/>
+-    <load module="mod_dialplan_asterisk"/>
++    <!-- <load module="mod_dialplan_asterisk"/> -->
+ 
+     <!-- Codec Interfaces -->
+     <load module="mod_voipcodecs"/>
+@@ -76,11 +76,11 @@
+     <!-- Timers -->
+ 
+     <!-- Languages -->
+-    <load module="mod_spidermonkey"/>
++    <!-- <load module="mod_spidermonkey"/> -->
+     <!-- <load module="mod_perl"/> -->
+     <!-- <load module="mod_python"/> -->
+     <!-- <load module="mod_java"/> -->
+-    <load module="mod_lua"/>
++    <!-- <load module="mod_lua"/> -->
+ 
+     <!-- ASR /TTS -->
+     <!-- <load module="mod_flite"/> -->

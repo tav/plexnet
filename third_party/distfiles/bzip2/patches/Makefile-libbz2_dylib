@@ -1,0 +1,43 @@
+
+# This Makefile builds a shared version of the bz2 library
+
+CC=gcc
+BIGFILES=-D_FILE_OFFSET_BITS=64
+CFLAGS=-Wall -Winline -O2 -g $(BIGFILES)
+PREFIX=/usr/local
+
+OBJS= blocksort.o  \
+      huffman.o    \
+      crctable.o   \
+      randtable.o  \
+      compress.o   \
+      decompress.o \
+      bzlib.o
+
+all: $(OBJS)
+	$(CC) -dynamiclib $(OBJS) -o libbz2.1.0.5.dylib \
+	      -install_name $(PREFIX)/lib/libbz2.1.0.dylib \
+	      -compatibility_version 1.0 -current_version 1.0.5
+	cp -f libbz2.1.0.5.dylib $(PREFIX)/lib
+	chmod a+r $(PREFIX)/lib/libbz2.1.0.5.dylib
+	ln -s -f libbz2.1.0.5.dylib $(PREFIX)/lib/libbz2.1.0.dylib
+	ln -s -f libbz2.1.0.dylib $(PREFIX)/lib/libbz2.1.dylib
+	ln -s -f libbz2.1.dylib $(PREFIX)/lib/libbz2.dylib
+
+clean:
+	rm -f $(OBJS) bzip2.o libbz2.so.1.0.5 libbz2.so.1.0 bzip2-shared
+
+blocksort.o: blocksort.c
+	$(CC) $(CFLAGS) -c blocksort.c
+huffman.o: huffman.c
+	$(CC) $(CFLAGS) -c huffman.c
+crctable.o: crctable.c
+	$(CC) $(CFLAGS) -c crctable.c
+randtable.o: randtable.c
+	$(CC) $(CFLAGS) -c randtable.c
+compress.o: compress.c
+	$(CC) $(CFLAGS) -c compress.c
+decompress.o: decompress.c
+	$(CC) $(CFLAGS) -c decompress.c
+bzlib.o: bzlib.c
+	$(CC) $(CFLAGS) -c bzlib.c

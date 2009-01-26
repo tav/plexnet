@@ -1,0 +1,14 @@
+*.tar.gz
+*.tar.bz2
+*.dylib
+*.lo
+*.la
+*.pyc
+*.pyo
+*.o
+*.so
+.articlestore
+.DS_Store
+.latest
+.sconsign*
+.svn

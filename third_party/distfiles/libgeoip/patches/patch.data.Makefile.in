@@ -1,0 +1,91 @@
+--- data/Makefile.in	2008-09-16 16:23:25.000000000 +0100
++++ data/Makefile.in.plexnet	2008-12-04 20:26:57.000000000 +0000
+@@ -114,23 +114,25 @@
+ 
+ 
+ install-pkgdataDATA: $(pkgdata_DATA)
+-	@$(NORMAL_INSTALL)
+-	$(mkinstalldirs) $(DESTDIR)$(pkgdatadir)
+-	@list='$(pkgdata_DATA)'; for p in $$list; do \
+-	  if test -f $(srcdir)/$$p; then \
+-	    echo " $(INSTALL_DATA) $(srcdir)/$$p $(DESTDIR)$(pkgdatadir)/$$p"; \
+-	    $(INSTALL_DATA) $(srcdir)/$$p $(DESTDIR)$(pkgdatadir)/$$p; \
+-	  else if test -f $$p; then \
+-	    echo " $(INSTALL_DATA) $$p $(DESTDIR)$(pkgdatadir)/$$p"; \
+-	    $(INSTALL_DATA) $$p $(DESTDIR)$(pkgdatadir)/$$p; \
+-	  fi; fi; \
+-	done
++	@echo "Skipping installation of GeoIP data files."
++	#@$(NORMAL_INSTALL)
++	#$(mkinstalldirs) $(DESTDIR)$(pkgdatadir)
++	#@list='$(pkgdata_DATA)'; for p in $$list; do \
++	#  if test -f $(srcdir)/$$p; then \
++	#    echo " $(INSTALL_DATA) $(srcdir)/$$p $(DESTDIR)$(pkgdatadir)/$$p"; \
++	#    $(INSTALL_DATA) $(srcdir)/$$p $(DESTDIR)$(pkgdatadir)/$$p; \
++	#  else if test -f $$p; then \
++	#    echo " $(INSTALL_DATA) $$p $(DESTDIR)$(pkgdatadir)/$$p"; \
++	#    $(INSTALL_DATA) $$p $(DESTDIR)$(pkgdatadir)/$$p; \
++	#  fi; fi; \
++	#done
+ 
+ uninstall-pkgdataDATA:
+-	@$(NORMAL_UNINSTALL)
+-	list='$(pkgdata_DATA)'; for p in $$list; do \
+-	  rm -f $(DESTDIR)$(pkgdatadir)/$$p; \
+-	done
++	@echo "Skipping installation of GeoIP data files."
++	#@$(NORMAL_UNINSTALL)
++	#list='$(pkgdata_DATA)'; for p in $$list; do \
++	#  rm -f $(DESTDIR)$(pkgdatadir)/$$p; \
++	#done
+ tags: TAGS
+ TAGS:
+ 
+@@ -140,16 +142,17 @@
+ subdir = data
+ 
+ distdir: $(DISTFILES)
+-	@for file in $(DISTFILES); do \
+-	  d=$(srcdir); \
+-	  if test -d $$d/$$file; then \
+-	    cp -pr $$d/$$file $(distdir)/$$file; \
+-	  else \
+-	    test -f $(distdir)/$$file \
+-	    || ln $$d/$$file $(distdir)/$$file 2> /dev/null \
+-	    || cp -p $$d/$$file $(distdir)/$$file || :; \
+-	  fi; \
+-	done
++	@echo "Skipping installation of GeoIP data files."
++# 	@for file in $(DISTFILES); do \
++# 	  d=$(srcdir); \
++# 	  if test -d $$d/$$file; then \
++# 	    cp -pr $$d/$$file $(distdir)/$$file; \
++# 	  else \
++# 	    test -f $(distdir)/$$file \
++# 	    || ln $$d/$$file $(distdir)/$$file 2> /dev/null \
++# 	    || cp -p $$d/$$file $(distdir)/$$file || :; \
++# 	  fi; \
++# 	done
+ info-am:
+ info: info-am
+ dvi-am:
+@@ -216,12 +219,13 @@
+ 
+ 
+ install-data-hook: install-pkgdataDATA
+-	@if test -f $(DESTDIR)$(DEFAULT_DB_FILE) ; then \
+-	        echo "$@ will not overwrite existing $(DESTDIR)$(DEFAULT_DB_FILE)" ; \
+-	else \
+-	        echo "$(INSTALL_DATA) GeoIP.dat $(DESTDIR)$(DEFAULT_DB_FILE)"; \
+-	        $(INSTALL_DATA) GeoIP.dat $(DESTDIR)$(DEFAULT_DB_FILE); \
+-	fi
++	@echo "Skipping installation of GeoIP data files."
++# 	@if test -f $(DESTDIR)$(DEFAULT_DB_FILE) ; then \
++# 	        echo "$@ will not overwrite existing $(DESTDIR)$(DEFAULT_DB_FILE)" ; \
++# 	else \
++# 	        echo "$(INSTALL_DATA) GeoIP.dat $(DESTDIR)$(DEFAULT_DB_FILE)"; \
++# 	        $(INSTALL_DATA) GeoIP.dat $(DESTDIR)$(DEFAULT_DB_FILE); \
++# 	fi
+ 
+ # Tell versions [3.59,3.63) of GNU make to not export all variables.
+ # Otherwise a system limit (for SysV at least) may be exceeded.

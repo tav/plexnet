@@ -1,0 +1,28 @@
+import plexnetenv
+import sys
+
+makefile_template = open('Makefile.in', 'rb').read()
+
+if sys.platform == 'darwin':
+    make_data = makefile_template.replace(
+        '$LIBEXT', 'dylib'
+        ).replace(
+        '$LIBFLAGS', '-dynamiclib'
+        )
+else:
+    make_data = makefile_template.replace(
+        '$LIBEXT', 'so'
+        ).replace(
+        '$LIBFLAGS', '-shared -Wl,-soname,$(SONAME)'
+        )
+
+make_data = make_data.replace(
+    '$PYTHON', sys.executable
+    ).replace(
+    '$PREFIX', plexnetenv.PLEXNET_LOCAL
+    )
+
+makefile = open('Makefile', 'wb')
+makefile.write(make_data)
+makefile.close()
+
