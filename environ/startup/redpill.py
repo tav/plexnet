@@ -12,12 +12,9 @@
 Usage: redpill [options]
 Options:
 
-  clean           Delete all generated files.
-  docs            Generate .html files from the documentation.
   dotfiles        Install .dotfiles (config) to %(USER_HOME)s
   help            Display the help text.
   init            Compile and install all dependencies.
-  pdfs            Generate .pdf files from the documentation.
   version         Print the version number and exit.
 
   --force         Overwrite (clobber) existing files.
@@ -185,26 +182,6 @@ else:
     PARALLEL = ''
 
 MTIME_CACHE = {}
-
-DOCS = join_path(PLEXNET_ROOT, 'documentation')
-TEXT = join_path(PLEXNET_ROOT, 'documentation', 'text')
-AUTHORS = join_path(DOCS, 'CREDITS.txt')
-WEBSITE_ROOT = join_path(DOCS, 'website')
-TEMPLATE_DIR = join_path(WEBSITE_ROOT, 'template')
-ARTICLE_STORE = join_path(STARTUP_DIRECTORY, '.articlestore')
-
-
-PRINCE = ['prince', '--input=html', '--output=pdf'] # --no-compress
-PRINCE_CSS = join_path(WEBSITE_ROOT, 'static', 'css', 'print.css')
-
-HTML_GEN = ['-d', ARTICLE_STORE, '-r', PLEXNET_ROOT, '-a', AUTHORS]
-
-SITES = {
-    # nick: [domain, source_dir, index_text, codegen]
-    'asktav': ['asktav.com', TEXT, 1, None],
-    'plexnet': ['plexnet.org', DOCS, 0, 'bootstrap'],
-    'turnupthecourage': ['turnupthecourage.com', TEXT, 1, None],
-    }
 
 class AlreadyInstalled(Exception):
     """Error raised when a package is detected to have already been installed."""
@@ -807,87 +784,6 @@ if get_flag('init'):
 
         gclient.RemoveDirectory(join_path(PKG_DIRECTORY, 'build'))
 
-    # temporary zope stuff
-
-    ZOPE_SRC = join_path(PYTHON_SITE_PACKAGES, 'zopesrc')
-    ZOPE_INCLUDE = [ZOPE_SRC]
-    os.chdir(ZOPE_SRC)
-
-    BTREE_DEPS = [
-        "BTrees/BTreeItemsTemplate.c",
-        "BTrees/BTreeModuleTemplate.c",
-        "BTrees/BTreeTemplate.c",
-        "BTrees/BucketTemplate.c",
-        "BTrees/MergeTemplate.c",
-        "BTrees/SetOpTemplate.c",
-        "BTrees/SetTemplate.c",
-        "BTrees/TreeSetTemplate.c",
-        "BTrees/sorters.c",
-        "persistent/cPersistence.h",
-    ]
-
-    BTREE_TYPES = {"O": "object", "I": "int", "F": "float", 'L': 'int'}
-    KEY_H = "BTrees/%skeymacros.h"
-    VALUE_H = "BTrees/%svaluemacros.h"
-
-    def BTreeExtension(flavor):
-        key = flavor[0]
-        value = flavor[1]
-        name = "BTrees._%sBTree" % flavor
-        sources = ["BTrees/_%sBTree.c" % flavor]
-        kwargs = {"include_dirs": ZOPE_INCLUDE}
-        if flavor != "fs":
-            kwargs["depends"] = (BTREE_DEPS + [KEY_H % BTREE_TYPES[key], VALUE_H % BTREE_TYPES[value]])
-        else:
-            kwargs["depends"] = BTREE_DEPS
-        if key != "O":
-            kwargs["define_macros"] = [('EXCLUDE_INTSET_SUPPORT', None)]
-        return Extension(name, sources, **kwargs)
-
-    try:
-        import zope.proxy._zope_proxy_proxy
-    except:
-        pyc_extensions = [
-            BTreeExtension(flavor) for flavor in
-            ("OO", "IO", "OI", "II", "IF", "fs", "LO", "OL", "LL", "LF")
-            ] + [
-            Extension(
-                name='persistent.cPersistence',
-                include_dirs=ZOPE_INCLUDE,
-                sources=['persistent/cPersistence.c', 'persistent/ring.c'],
-                depends=['persistent/cPersistence.h', 'persistent/ring.h', 'persistent/ring.c']
-                ),
-            Extension(
-                name='persistent.cPickleCache',
-                include_dirs=ZOPE_INCLUDE,
-                sources=['persistent/cPickleCache.c', 'persistent/ring.c'],
-                depends=['persistent/cPersistence.h', 'persistent/ring.h', 'persistent/ring.c']
-                ),
-            Extension(
-                name='persistent.TimeStamp',
-                include_dirs=ZOPE_INCLUDE,
-                sources=['persistent/TimeStamp.c']
-                )
-            ]
-        sys.argv[1:] = ['build_ext', '--inplace']
-        do_action_in_directory(
-            "Compiling Zope Extensions", "Compiled", ZOPE_SRC,
-            lambda : setup(ext_modules=pyc_extensions),
-            )
-        do_action_in_directory(
-            "Compiling zope.proxy Extension", "Compiled", ZOPE_SRC,
-            lambda : setup(
-                headers=[join_path(ZOPE_SRC, 'zope', 'proxy', 'proxy.h')],
-                ext_modules=[
-                    Extension(
-                        name="zope.proxy._zope_proxy_proxy",
-                        sources=['zope/proxy/_zope_proxy_proxy.c']
-                        )
-                    ]
-                )
-            )
-        gclient.RemoveDirectory(join_path(ZOPE_SRC, 'build'))
-
     sys.argv = original_argv
 
 # ------------------------------------------------------------------------------
@@ -902,164 +798,6 @@ if get_flag('commit'):
 
 if get_flag('startupfiles'): # @/@ generate startup tarballs/zipfiles
     pass
-
-if get_flag('pdfs'):
-    # $(documentation_pdf_files): documentation/pdf/%.pdf: documentation/article/%.html $(template) $(pdf_css)
-    # 	@echo "---> generating" "$@"
-    # 	@for n in "$<"; \
-    # 	  do \
-    # 	    $(prince) $$n --style=$(pdf_css) --output=$@; \
-    # 	  done;
-    # 	@echo
-    pass
-
-if get_flag('todo'):
-    # @echo "# Writing: Done Tasks:"
-    # @grep "^+" blog/todo.txt | wc -l
-    # @echo ""
-    # @echo "Todo Tasks:"
-    # @grep "^*" blog/todo.txt | wc -l
-    # @echo ""
-    # @echo "Total Tasks:"
-    # @grep "^[*+]" blog/todo.txt | wc -l
-    # @echo ""
-    # @echo "# Coding: Done Tasks:"
-    # @grep "^+" documentation/todo.txt | wc -l
-    # @echo ""
-    # @echo "Todo Tasks:"
-    # @grep "^*" documentation/todo.txt | wc -l
-    # @echo ""
-    # @echo "Total Tasks:"
-    # @grep "^[*+]" documentation/todo.txt | wc -l
-    pass
-
-# ------------------------------------------------------------------------------
-# cleanup
-# ------------------------------------------------------------------------------
-
-if get_flag('clean'):
-    for site in SITES:
-        output_dir = join_path(WEBSITE_ROOT, SITES[site][0])
-        files = listdir(output_dir)
-        for file in fnfilter(files, '*.html'):
-            file = join_path(output_dir, file)
-            print "Removing:", file
-            os.remove(file)
-        for file in fnfilter(files, '*.rss'):
-            file = join_path(output_dir, file)
-            print "Removing:", file
-            os.remove(file)
-    if isfile(ARTICLE_STORE):
-        print "Removing:", ARTICLE_STORE
-        os.remove(ARTICLE_STORE)
-
-# ------------------------------------------------------------------------------
-# docs
-# ------------------------------------------------------------------------------
-
-def generate_docs(site, force=False):
-
-    from bootstrap.tool.article import main as generate_article
-
-    #'asktav': ['asktav.com', TEXT, 1, None],
-    #'plexnet': ['plexnet.org', DOCS, 0, 'plexnet'],
-    #'turnupthecourage': ['turnupthecourage.com', TEXT, 1, None],
-
-    domain, source_dir, index_text, codegen = SITES[site]
-    latest = get_mtime(LATEST_FILE)
-
-    if index_text:
-        source_file = open(join_path(source_dir, 'index.%s.txt' % site), 'rb')
-        sources = [source.strip() for source in source_file.readlines()]
-        source_file.close()
-    else:
-        sources = [
-            source[:-4]
-            for source in fnfilter(listdir(source_dir), '*.txt')
-            ]
-
-    modified = False
-
-    template = join_path(TEMPLATE_DIR, '%s.genshi' % site)
-    output_dir = join_path(WEBSITE_ROOT, domain)
-
-    index_mtime = get_mtime(join_path(output_dir, 'index.html'))
-    template_mtime = get_mtime(template)
-
-    argv = HTML_GEN + ['-t', template, '-o', output_dir]
-
-    if force:
-        gensources = [
-            join_path(source_dir, '%s.txt' % source)
-            for source in sources
-            ]
-    else:
-        gensources = []
-        for source in sources:
-
-            source_file = join_path(source_dir, '%s.txt' % source)
-            dest_file = join_path(output_dir, '%s.html' % source)
-            dest_mtime = get_mtime(dest_file)
-
-            regen = 0
-
-            if get_mtime(source_file) > dest_mtime:
-                regen = 1
-            elif template_mtime > dest_mtime:
-                regen = 1
-
-            if regen:
-                gensources.append(source_file)
-            elif dest_mtime > index_mtime:
-                modified = True
-
-    if gensources:
-        _argv = argv[:]
-        _argv.extend(gensources)
-        generate_article(_argv)
-        modified = True
-
-    regen = 0
-
-    if codegen:
-        package_files = set(); add = package_files.add
-        package_name = 'package.%s.html' % codegen
-        package_mtime = get_mtime(join_path(output_dir, package_name))
-        code_root = join_path(PLEXNET_SOURCE, codegen)
-        for entry in listdir(code_root):
-            path = join_path(code_root, entry)
-            if isfile(path):
-                if entry.endswith('.py'):
-                    if get_mtime(path) > package_mtime:
-                        regen = 1
-                        break
-            elif isdir(path):
-                for entry2 in listdir(join_path(code_root, entry)):
-                    path2 = join_path(code_root, entry, entry2)
-                    if isfile(path2) and entry2.endswith('.py'):
-                        if get_mtime(path2) > package_mtime:
-                            regen = 1
-                            break
-        if regen or force:
-            print
-            print "---> generating CODE DOCUMENTATION for %r" % codegen
-            _argv = argv[:]
-            _argv.extend(['-c', code_root])
-            generate_article(_argv)
-            modified = True
-        
-    if modified or (template_mtime > index_mtime) or force:
-        print
-        print "---> generating INDEX FILES for %r" % domain
-        _argv = argv[:]
-        _argv.extend(['-p', output_dir])
-        generate_article(_argv)
-
-if get_flag('docs'):
-    force = get_flag('--force', False)
-    for site in SITES:
-        generate_docs(site, force)
-    touch(LATEST_FILE)
 
 # ------------------------------------------------------------------------------
 # env info
