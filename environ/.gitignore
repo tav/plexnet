@@ -1,8 +1,9 @@
+local
+startup/.stdout
 *.dylib
 *.lo
 *.la
 *.pyc
-*.pyo
 *.o
 *.so
 .articlestore
