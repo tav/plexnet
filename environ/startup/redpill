@@ -1,0 +1,95 @@
+#! /bin/sh
+
+UNAME=$(uname -s)
+LSOF=$(lsof -p $$ 2> /dev/null | grep -E "/"$(basename $0)"$")
+
+if [ "$UNAME" == "Linux" ]; then
+    SCRIPT_PATH=$(echo $LSOF | sed -r s/'^([^\/]+)\/'/'\/'/1 2>/dev/null)
+fi
+
+if [ "$UNAME" == "Darwin" ]; then
+    SCRIPT_PATH=$(echo $LSOF | sed -E s/'^([^\/]+)\/'/'\/'/1 2>/dev/null)
+fi
+
+STARTUP_DIRECTORY=$(dirname $SCRIPT_PATH)
+PLEXNET_ROOT=$(dirname $(dirname $(dirname $SCRIPT_PATH)))
+
+if [ ! "$PLEXNET_LOCAL" ]; then
+    source $STARTUP_DIRECTORY/plexnetenv.sh noinstall
+fi
+
+action=$'\e[34;01m'\>\>
+error=$'\e[31;01m'!!
+normal=$'\e[m'
+progress=$'\e[30;01m'##
+success=$'\e[32;01m'**
+
+_exit_on_error() {
+    echo $error Something went wrong whilst installing $TARGET !! $normal
+    exit
+}
+
+_set_target() {
+    TARGET="$1 $2"
+    TNAME=$1
+    TVERS=$2
+}
+
+_uncompress_tarball() {
+    echo ${action} Installing $TARGET ${normal}
+    cd $PLEXNET_ROOT/third_party/distfiles/$TNAME
+    echo ${progress} Unpacking the $TARGET Source Code ${normal}
+    tar -xzf $TNAME-$TVERS.tar.gz
+    cd $TNAME-$TVERS
+    echo ${progress} Compiling $TARGET ${normal}
+}
+
+_compile_tarball() {
+    _uncompress_tarball
+    CPPFLAGS="-I$PLEXNET_LOCAL/include" LDFLAGS="-L$PLEXNET_LOCAL/lib" ./configure --prefix=$PLEXNET_LOCAL $CONFIG_FLAGS || _exit_on_error
+    CPPFLAGS="-I$PLEXNET_LOCAL/include" LDFLAGS="-L$PLEXNET_LOCAL/lib" make install || _exit_on_error
+    _remove_directory
+}
+
+_remove_directory() {
+    echo ${success} Successfully installed $TARGET ${normal}
+    cd ..
+    rm -rf $TNAME-$TVERS
+}
+
+if [ ! -f $PLEXNET_LOCAL/bin/python2.6 ]; then
+
+    CURDIR=`pwd`
+
+    if [ "$UNAME" == "Darwin" ]; then
+        EXTRA_PY_ARGS="--enable-toolbox-glue --enable-framework=$PLEXNET_LOCAL/framework"
+        BZIP2_MAKEFILE="Makefile-libbz2_dylib"
+    else
+        EXTRA_PY_ARGS=""
+        BZIP2_MAKEFILE="Makefile-libbz2_so"
+    fi
+
+    _set_target "zlib" "1.2.3"
+    CONFIG_FLAGS="--shared"
+    _compile_tarball
+
+    _set_target "libreadline" "5.2"
+    CONFIG_FLAGS="--infodir=$PLEXNET_LOCAL/share/info"
+    _compile_tarball
+
+    _set_target "bzip2" "1.0.5"
+    _uncompress_tarball
+    make install PREFIX=$PLEXNET_LOCAL || _exit_on_error
+    make clean
+    make -f $BZIP2_MAKEFILE all PREFIX=$PLEXNET_LOCAL || _exit_on_error
+    _remove_directory
+
+    _set_target "python" "2.6.1"
+    CONFIG_FLAGS="--enable-ipv6 --enable-unicode=ucs2 $EXTRA_PY_ARGS"
+    _compile_tarball
+
+    cd $CURDIR
+
+fi
+
+$PLEXNET_LOCAL/bin/python2.6 $STARTUP_DIRECTORY/redpill.py $@
