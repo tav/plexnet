@@ -1,5 +1,5 @@
 local
-startup/.stdout
+startup/.last_self_update
 *.dylib
 *.lo
 *.la

@@ -3,11 +3,26 @@
 """
 Yatiblog -- Blog/Documentation Generator
 
-  clean           Delete all generated files.
-  docs            Generate .html files from the documentation.
-  pdfs            Generate .pdf files from the documentation.
+By default yatiblog will generate .html files in the given directory.
+
+Usage: yatiblog [path/to/source/files]
+
+  --clean           Delete all generated files instead of generating .html files.
+  --pdfs            Generate .pdf files from the documentation.
+  --package=PACKAGE 
 
 """
+
+from fnmatch import filter as fnfilter
+from os import stat, getcwd, listdir
+
+from plexnet.tool.article import main as generate_article
+
+# ------------------------------------------------------------------------------
+# some konstants
+# ------------------------------------------------------------------------------
+
+LATEST_FILENAME = '.latest'
 
 DOCS = join_path(PLEXNET_ROOT, 'documentation')
 TEXT = join_path(PLEXNET_ROOT, 'documentation', 'text')
@@ -16,9 +31,8 @@ WEBSITE_ROOT = join_path(DOCS, 'website')
 TEMPLATE_DIR = join_path(WEBSITE_ROOT, 'template')
 ARTICLE_STORE = join_path(STARTUP_DIRECTORY, '.articlestore')
 
-
-PRINCE = ['prince', '--input=html', '--output=pdf'] # --no-compress
-PRINCE_CSS = join_path(WEBSITE_ROOT, 'static', 'css', 'print.css')
+PDF_COMMAND = ['prince', '--input=html', '--output=pdf'] # --no-compress
+PDF_CSS = join_path(WEBSITE_ROOT, 'static', 'css', 'print.css')
 
 HTML_GEN = ['-d', ARTICLE_STORE, '-r', PLEXNET_ROOT, '-a', AUTHORS]
 
@@ -28,6 +42,58 @@ SITES = {
     'plexnet': ['plexnet.org', DOCS, 0, 'bootstrap'],
     'turnupthecourage': ['turnupthecourage.com', TEXT, 1, None],
     }
+
+MTIME_CACHE = {}
+
+# ------------------------------------------------------------------------------
+# utility funktions
+# ------------------------------------------------------------------------------
+
+def get_mtime(file, directory=None, usecache=True):
+    """Return the last modified time of the given file."""
+    if directory is not None:
+        file = join_path(directory, *file.split('/')) # posixpath
+    if usecache:
+        if file in MTIME_CACHE:
+            return MTIME_CACHE[file]
+    try:
+        mtime = stat(file).st_mtime
+    except OSError:
+        mtime = 0
+    if usecache:
+        return MTIME_CACHE.setdefault(file, mtime)
+    return mtime
+
+def touch(file):
+    """Mimic the behaviour of the Unix ``touch`` utility."""
+    if isfile(file):
+        os.utime(file, None)
+    else:
+        open(file, 'wb').close()
+
+def get_flag(flag, alter=True):
+    """Return whether a specific flag is set in the command line parameters."""
+
+    flagc = '%s:' % flag
+    argv = []
+    retval = None
+    for arg in sys.argv:
+        if arg == flag:
+            retval = True
+        elif arg.startswith(flagc):
+            retval = arg.split(flagc, 1)[1] or True
+        else:
+            argv.append(arg)
+    if alter:
+        sys.argv[:] = argv
+        if retval:
+            global flagged
+            flagged = True
+    return retval
+
+# ------------------------------------------------------------------------------
+# 
+# ------------------------------------------------------------------------------
 
 if get_flag('pdfs'):
     # $(documentation_pdf_files): documentation/pdf/%.pdf: documentation/article/%.html $(template) $(pdf_css)

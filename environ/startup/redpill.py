@@ -33,10 +33,9 @@ import tarfile
 import plexnetenv
 import gclient
 
-from fnmatch import filter as fnfilter
 from glob import glob
 from os import stat, getcwd, listdir
-from os.path import abspath, dirname, isdir, isfile, join as join_path, expanduser
+from os.path import isdir, isfile, join as join_path, expanduser
 from posixpath import split as posix_split
 from shutil import rmtree
 from subprocess import Popen, PIPE
@@ -138,12 +137,6 @@ PLEXNET_SOURCE = plexnetenv.PLEXNET_SOURCE
 PYTHON_SITE_PACKAGES = plexnetenv.PYTHON_SITE_PACKAGES
 THIRD_PARTY = plexnetenv.THIRD_PARTY
 
-if sys.platform == 'win32':
-    gclient.SVN_COMMAND = join_path(STARTUP_DIRECTORY, 'svn', 'svn.exe')
-else:
-    gclient.SVN_COMMAND = 'svn'
-
-LATEST_FILE = join_path(STARTUP_DIRECTORY, '.latest')
 SELF_UPDATE_FILE = join_path(STARTUP_DIRECTORY, '.last_self_update')
 SELF_UPDATE_INTERVAL = 240 # 86400
 
@@ -186,6 +179,9 @@ MTIME_CACHE = {}
 class AlreadyInstalled(Exception):
     """Error raised when a package is detected to have already been installed."""
 
+FLAGGED = None
+LAST_UPDATED = 0
+
 # ------------------------------------------------------------------------------
 # utility funktions
 # ------------------------------------------------------------------------------
@@ -205,13 +201,6 @@ def get_mtime(file, directory=None, usecache=True):
         return MTIME_CACHE.setdefault(file, mtime)
     return mtime
 
-def touch(file):
-    """Mimic the behaviour of the Unix ``touch`` utility."""
-    if isfile(file):
-        os.utime(file, None)
-    else:
-        open(file, 'wb').close()
-
 def get_flag(flag, alter=True):
     """Return whether a specific flag is set in the command line parameters."""
 
@@ -228,8 +217,8 @@ def get_flag(flag, alter=True):
     if alter:
         sys.argv[:] = argv
         if retval:
-            global flagged
-            flagged = True
+            global FLAGGED
+            FLAGGED = True
     return retval
 
 def install_dot_file(file, force=False, directory=False):
@@ -477,16 +466,14 @@ if get_flag('--version') or get_flag('version') or get_flag('-v') or get_flag('-
 # ------------------------------------------------------------------------------
 
 if get_flag('--verbose'):
-    DEVNULL = sys.stdout
+    VERBOSE = True
 else:
-    DEVNULL = open(join_path(STARTUP_DIRECTORY, '.stdout'), 'wb')
-
-flagged = last_updated = None
+    VERBOSE = False
 
 if isfile(SELF_UPDATE_FILE):
-    last_updated = open(SELF_UPDATE_FILE, 'rb').read()
+    LAST_UPDATED = open(SELF_UPDATE_FILE, 'rb').read()
 
-if last_updated and ((NOW - float(last_updated)) > SELF_UPDATE_INTERVAL):
+if (NOW - float(LAST_UPDATED)) > SELF_UPDATE_INTERVAL:
     import socket
     socket.setdefaulttimeout(2.0)
     try:
@@ -494,7 +481,8 @@ if last_updated and ((NOW - float(last_updated)) > SELF_UPDATE_INTERVAL):
     except:
         pass
     else:
-        gclient.RunSVN(['up'], STARTUP_DIRECTORY, DEVNULL)
+        print "Running self update"
+        # gclient.RunSVN(['up'], STARTUP_DIRECTORY, DEVNULL)
         open(SELF_UPDATE_FILE, 'wb').write(str(NOW))
 
 # ------------------------------------------------------------------------------
@@ -684,7 +672,7 @@ if get_flag('init'):
             sys.exit(1)
         print_message("Successfully Installed %s" % SETUPTOOLS, SUCCESS)
         for path in sys.path:
-            if isdir(path) and EGG_PATH in os.listdir(path):
+            if isdir(path) and EGG_PATH in listdir(path):
                 sys.path.append(join_path(path, EGG_PATH))
 
     install_python_package('pyopenssl', '0.8')
@@ -855,7 +843,7 @@ In fact, it is expected that a future version of the redpill
 will have pretty front-end GUI applications like ``espSetup``.
 """
 
-if flagged:
+if FLAGGED:
     sys.exit()
 
 if CURRENT_DIRECTORY != STARTUP_DIRECTORY:
