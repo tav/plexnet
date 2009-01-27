@@ -1,0 +1,51 @@
+<div xmlns:py="http://genshi.edgewall.org/">
+<?python
+
+  def div(list):
+    list_len = len(list)
+    left = int(round(float(list_len)/2))
+    right = list_len - left
+    return list[:left], list[-right:]
+
+  LINKS = [
+
+  ('http://www.asktav.com/plexnet.html', 'Plexnet Specification'),
+  ('GETTING-STARTED.html', 'Getting Started'),
+  ('LICENSE.html', 'Copyright & Licensing'),
+  ('CREDITS.html', 'Credits'),
+
+  ]
+
+?>
+<strong>Articles:</strong>
+<table width="100%"><tr>
+<td py:for="column_items in div(LINKS)">
+<ul>
+  <li py:for="item in column_items">
+    <a href="${item[0]}">${Markup(item[1])}</a>
+	<!--
+	<div class="index-link-info">
+	</div>
+	-->
+  </li>
+</ul>
+</td>
+</tr></table>
+
+<br />
+<strong>Source Code Documentation:</strong>
+<table width="100%"><tr>
+<td py:for="column_items in div(sorted([item for item in items if item['__type__'] == 'py'], key=lambda x: x['__name__']))">
+<ul>
+  <li py:for="item in column_items">
+    <a href="${item['__name__']}.html">${item['__name__'][8:]}</a>
+	<!--
+	<div class="index-link-info">
+	  updated @ ${item['__updated__'].strftime('%H:%M, %d %b %Y')}
+	</div>
+	-->
+  </li>
+</ul>
+</td>
+</tr></table>
+</div>
