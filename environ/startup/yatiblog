@@ -253,7 +253,7 @@ def main():
                             break
                 elif isdir(path):
                     for entry2 in listdir(join_path(package_root, entry)):
-                        path2 = join_path(code_root, entry, entry2)
+                        path2 = join_path(package_root, entry, entry2)
                         if isfile(path2) and entry2.endswith('.py'):
                             if get_mtime(path2) > package_mtime:
                                 regen = 1

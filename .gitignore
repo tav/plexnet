@@ -1,3 +1,4 @@
+.gendate
 *.dylib
 *.lo
 *.la
