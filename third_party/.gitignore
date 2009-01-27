@@ -1,3 +1,5 @@
+python/docutils/writers/s5_html
+python/gdata/Crypto
 *.tar.gz
 *.tar.bz2
 *.dylib
