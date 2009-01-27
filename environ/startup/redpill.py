@@ -25,8 +25,6 @@ The ``redpill`` bootstraps you into the world of Espia.
 For now, simply run ``redpill init`` to get started.
 """
 
-from __future__ import print_function
-
 import os
 import shutil
 import sys
@@ -42,12 +40,13 @@ from posixpath import split as posix_split
 from shutil import rmtree
 from subprocess import Popen, PIPE
 from time import time
+from urllib import urlopen
 
 # ------------------------------------------------------------------------------
 # do a chek for the required minimal python version and get out early if not met
 # ------------------------------------------------------------------------------
 
-__min_python_version__ = (2, 6, 0)
+__min_python_version__ = (2, 6, 1)
 
 if not hasattr(sys, 'hexversion') or sys.version_info < __min_python_version__:
 
@@ -130,6 +129,8 @@ DEPENDENCIES = [(isinstance(i, tuple) and i[0] or i) for i in DOWNLOAD_MAP]
 
 __version__ = '0.1'
 __additional__ = ''
+
+DISTFILES_SERVER = "http://release.plexnet.org/distfiles"
 
 STARTUP_DIRECTORY = plexnetenv.STARTUP_DIRECTORY
 PLEXNET_ROOT = plexnetenv.PLEXNET_ROOT
@@ -299,8 +300,21 @@ def untar(name, version):
     dest_dir = join_path(THIRD_PARTY, 'distfiles', name.lower())
     os.chdir(dest_dir)
 
-    print_message("Unpacking %s.tar.bz2" % path_prefix, PROGRESS)
-    tar = tarfile.open('%s.tar.bz2' % path_prefix, 'r:bz2')
+    tarball_filename = '%s.tar.bz2' % path_prefix
+
+    if not isfile(tarball_filename):
+        print_message("Downloading %s" % tarball_filename, PROGRESS)
+        distfile = urlopen(
+            "%s/%s/%s" % (DISTFILES_SERVER, name, tarball_filename)
+            )
+        tarball_source = distfile.read()
+        tarball_file = open(tarball_filename, 'wb')
+        tarball_file.write(tarball_source)
+        distfile.close()
+        tarball_file.close()
+        
+    print_message("Unpacking %s" % tarball_filename, PROGRESS)
+    tar = tarfile.open(tarball_filename, 'r:bz2')
     tar.extractall()
     tar.close()
 

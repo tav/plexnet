@@ -1,5 +1,6 @@
 #! /bin/sh
 
+DISTFILES_SERVER="http://release.plexnet.org/distfiles"
 UNAME=$(uname -s)
 LSOF=$(lsof -p $$ 2> /dev/null | grep -E "/"$(basename $0)"$")
 
@@ -38,8 +39,13 @@ _set_target() {
 _uncompress_tarball() {
     echo ${action} Installing $TARGET ${normal}
     cd $PLEXNET_ROOT/third_party/distfiles/$TNAME
+    TARBALL_FILENAME=$TNAME-$TVERS.tar.gz
+    if [ ! -f $TARBALL_FILENAME ]; then
+        echo ${progress} Downloading the $TARGET Source Code ${normal}
+        curl -O ${DISTFILES_SERVER}/$TNAME/${TARBALL_FILENAME}
+    fi
     echo ${progress} Unpacking the $TARGET Source Code ${normal}
-    tar -xzf $TNAME-$TVERS.tar.gz
+    tar -xzf $TARBALL_FILENAME
     cd $TNAME-$TVERS
     echo ${progress} Compiling $TARGET ${normal}
 }
