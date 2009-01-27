@@ -1,0 +1,13 @@
+<!--
+Copyright (c) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009 The SCons Foundation
+
+This file is processed by the bin/SConsDoc.py module.
+See its __doc__ string for a discussion of the format.
+-->
+<tool name="g77">
+<summary>
+Set construction variables for the &g77; Fortran compiler.
+Calls the &t-f77; Tool module
+to set variables.
+</summary>
+</tool>

@@ -1,0 +1,27 @@
+<!--
+Copyright (c) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009 The SCons Foundation
+
+This file is processed by the bin/SConsDoc.py module.
+See its __doc__ string for a discussion of the format.
+-->
+<tool name="mwld">
+<summary>
+Sets construction variables for the Metrowerks CodeWarrior linker.
+</summary>
+<sets>
+AR
+ARCOM
+LIBDIRPREFIX
+LIBDIRSUFFIX
+LIBLINKPREFIX
+LIBLINKSUFFIX
+LINK
+LINKCOM
+SHLINK
+SHLINKFLAGS
+SHLINKCOM
+<!--SHLIBEMITTER-->
+</sets>
+<uses>
+</uses>
+</tool>

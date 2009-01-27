@@ -1,0 +1,30 @@
+<!--
+Copyright (c) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009 The SCons Foundation
+
+This file is processed by the bin/SConsDoc.py module.
+See its __doc__ string for a discussion of the format.
+-->
+
+<cvar name="PKGCHK">
+<summary>
+On Solaris systems,
+the package-checking program that will
+be used (along with &cv-PKGINFO;)
+to look for installed versions of
+the Sun PRO C++ compiler.
+The default is
+<filename>/usr/sbin/pgkchk</filename>.
+</summary>
+</cvar>
+
+<cvar name="PKGINFO">
+<summary>
+On Solaris systems,
+the package information program that will
+be used (along with &cv-PKGCHK;)
+to look for installed versions of
+the Sun PRO C++ compiler.
+The default is
+<filename>pkginfo</filename>.
+</summary>
+</cvar>
