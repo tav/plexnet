@@ -1,0 +1,7 @@
+# perhaps there should be a config.minimal for dial-up users ?
+
+{
+'windows': {
+  'git': 'http://release.plexnet.org/startup/windows/git'
+  }
+}
