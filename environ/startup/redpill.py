@@ -693,7 +693,7 @@ if get_flag('init'):
                 sys.path.append(join_path(path, EGG_PATH))
 
     install_python_package('pyopenssl', '0.8')
-    install_python_package('pytz', '2008i')
+    install_python_package('pytz', '2009a')
     install_python_package('pil', '1.1.6')
     install_python_package('numpy', '1.2.1')
 
