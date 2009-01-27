@@ -321,7 +321,9 @@ def untar(name, version):
 
     tarball_filename = '%s.tar.bz2' % path_prefix
 
-    if not isfile(tarball_filename):
+    try:
+        tar = tarfile.open(tarball_filename, 'r:bz2')
+    except:
         print_message("Downloading %s" % tarball_filename, PROGRESS)
         distfile = urlopen(
             "%s/%s/%s" % (DISTFILES_SERVER, name.lower(), tarball_filename)
@@ -331,9 +333,9 @@ def untar(name, version):
         tarball_file.write(tarball_source)
         distfile.close()
         tarball_file.close()
+        tar = tarfile.open(tarball_filename, 'r:bz2')
         
     print_message("Unpacking %s" % tarball_filename, PROGRESS)
-    tar = tarfile.open(tarball_filename, 'r:bz2')
     tar.extractall()
     tar.close()
 
