@@ -178,6 +178,7 @@ else:
     PARALLEL = ''
 
 MTIME_CACHE = {}
+LOCAL_FILELISTING = set()
 
 class AlreadyInstalled(Exception):
     """Error raised when a package is detected to have already been installed."""
@@ -248,6 +249,26 @@ def print_message(message, type=ACTION):
     print(type + message + NORMAL)
     print('')
 
+def gather_local_filelisting(directory=PLEXNET_LOCAL, gathered=None):
+    """Return a set of all resources inside the given ``directory``."""
+
+    if gathered is None:
+        if not isdir(directory):
+            return set()
+        gathered = set()
+
+    for item in listdir(directory):
+        path = join_path(directory, item)
+        if isdir(path):
+            gathered.add(path + '/')
+            gather_local_filelisting(path, gathered)
+        else:
+            if path.endswith('.pyc') or path.endswith('.pyo'):
+                continue
+            gathered.add(path)
+
+    return gathered
+
 def compile_from_source_tarball(
     name, version, commands=None, config_command='./configure', config_flags='',
     separate_make_install=False, make_flags="install"
@@ -287,6 +308,11 @@ def compile_from_source_tarball(
 
 def untar(name, version):
     """Extract source files from a tarball and enter the source directory."""
+
+    global LOCAL_FILELISTING
+
+    if not LOCAL_FILELISTING:
+        LOCAL_FILELISTING = gather_local_filelisting()
 
     if version:
         path_prefix = "%s-%s" % (name.lower(), version)
@@ -330,8 +356,14 @@ def rmsource(name, version, dest_dir, path_prefix):
     rmtree(join_path(dest_dir, path_prefix))
     print_message("Successfully Installed %s %s" % (name, version), SUCCESS)
 
+    global LOCAL_FILELISTING
+
+    new_listing = gather_local_filelisting()
+    receipt_data = new_listing.difference(LOCAL_FILELISTING)
+    LOCAL_FILELISTING = new_listing
+
     receipt = open(join_path(PLEXNET_INSTALLED, path_prefix), 'wb')
-    receipt.write(' ')
+    receipt.write('\n'.join(receipt_data))
     receipt.close()
 
     return True
