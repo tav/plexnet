@@ -12,12 +12,10 @@
 Usage: redpill [options]
 Options:
 
-  dotfiles        Install .dotfiles (config) to %(USER_HOME)s
   help            Display the help text.
   init            Compile and install all dependencies.
   version         Print the version number and exit.
 
-  --force         Overwrite (clobber) existing files.
   --verbose       Print updates relating to internals.
 
 The ``redpill`` bootstraps you into the world of Espia.
@@ -140,16 +138,12 @@ PLEXNET_SOURCE = plexnetenv.PLEXNET_SOURCE
 PYTHON_SITE_PACKAGES = plexnetenv.PYTHON_SITE_PACKAGES
 THIRD_PARTY = plexnetenv.THIRD_PARTY
 
-SELF_UPDATE_FILE = join_path(STARTUP_DIRECTORY, '.last_self_update')
-SELF_UPDATE_INTERVAL = 240 # 86400
-
 BASH_MESSAGE = """export PLEXNET_ROOT="%s"
 source $PLEXNET_ROOT/environ/startup/plexnetenv.sh install
 """ % PLEXNET_ROOT
 
 CURRENT_DIRECTORY = os.getcwd()
 USER_HOME = expanduser('~')
-NOW = time()
 PLAT_EXT = ['.so', '.dll'][os.name == 'nt']
 
 ACTION = '\x1b[34;01m>> '
@@ -184,7 +178,6 @@ class AlreadyInstalled(Exception):
     """Error raised when a package is detected to have already been installed."""
 
 FLAGGED = None
-LAST_UPDATED = 0
 
 # ------------------------------------------------------------------------------
 # utility funktions
@@ -510,30 +503,6 @@ if get_flag('--version') or get_flag('version') or get_flag('-v') or get_flag('-
     sys.exit(0)
 
 # ------------------------------------------------------------------------------
-# self update
-# ------------------------------------------------------------------------------
-
-if get_flag('--verbose'):
-    VERBOSE = True
-else:
-    VERBOSE = False
-
-if isfile(SELF_UPDATE_FILE):
-    LAST_UPDATED = open(SELF_UPDATE_FILE, 'rb').read()
-
-if (NOW - float(LAST_UPDATED)) > SELF_UPDATE_INTERVAL:
-    import socket
-    socket.setdefaulttimeout(2.0)
-    try:
-        socket.gethostbyname('google.com') # are we online ?
-    except:
-        pass
-    else:
-        print "Running self update"
-        # gclient.RunSVN(['up'], STARTUP_DIRECTORY, DEVNULL)
-        open(SELF_UPDATE_FILE, 'wb').write(str(NOW))
-
-# ------------------------------------------------------------------------------
 # init
 # ------------------------------------------------------------------------------
 
@@ -850,19 +819,6 @@ if not os.environ.get('PLEXNET_INSTALLED', ''):
                    ), INSTRUCTION
                 )
             print(BASH_MESSAGE)
-
-# ------------------------------------------------------------------------------
-# kopy .konfig files to the user's home direktory
-# ------------------------------------------------------------------------------
-
-if get_flag('dotfiles') and os.name == 'posix':
-    force = get_flag('--force', False)
-    print_message("Installing .config files to %s" % USER_HOME, ACTION)
-    install_dot_file('bashrc', force)
-    install_dot_file('emacs', force)
-    install_dot_file('site-lisp', force, True)
-    install_dot_file('subversion/config', force)
-    print('')
 
 # ------------------------------------------------------------------------------
 # emulate ``scons`` when not called from the enklosing direktory
