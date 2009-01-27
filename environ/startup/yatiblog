@@ -1,21 +1,35 @@
-#! /usr/bin/env python
+#! /usr/bin/env python2.6
 
 """
 Yatiblog -- Blog/Documentation Generator
 
-By default yatiblog will generate .html files in the given directory.
+By default yatiblog will generate .html for source files in the given directory.
 
-Usage: yatiblog [path/to/source/files]
+Usage: yatiblog [path/to/source/directory] [flags]
 
-  --clean           Delete all generated files instead of generating .html files.
-  --pdfs            Generate .pdf files from the documentation.
-  --package=PACKAGE 
+  --clean            Delete all generated files instead of generating .html files.
+  --force            Force regeneration of ALL files irrespective of changes.
+  --pdf=CSS_FILE     Generate .pdf files from the documentation with the CSS_FILE.
+  --package=PACKAGE  Generate .html documentation for the given package.
+  --sitedir=DIRNAME  The subdirectory for site config/output [default: website]
+  --pdfdir=DIRNAME   The subdirectory for .pdf output [default: pdf]
+
+For example:
+
+  yatiblog /home/tav/blog pdf:/home/tav/blog/print.css package:plexnet
 
 """
 
+from __future__ import print_function
+
+import os
+import sys
+
 from fnmatch import filter as fnfilter
 from os import stat, getcwd, listdir
+from os.path import abspath, isabs, isdir, isfile, join as join_path
 
+from plexnetenv import STARTUP_DIRECTORY
 from plexnet.tool.article import main as generate_article
 
 # ------------------------------------------------------------------------------
@@ -23,26 +37,12 @@ from plexnet.tool.article import main as generate_article
 # ------------------------------------------------------------------------------
 
 LATEST_FILENAME = '.latest'
+SITEDIR = 'website'
+PDFDIR = 'pdf'
 
-DOCS = join_path(PLEXNET_ROOT, 'documentation')
-TEXT = join_path(PLEXNET_ROOT, 'documentation', 'text')
-AUTHORS = join_path(DOCS, 'CREDITS.txt')
-WEBSITE_ROOT = join_path(DOCS, 'website')
-TEMPLATE_DIR = join_path(WEBSITE_ROOT, 'template')
 ARTICLE_STORE = join_path(STARTUP_DIRECTORY, '.articlestore')
 
 PDF_COMMAND = ['prince', '--input=html', '--output=pdf'] # --no-compress
-PDF_CSS = join_path(WEBSITE_ROOT, 'static', 'css', 'print.css')
-
-HTML_GEN = ['-d', ARTICLE_STORE, '-r', PLEXNET_ROOT, '-a', AUTHORS]
-
-SITES = {
-    # nick: [domain, source_dir, index_text, codegen]
-    'asktav': ['asktav.com', TEXT, 1, None],
-    'plexnet': ['plexnet.org', DOCS, 0, 'bootstrap'],
-    'turnupthecourage': ['turnupthecourage.com', TEXT, 1, None],
-    }
-
 MTIME_CACHE = {}
 
 # ------------------------------------------------------------------------------
@@ -71,91 +71,46 @@ def touch(file):
     else:
         open(file, 'wb').close()
 
-def get_flag(flag, alter=True):
+def get_flag(flag, alter=True, default=True):
     """Return whether a specific flag is set in the command line parameters."""
 
-    flagc = '%s:' % flag
+    flagc = '%s=' % flag
     argv = []
     retval = None
     for arg in sys.argv:
         if arg == flag:
-            retval = True
+            retval = default
         elif arg.startswith(flagc):
-            retval = arg.split(flagc, 1)[1] or True
+            retval = arg.split(flagc, 1)[1] or default
         else:
             argv.append(arg)
     if alter:
         sys.argv[:] = argv
-        if retval:
-            global flagged
-            flagged = True
+    if retval is None and default is not True:
+        return default
     return retval
 
 # ------------------------------------------------------------------------------
-# 
-# ------------------------------------------------------------------------------
-
-if get_flag('pdfs'):
-    # $(documentation_pdf_files): documentation/pdf/%.pdf: documentation/article/%.html $(template) $(pdf_css)
-    # 	@echo "---> generating" "$@"
-    # 	@for n in "$<"; \
-    # 	  do \
-    # 	    $(prince) $$n --style=$(pdf_css) --output=$@; \
-    # 	  done;
-    # 	@echo
-    pass
-
-if get_flag('todo'):
-    # @echo "# Writing: Done Tasks:"
-    # @grep "^+" blog/todo.txt | wc -l
-    # @echo ""
-    # @echo "Todo Tasks:"
-    # @grep "^*" blog/todo.txt | wc -l
-    # @echo ""
-    # @echo "Total Tasks:"
-    # @grep "^[*+]" blog/todo.txt | wc -l
-    # @echo ""
-    # @echo "# Coding: Done Tasks:"
-    # @grep "^+" documentation/todo.txt | wc -l
-    # @echo ""
-    # @echo "Todo Tasks:"
-    # @grep "^*" documentation/todo.txt | wc -l
-    # @echo ""
-    # @echo "Total Tasks:"
-    # @grep "^[*+]" documentation/todo.txt | wc -l
-    pass
-
-# ------------------------------------------------------------------------------
-# cleanup
-# ------------------------------------------------------------------------------
-
-if get_flag('clean'):
-    for site in SITES:
-        output_dir = join_path(WEBSITE_ROOT, SITES[site][0])
-        files = listdir(output_dir)
-        for file in fnfilter(files, '*.html'):
-            file = join_path(output_dir, file)
-            print "Removing:", file
-            os.remove(file)
-        for file in fnfilter(files, '*.rss'):
-            file = join_path(output_dir, file)
-            print "Removing:", file
-            os.remove(file)
-    if isfile(ARTICLE_STORE):
-        print "Removing:", ARTICLE_STORE
-        os.remove(ARTICLE_STORE)
-
-# ------------------------------------------------------------------------------
-# docs
+# kore generator
 # ------------------------------------------------------------------------------
 
 def generate_docs(site, force=False):
 
-    from plexnet.tool.article import main as generate_article
-
     #'asktav': ['asktav.com', TEXT, 1, None],
     #'plexnet': ['plexnet.org', DOCS, 0, 'plexnet'],
     #'turnupthecourage': ['turnupthecourage.com', TEXT, 1, None],
+
+    PDF_CSS = join_path(WEBSITE_ROOT, 'static', 'css', 'print.css')
+    HTML_GEN = ['-d', ARTICLE_STORE, '-r', PLEXNET_ROOT, '-a', AUTHORS]
+
+    SITES = {
+        # nick: [domain, source_dir, index_text, codegen]
+        'asktav': ['asktav.com', TEXT, 1, None],
+        'plexnet': ['plexnet.org', DOCS, 0, 'bootstrap'],
+        'turnupthecourage': ['turnupthecourage.com', TEXT, 1, None],
+        }
+
+    AUTHORS = join_path(DOCS, 'CREDITS.txt')
 
     domain, source_dir, index_text, codegen = SITES[site]
     latest = get_mtime(LATEST_FILE)
@@ -234,7 +189,7 @@ def generate_docs(site, force=False):
                             break
         if regen or force:
             print
-            print "---> generating CODE DOCUMENTATION for %r" % codegen
+            print("---> generating CODE DOCUMENTATION for %r" % codegen)
             _argv = argv[:]
             _argv.extend(['-c', code_root])
             generate_article(_argv)
@@ -242,14 +197,108 @@ def generate_docs(site, force=False):
         
     if modified or (template_mtime > index_mtime) or force:
         print
-        print "---> generating INDEX FILES for %r" % domain
+        print("---> generating INDEX FILES for %r" % domain)
         _argv = argv[:]
         _argv.extend(['-p', output_dir])
         generate_article(_argv)
 
-if get_flag('docs'):
-    force = get_flag('--force', False)
-    for site in SITES:
-        generate_docs(site, force)
-    touch(LATEST_FILE)
+# ------------------------------------------------------------------------------
+# main funktion
+# ------------------------------------------------------------------------------
 
+def error(message):
+    print('\n' + ('-' * 70) + '\n')
+    print("  !! %s !!" % message)
+    print('\n' + ('-' * 70) + '\n')
+
+def main():
+
+    sys.argv = sys.argv[1:]
+
+    help = get_flag('--help') or get_flag('help') or get_flag('-h')
+    force = get_flag('--force')
+    clean = get_flag('--clean')
+    pdfs = get_flag('--pdf')
+    package = get_flag('--package')
+    sitedir = get_flag('--sitedir', default=SITEDIR)
+    pdfdir = get_flag('--pdfdir', default=PDFDIR)
+
+    if help:
+        print(__doc__)
+        sys.exit()
+
+    if not sys.argv:
+        error("A path to a directory with yatiblog text files wasn't given")
+        sys.exit(1)
+
+    LAST = len(sys.argv) - 1
+
+    for idx, path in enumerate(sys.argv):
+
+        path = abspath(path)
+
+        if not isdir(path):
+            error("%r doesn't exist" % path)
+            sys.exit(1)
+
+        if not isabs(sitedir):
+            sitedir = join_path(path, sitedir)
+
+        if not isdir(sitedir):
+            print("Creating: %r" % sitedir)
+            os.mkdir(sitedir)
+
+        if not isabs(pdfdir):
+            pdfdir = join_path(sitedir, pdfdir)
+
+        if not isdir(pdfdir):
+            print("Creating: %r" % pdfdir)
+            os.mkdir(pdfdir)
+
+        if clean:
+
+             files = listdir(sitedir)
+
+             for file in fnfilter(files, '*.html'):
+                 file = join_path(sitedir, file)
+                 print("Removing:", file)
+                 os.remove(file)
+
+             for file in fnfilter(files, '*.rss'):
+                 file = join_path(sitedir, file)
+                 print("Removing:", file)
+                 os.remove(file)
+
+             pdfs = listdir(pdfdir)
+
+             for file in fnfilter(pdfs, '*.pdf'):
+                 file = join_path(pdfdir, file)
+                 print("Removing:", file)
+                 os.remove(file)
+
+             if isfile(ARTICLE_STORE):
+                 print("Removing:", ARTICLE_STORE)
+                 os.remove(ARTICLE_STORE)
+
+             if idx == LAST:
+                 sys.exit()
+
+             continue
+
+        print('hi')
+
+#     for site in SITES:
+#         generate_docs(site, force)
+#     touch(LATEST_FILE)
+
+
+# $(documentation_pdf_files): documentation/pdf/%.pdf: documentation/article/%.html $(template) $(pdf_css)
+# 	@echo "---> generating" "$@"
+# 	    $(prince) $$n --style=$(pdf_css) --output=$@; \
+
+# ------------------------------------------------------------------------------
+# self runner
+# ------------------------------------------------------------------------------
+
+if __name__ == '__main__':
+    main()

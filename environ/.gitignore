@@ -1,5 +1,6 @@
 local
 startup/.last_self_update
+startup/.articlestore
 *.dylib
 *.lo
 *.la

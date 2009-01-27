@@ -25,6 +25,8 @@ The ``redpill`` bootstraps you into the world of Espia.
 For now, simply run ``redpill init`` to get started.
 """
 
+from __future__ import print_function
+
 import os
 import shutil
 import sys
