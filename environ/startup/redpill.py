@@ -324,7 +324,7 @@ def untar(name, version):
     if not isfile(tarball_filename):
         print_message("Downloading %s" % tarball_filename, PROGRESS)
         distfile = urlopen(
-            "%s/%s/%s" % (DISTFILES_SERVER, name, tarball_filename)
+            "%s/%s/%s" % (DISTFILES_SERVER, name.lower(), tarball_filename)
             )
         tarball_source = distfile.read()
         tarball_file = open(tarball_filename, 'wb')
