@@ -436,7 +436,7 @@ def main(argv, genfiles=None):
 
             filebase, filetype = splitext(basename(filename))
             info['__outdir__'] = output_path
-            info['__name__'] = filebase
+            info['__name__'] = filebase.lower()
             info['__type__'] = 'txt'
             info['__title__'] = filebase.replace('-', ' ')
             add_file((source, info))
