@@ -208,7 +208,7 @@ def main():
             for source in sources:
 
                 source_file = join_path(source_dir, '%s.txt' % source)
-                dest_file = join_path(output_dir, '%s.html' % source)
+                dest_file = join_path(output_dir, '%s.html' % source.lower())
                 dest_mtime = get_mtime(dest_file)
 
                 regen = 0
