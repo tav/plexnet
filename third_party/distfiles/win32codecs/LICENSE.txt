@@ -1,0 +1,3 @@
+The license for these win32 codecs is bloody difficult to find. It is the files
+as distributed on the mplayer website. See the mplayer website for further
+information.
