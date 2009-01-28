@@ -1,4 +1,6 @@
-"""
+# -*- coding: utf-8 -*-
+
+u"""
 ================
 Plexnet Builtins
 ================
@@ -35,6 +37,16 @@ There is a special ambiguous transboolean -- ``Maybe``:
   >>> hate_nutella
   Maybe(0)
 
+The builtin ``get_canonical_plexname`` takes a single parameter, ``plexname``,
+which has to be a unicode string. The plexname is then normalised and case
+folded according to some of the Unicode specifications and certain whitespace
+and control characters are replaced by '-'.
+
+    >>> get_canonical_plexname(u'Hello World')
+    u'hello-world'
+
+    >>> # get_canonical_plexname(u'Müllerstraße')
+    u'müllerstrasse'
 
 """
 
@@ -45,10 +57,12 @@ from datetime import date, datetime, time, timedelta
 from decimal import Decimal as decimal
 from fractions import gcd, Fraction as fraction
 from future_builtins import ascii, filter, hex, map, oct, zip
+from unicodedata import category, normalize as normalise_unicode
 
 from pytz import UTC
 
 from ..util.optimise import optimise
+from ..util.casefold import CASE_MAP
 
 __all__ = [
 
@@ -62,6 +76,14 @@ __all__ = [
 # ------------------------------------------------------------------------------
 
 __metaclass__ = type
+
+# from stringprep @/@ based off of unicode 3.2.0 though ...
+
+SPECIALS = set(
+    [35, 45, 47, 59, 95] + # - / ; _
+    [1757, 1807, 6158, 8204, 8205, 8232, 8233, 65279] + range(8288, 8292) +
+    range(8298, 8304) + range(65529, 65533) + range(119155, 119163)
+    )
 
 # ------------------------------------------------------------------------------
 # transboolean
@@ -120,11 +142,65 @@ class Maybe(int):
 # Mu / Fuzzy / Possible
 
 # ------------------------------------------------------------------------------
+# symbols
+# ------------------------------------------------------------------------------
+
+Blank = object()
+Null = object()
+
+# ------------------------------------------------------------------------------
 # text builtins
 # ------------------------------------------------------------------------------
 
 class text(unicode):
     """A Text."""
+
+# ------------------------------------------------------------------------------
+# plexname
+# ------------------------------------------------------------------------------
+
+def get_canonical_plexname(plexname):
+    """Return a canonicalised form of a plexname."""
+
+    if not isinstance(plexname, unicode):
+        plexname = unicode(plexname, 'utf-8')
+
+    # @/@ this has lotsa skope for optimisation. also, need to choose between:
+
+    #   NFKD(toCasefold(NFKD(toCasefold(NFD(X)))))
+    #   NFD(toCasefold(NFD(X)))
+
+    if u'\u0345' in plexname: # COMBINING GREEK YPOGEGRAMMENI
+        plexname = normalise_unicode('NFD', plexname)
+
+    canonised = []; out = canonised.append
+    space = False
+
+    for char in plexname:
+
+        # @/@ http://www.fileformat.info/info/unicode/category/index.htm
+
+        if (category(char) in ['Cc', 'Zs']) or (ord(char) in SPECIALS):
+            space = True
+            continue
+
+        if space:
+            space = False
+            if canonised:
+                out(u'-')
+
+        out(CASE_MAP.get(char, char))
+
+    plexname = normalise_unicode('NFKD', u''.join(canonised))
+    canonised[:] = []
+
+    for char in plexname:
+        out(CASE_MAP.get(char, char))
+
+    # @/@ we're using NFKC sinse it looks prettier
+    # @/@ see FC_NFKC_Closure to do properly -- DerivedNormalizationProps.txt
+
+    return normalise_unicode('NFKC', u''.join(canonised))
 
 # ------------------------------------------------------------------------------
 # date builtins
@@ -168,8 +244,3 @@ def install_builtins(namespace=None):
     for name in __all__:
         if name in _globals:
             namespace[name] = _globals[name]
-
-
-Blank = object()
-Null = object()
-
