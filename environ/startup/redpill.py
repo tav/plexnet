@@ -714,8 +714,12 @@ if get_flag('init'):
         'extension.TimeStamp': ['extension/TimeStamp.c'],
         'extension.whirlpool': ['extension/whirlpool.c'],
         'genshi._speedups': ['genshi/_speedups.c'],
+        'gdata.tlslite.utils.entropy': ['gdata/tlslite/utils/entropy.c'],
         # '_uuid': ['uuid.c', 'pyuuid.c'],
         }
+
+    if sys.platform == "win32":
+        EXTENSIONS['gdata.tlslite.utils.win32prng'] = ['gdata/tlslite/utils/win32prng.c']
 
     for name, sources in EXTENSIONS.iteritems():
         dest_mtime = get_mtime(name.replace('.', '/') + PLAT_EXT)
@@ -736,7 +740,7 @@ if get_flag('init'):
                     libraries=libraries, library_dirs=[PLEXNET_LIB],
                     ))
                 break
-
+    print pyc_extensions
     if pyc_extensions:
         do_action_in_directory(
             "Compiling Extensions", "Compiled", PYTHON_SITE_PACKAGES,
