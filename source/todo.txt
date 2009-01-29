@@ -1,0 +1,30 @@
+#! /bin/sh
+
+echo ""
+echo "Done Tasks:"
+echo ""
+grep "^+" todo.txt | wc -l
+echo ""
+echo "Todo Tasks:"
+echo ""
+grep "^-" todo.txt | wc -l
+echo ""
+echo "Total Tasks:"
+echo ""
+grep "^[+-]" todo.txt | wc -l
+echo ""
+
+cat > /dev/null << EOF
+
+===============
+Section Heading
+===============
+
++ Completed task 1
+- Task needing to be done
+
++ Completed task 2
+
+
+
+EOF
