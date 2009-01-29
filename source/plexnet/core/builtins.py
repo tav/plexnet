@@ -159,6 +159,7 @@ class text(unicode):
 # plexname
 # ------------------------------------------------------------------------------
 
+@optimise()
 def get_canonical_plexname(plexname):
     """Return a canonicalised form of a plexname."""
 
