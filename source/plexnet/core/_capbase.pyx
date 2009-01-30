@@ -118,6 +118,9 @@ cdef class Namespace:
     def __repr__(Namespace self):
         return getattr(self, ('__repr__'))()
 
+    def __add__(Namespace self, other):
+        return getattr(self, ('__add__'))(other)
+
 cdef _prune_stores():
 
     cdef list remlist, surv
