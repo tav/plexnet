@@ -3,10 +3,12 @@
 import sys
 import traceback
 
+from os import walk, sep
+from os.path import join as join_path
+
 from ..util.doctest import testfile, testmod, ELLIPSIS
-from ..util.io import DEVNULL
+from ..util.io import DEVNULL, print_text as text
 from ..util.io import print_message as heading, print_note as note
-from ..util.io import print_text as text
 
 # ------------------------------------------------------------------------------
 # some konstants
@@ -16,53 +18,25 @@ PASSED = 'PASSED'
 FAILED = "------ FAILED"
 IMPORT_ERROR = "------ IMPORT ERROR"
 
-# ------------------------------------------------------------------------------
-# modules to be tested
-# ------------------------------------------------------------------------------
-
-DEFAULT_TEST_MODULES = (
-
-    'util.secure',
-    'util.modulesetup',
-    '#SECURE_PYTHON',
-    'util.optimise',
-    'core.builtins',
-
-    'core.capbase',
-    'core.networking',
-    'core.psf',
-    'core.py2js',
-
-    'service.facebook',
-    'service.rst',
-    'service.worldbank',
-
-    'util.dict',
-    'util.doctest',
-    'util.io',
-    'util.pytype',
-    'util.urischeme',
-
-    )
+PACKAGE = 'plexnet'
 
 # ------------------------------------------------------------------------------
 # handlers
 # ------------------------------------------------------------------------------
 
 handlers = {}
-register_handler = handlers.__setitem__
 
 def secure_python():
-    from ..util.secure import secure_python
+    from plexnet.util.secure import secure_python
     secure_python()
 
-register_handler('#SECURE_PYTHON', secure_python)
+handlers[secure_python] = ('util.secure',)
 
 # ------------------------------------------------------------------------------
 # a basik test framework ;p
 # ------------------------------------------------------------------------------
 
-def run_tests(argv=None, verbose=False, package='plexnet', handlers=handlers):
+def run_tests(argv=None, verbose=False, package=PACKAGE, handlers=handlers):
     """
     Run Plexnet Tests.
 
@@ -122,16 +96,37 @@ def run_tests(argv=None, verbose=False, package='plexnet', handlers=handlers):
         text = lambda colour, text: text
         argv.remove('--no-colour')
 
-    if not argv:
-        argv = DEFAULT_TEST_MODULES
+    if package and not argv:
+
+        package_path = __import__(package).__path__[0]
+        pp_len = len(package_path) + 1
+        add_mod = argv.append
+
+        for root, dirs, files in walk(package_path):
+            for file in files:
+                if file.endswith('.py') and file != '__init__.py':
+                    add_mod(join_path(root, file)[pp_len:-3].replace(sep, '.'))
+
+    argv.sort()
+
+    if package == PACKAGE:
+        for handler in handlers.keys():
+            idx = 0
+            for mod in handlers[handler]:
+                if mod in argv:
+                    argv.remove(mod)
+                    argv.insert(0, mod)
+                    idx += 1
+            else:
+                argv.insert(idx, handler)
 
     test_data = []; out = test_data.append
 
-    for module in argv:
-        if module in handlers:
-            handlers[module]()
+    for item in argv:
+        if item in handlers:
+            item()
         else:
-            out(test_module(module, verbose, package, suppress))
+            out(test_module(item, verbose, package, suppress))
 
     print_test_summary(test_data, ori_stdout)
 
