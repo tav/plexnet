@@ -9,10 +9,10 @@
 
   LINKS = [
 
-  ('http://www.asktav.com/plexnet.html', 'Plexnet Specification'),
-  ('GETTING-STARTED.html', 'Getting Started'),
-  ('LICENSE.html', 'Copyright & Licensing'),
-  ('CREDITS.html', 'Credits'),
+  ('http://tav.espians.com/plexnet.html', 'Plexnet Specification'),
+  ('install.html', 'Installing Plexnet'),
+  ('license.html', 'Copyright & Licensing'),
+  ('credits.html', 'Credits'),
 
   ]
 
