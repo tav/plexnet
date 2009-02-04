@@ -39,8 +39,7 @@ from plexnet.tool.article import main as generate_article
 LATEST_FILENAME = '.latest'
 SITEDIR = 'website'
 PDFDIR = 'pdf'
-
-ARTICLE_STORE = join_path(STARTUP_DIRECTORY, '.articlestore')
+ARTICLE_STORE = '.articlestore'
 
 PDF_COMMAND = ['prince', '--input=html', '--output=pdf'] # --no-compress
 MTIME_CACHE = {}
@@ -148,6 +147,8 @@ def main():
             print("Creating: %r" % output_pdf_dir)
             mkdir(output_pdf_dir)
 
+        article_store = join_path(output_dir, ARTICLE_STORE)
+
         if clean:
 
              files = listdir(output_dir)
@@ -169,9 +170,9 @@ def main():
                  print("Removing:", file)
                  rm(file)
 
-             if isfile(ARTICLE_STORE):
-                 print("Removing:", ARTICLE_STORE)
-                 rm(ARTICLE_STORE)
+             if isfile(article_store):
+                 print("Removing:", article_store)
+                 rm(article_store)
 
              if idx == LAST:
                  sys.exit()
@@ -192,7 +193,7 @@ def main():
         index_mtime = get_mtime(join_path(output_dir, 'index.html'))
         template_mtime = get_mtime(template)
 
-        argv = ['-d', ARTICLE_STORE, '-t', template, '-o', output_dir]
+        argv = ['-d', article_store, '-t', template, '-o', output_dir]
 
         if authors:
             argv.append('-a')
