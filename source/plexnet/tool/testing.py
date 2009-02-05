@@ -96,8 +96,11 @@ def run_tests(argv=None, verbose=False, package=PACKAGE, handlers=handlers):
         text = lambda colour, text: text
         argv.remove('--no-colour')
 
+    print_empty_tests = True
+
     if package and not argv:
 
+        print_empty_tests = False
         package_path = __import__(package).__path__[0]
         pp_len = len(package_path) + 1
         add_mod = argv.append
@@ -128,7 +131,7 @@ def run_tests(argv=None, verbose=False, package=PACKAGE, handlers=handlers):
         else:
             out(test_module(item, verbose, package, suppress))
 
-    print_test_summary(test_data, ori_stdout)
+    print_test_summary(test_data, ori_stdout, print_empty_tests)
 
 def test_module(module_name, verbosity=None, package='', suppress=False):
     """Test the given module, print failure output and return some state info."""
@@ -179,7 +182,7 @@ def test_module(module_name, verbosity=None, package='', suppress=False):
 
 _marker = object()
 
-def print_test_summary(results, stream):
+def print_test_summary(results, stream, print_empty_tests):
 
     sys.stdout = stream
 
@@ -190,6 +193,9 @@ def print_test_summary(results, stream):
     _total = _count = 0
 
     for name, failures, tries, status in results:
+
+        if not print_empty_tests and tries == 0:
+            continue
 
         _total += tries
         _split = name.rsplit('.', 1)

@@ -54,6 +54,32 @@ provided ``Namespace``:
     >>> x + y
     Point(4, 6)
 
+    >>> def Spam():
+    ...     __doc__ = 'Hello'
+    ...     return Namespace(__doc__=__doc__)
+
+    >>> s = Spam()
+
+    >>> unicode(s)
+    u'<plexnet.core._capbase.Namespace object at 0x...>'
+
+    >>> hash(s) == hash(s)
+    True
+
+    >>> len(s)
+    Traceback (most recent call last):
+    ...
+    TypeError: Namespace object has no len()
+
+    >>> def Spam2():
+    ...     def __len__():
+    ...         return 4
+    ...     return Namespace()
+
+    >>> len(Spam2())
+    4
+
+
 """
 
 from sys import _getframe as get_frame

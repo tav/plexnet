@@ -32,7 +32,6 @@ cdef extern from "Python.h":
 
     int PyUnicode_Tailmatch(object str, object substr, Py_ssize_t start, Py_ssize_t end, int direction)
 
-
 cdef extern from "support.h":
     object get_frame_locals()
 
@@ -109,17 +108,50 @@ cdef class Namespace:
 
         raise AttributeError("'Namespace' object has no attribute %r" % attribute)
 
+    # string kustomisation
+
+    def __repr__(Namespace self):
+        method = getattr3(self, '__repr__', None)
+        if method is None:
+            return object.__repr__(self)
+        return method()
+
+    def __str__(Namespace self):
+        method = getattr3(self, '__str__', None)
+        if method is None:
+            return object.__str__(self)
+        return method()
+
+    def __unicode__(Namespace self):
+        method = getattr3(self, '__unicode__', None)
+        if method is None:
+            str_method = getattr3(self, '__str__', None)
+            if str_method is None:
+                return object.__str__(self)
+            return str_method()
+        return method()
+
+    # generik
+
     def __dir__(Namespace self):
         return list(_id2keys_store[self.id])
 
-    def __str__(Namespace self):
-        return getattr(self, ('__str__'))()
- 
-    def __repr__(Namespace self):
-        return getattr(self, ('__repr__'))()
+    def __hash__(Namespace self):
+        method = getattr3(self, '__hash__', None)
+        if method is None:
+            return object.__hash__(self)
+        return method()
+
+    def __len__(Namespace self):
+        method = getattr3(self, '__len__', None)
+        if method is None:
+            raise TypeError("Namespace object has no len()")
+        return method()
+
+    # XXX need to add support for other __magic__ methods
 
     def __add__(Namespace self, other):
-        return getattr(self, ('__add__'))(other)
+        return getattr(self, '__add__')(other)
 
 cdef _prune_stores():
 
