@@ -42,7 +42,7 @@ __authors__ =  {
 
 __maintainer__ = __authors__[1]
 
-__version__ = (0, 9, 0)
+__version__ = (0, 1)
 __release__ = '.'.join(map(str, __version__))
 
 __moreinfo__ = ("http://www.plexnet.org", "plex:ocsi/plexnet")
