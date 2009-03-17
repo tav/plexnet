@@ -403,7 +403,7 @@ def main(argv, genfiles=None):
                 info['__type__'] = 'py'
                 info['__title__'] = module
                 info['__source__'] = highlight(module_source, PythonLexer(), SYNTAX_FORMATTER)
-                add_file((docstring, info))
+                add_file((docstring, '', info))
 
     else:
 
@@ -434,14 +434,19 @@ def main(argv, genfiles=None):
             source = source_file.read()
             source_file.close()
 
+            if '\n.. more\n' in source:
+                source_lead = source.split('\n.. more\n')[0]
+            else:
+                source_lead = ''
+
             filebase, filetype = splitext(basename(filename))
             info['__outdir__'] = output_path
             info['__name__'] = filebase.lower()
             info['__type__'] = 'txt'
             info['__title__'] = filebase.replace('-', ' ')
-            add_file((source, info))
+            add_file((source, source_lead, info))
 
-    for source, info in files:
+    for source, source_lead, info in files:
 
         if verbose:
             print
@@ -459,6 +464,10 @@ def main(argv, genfiles=None):
             # output = output.encode(output_encoding)
             info['__text__'] = output.encode(output_encoding)
             info.update(props)
+            if source_lead:
+                info['__lead__'] = render_rst(
+                    source_lead, format, input_encoding, True
+                    )[0].encode(output_encoding)
             output = template.generate(
                 content=output,
                 info=info,
@@ -472,6 +481,10 @@ def main(argv, genfiles=None):
             info.update(props)
             output = output.encode(output_encoding)
             info['__text__'] = output
+            if source_lead:
+                info['__lead__'] = render_rst(
+                    source_lead, format, input_encoding, True, as_whole=True
+                    )[0].encode(output_encoding)
 
         if data_file:
             data_dict[info['__path__']] = info
