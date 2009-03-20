@@ -12,6 +12,7 @@ from os.path import split as split_path, splitext, isabs
 from optparse import OptionParser
 from pickle import load as load_pickle, dump as dump_pickle
 from re import compile
+from time import time
 
 from genshi.template import MarkupTemplate, TemplateLoader
 from pygments import highlight
@@ -27,6 +28,7 @@ from ..service.rst import render_rst
 LINE = '-' * 78
 HOME = getcwd()
 
+MORE_LINE = '\n.. more\n'
 SEPARATORS = ('-', ':')
 
 SVN_INFO = "svn info -R %s" # -R HEAD
@@ -434,8 +436,9 @@ def main(argv, genfiles=None):
             source = source_file.read()
             source_file.close()
 
-            if '\n.. more\n' in source:
-                source_lead = source.split('\n.. more\n')[0]
+            if MORE_LINE in source:
+                source_lead = source.split(MORE_LINE)[0]
+                source = source.replace(MORE_LINE, '')
             else:
                 source_lead = ''
 
@@ -515,6 +518,27 @@ def main(argv, genfiles=None):
             for item in data_dict.itervalues()
             if item['__outdir__'] == pattern
             ]
+
+        # index.js/json
+
+        import json
+
+        index_js_template = join_path(output_path, 'index.js.template')
+
+        if isfile(index_js_template):
+
+            index_json = json.dumps([
+                [_art['__name__'], _art['title'].encode('utf-8')]
+                for _art in sorted(
+                    [item for item in items if item.get('x-created')],
+                    key=lambda i: i['x-created']
+                    )
+                ])
+
+            index_js_template = open(index_js_template, 'rb').read()
+            index_js = open(join_path(output_path, 'index.js'), 'wb')
+            index_js.write(index_js_template % index_json)
+            index_js.close()
 
         for name, mode, format in INDEX_FILES:
 
