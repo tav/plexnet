@@ -530,7 +530,8 @@ def main(argv, genfiles=None):
             index_json = json.dumps([
                 [_art['__name__'], _art['title'].encode('utf-8')]
                 for _art in sorted(
-                    [item for item in items if item.get('x-created')],
+                    [item for item in items if item.get('x-created') and
+                     item.get('x-type', 'blog') == 'blog'],
                     key=lambda i: i['x-created']
                     )
                 ])
