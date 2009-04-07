@@ -59,8 +59,7 @@ framework, by running:
 
    $ docspec website /path/to/website/directory
 
-If no you run docspec website without specifying a directory, it will default
-to:
+If you run docspec website without specifying a directory, it will default to:
 
    $PLEXNET_ROOT/documentation/website/
 
@@ -83,12 +82,11 @@ Example tags include:
 
    feature, backend, networking, crypto
 
+Certain "typed" tags are given special treatment in the default web interface.
+
 You can tag a docspec with users using an @username tag, e.g.
 
    @tav, @Killarny, @sbp, @thruflo
-
-And finally, 3 special typed tags are given special treatment in the default web
-interface.
 
 You can specify the "state" of a docspec. The recommended states are:
 
@@ -105,24 +103,47 @@ dependent on. This is done with the "requires" type, e.g.
 
 """
 
-import plexnetenv
+import os
+import subprocess
 import sys
 
+from datetime import datetime
 from os import listdir
-from os.path import isdir, join as join_path
+from os.path import exists, isdir, join as join_path
+from textwrap import TextWrapper
 from time import time
+
+import plexnetenv
 
 # ------------------------------------------------------------------------------
 # some konstants
 # ------------------------------------------------------------------------------
 
-DOCSPEC_TEMPLATE = """
-:X-Depends:
+DOCSPEC_TEMPLATE = """%s
+%s
+%s
+
+:X-Created: [%s]
 :X-Tags:
 
-  state:open, priority:low, untagged
+    %s
 
 """
+
+NOW = datetime.utcnow()
+
+# ------------------------------------------------------------------------------
+# utility klasses
+# ------------------------------------------------------------------------------
+
+class Tag(object):
+
+    def __init__(self):
+        self.people = []
+        self.state = 'new'
+        self.priority = 'normal'
+        self.requires = []
+        self.tags = []
 
 # ------------------------------------------------------------------------------
 # utility funktions
@@ -131,17 +152,49 @@ DOCSPEC_TEMPLATE = """
 def create_docspec_id():
     return hex(int(time()*100))[2:-1]
 
-def create_docspec(title):
+def create_docspec(docspec_id, title, tags):
+
+    title = title.strip()
+    if not title:
+        title = "Docspec %s" % docspec_id
 
     title_length = len(title)
-    header = "%s\n%s\n%s\n" % ('=' * title_length, title, '=' * title_length)
-    docspec_content = header + DOCSPEC_TEMPLATE
 
-    print docspec_content
+    tags = tags.strip()
+    if not tags:
+        tags = "state:new, priority:normal, untagged"
+
+    wrapper = TextWrapper(width=80)
+    wrapper.subsequent_indent = '    '
+    tags = wrapper.fill(tags)
+
+    return DOCSPEC_TEMPLATE % (
+        '=' * title_length,
+        title,
+        '=' * title_length,
+        NOW.strftime('%Y-%m-%d, %H:%M'),
+        tags
+        )
 
 def help():
     print __doc__
     sys.exit()
+
+def parse_tag_string(tags):
+    result = Tag()
+    tags = filter(None, map(str.strip, tags.split(',')))
+    for tag in tags:
+        tag = '-'.join(tag.split()).lower()
+        result.tags.append(tag)
+        if tag.startswith('@'):
+            result.people.append(tag[1:])
+        elif tag.startswith('state:'):
+            result.state = tag[6:]
+        elif tag.startswith('priority:'):
+            result.priority = tag[9:]
+        elif tag.startswith('requires:'):
+            result.requires.append(tag[9:])
+    return result.__dict__
 
 # ------------------------------------------------------------------------------
 # main runner
@@ -159,7 +212,9 @@ def runner(argv=None):
     docspec_directory = join_path(plexnetenv.PLEXNET_ROOT, 'documentation', 'docspec')
 
     try:
-        docspec_directory = argv[argv.index('-d') + 1]
+        dir_pos = argv.index('-d')
+        del argv[dir_pos]
+        docspec_directory = argv.pop(dir_pos)
     except Exception:
         pass
 
@@ -168,12 +223,56 @@ def runner(argv=None):
         sys.exit(1)
 
     if command == 'new':
-        print
-        # create_docspec()
-        print create_docspec_id()
+
+        docspec_id = create_docspec_id()
+        tags = title = ''
+
+        if '-t' in argv:
+            tag_pos = argv.index('-t')
+            del argv[tag_pos]
+            try:
+                tags = argv.pop(tag_pos)
+            except IndexError:
+                pass
+
+        if argv:
+            title = argv[0]
+
+        content = create_docspec(docspec_id, title, tags)
+        docspec_filename = join_path(docspec_directory, docspec_id + '.txt')
+
+        if exists(docspec_filename):
+            print "!! File %r already exists !!" % docspec_filename
+            sys.exit(1)
+
+        docspec = open(docspec_filename, 'wb')
+        docspec.write(content)
+        docspec.close()
+
+        if 'EDITOR' in os.environ:
+            retval = subprocess.call([os.environ['EDITOR'], docspec_filename])
+            if retval:
+                print "!! Couldn't open %r with $EDITOR !!" % docspec_filename
+            print
+            print " Docspec Id:    %s" % docspec_id
+            print " Docspec File:  %s" % docspec_filename
+            print
 
     elif command == 'list':
-        print listdir(docspec_directory)
+
+        # sort on created
+
+        print
+        print " +------------+--------------------+------------+--------+--------------------------------+"
+        print " | Docspec ID |              Title |    Created |  State |                           Tags |"
+        print " +------------+--------------------+------------+--------+--------------------------------+"
+        for docspec in listdir(docspec_directory):
+            tags = ['@tav', 'state:new', 'gui', 'requires:21155315131']
+            print " | %10s | %18s | %s | %6s | %s |" % (
+                docspec[:-4], "hOIHOIHOIHO IHO HOI HOIHOIO"[:18], '2009/02/23',
+                'new'[:6], ','.join(tags)[:30]
+                )
+        print " +------------+--------------------+------------+--------+--------------------------------+"
 
     elif command == 'help':
         help()
