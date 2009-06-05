@@ -3,6 +3,8 @@
 environ/local
 third_party/python/docutils/writers/s5_html
 third_party/python/gdata/Crypto
+third_party/generic/pypy/demo
+third_party/generic/pypy/pypy/lang
 
 # general hidden files/directories
 

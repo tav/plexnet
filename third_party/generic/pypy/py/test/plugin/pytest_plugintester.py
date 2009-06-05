@@ -1,0 +1,208 @@
+"""
+plugin with support classes and functions for testing pytest functionality 
+"""
+import py
+
+class PlugintesterPlugin:
+    """ test support code for testing pytest plugins. """
+    def pytest_funcarg__plugintester(self, pyfuncitem):
+        pt = PluginTester(pyfuncitem) 
+        pyfuncitem.addfinalizer(pt.finalize)
+        return pt
+
+class Support(object):
+    def __init__(self, pyfuncitem):
+        """ instantiated per function that requests it. """
+        self.pyfuncitem = pyfuncitem
+
+    def getmoditem(self):
+        for colitem in self.pyfuncitem.listchain():
+            if isinstance(colitem, colitem.Module):
+                return colitem 
+
+    def finalize(self):
+        """ called after test function finished execution"""
+
+class PluginTester(Support):
+    def testdir(self):
+        # XXX import differently, eg. 
+        #     FSTester = self.pyfuncitem.config.pytestplugins.getpluginattr("pytester", "FSTester")
+        from pytest_pytester import TmpTestdir
+        crunner = TmpTestdir(self.pyfuncitem)
+        # 
+        for colitem in self.pyfuncitem.listchain():
+            if isinstance(colitem, py.test.collect.Module) and \
+               colitem.name.startswith("pytest_"):
+                    crunner.plugins.append(colitem.fspath.purebasename)
+                    break 
+        return crunner 
+
+    def apicheck(self, pluginclass):
+        print "loading and checking", pluginclass 
+        fail = False 
+        pm = py.test._PytestPlugins()
+        methods = collectattr(pluginclass)
+        hooks = collectattr(PytestPluginHooks)
+        getargs = py.std.inspect.getargs
+
+        def isgenerichook(name):
+            return name.startswith("pytest_funcarg__")
+
+        while methods:
+            name, method = methods.popitem()
+            if isgenerichook(name):
+                continue
+            if name not in hooks:
+                print "found unknown hook: %s" % name 
+                fail = True
+            else:
+                hook = hooks[name]
+                if not hasattr(hook, 'func_code'):
+                    continue # XXX do some checks on attributes as well? 
+                method_args = getargs(method.func_code) 
+                if '__call__' in method_args[0]:
+                    method_args[0].remove('__call__')
+                hookargs = getargs(hook.func_code)
+                for arg, hookarg in zip(method_args[0], hookargs[0]):
+                    if arg != hookarg: 
+                        print "argument mismatch:" 
+                        print "actual  : %s.%s" %(pluginclass.__name__, formatdef(method))
+                        print "required:", formatdef(hook)
+                        fail = True
+                        break 
+                if not fail:
+                    print "matching hook:", formatdef(method)
+        if fail:
+            py.test.fail("Plugin API error")
+
+def collectattr(obj, prefixes=("pytest_", "pyevent_")):
+    methods = {}
+    for apiname in vars(obj): 
+        for prefix in prefixes:
+            if apiname.startswith(prefix):
+                methods[apiname] = getattr(obj, apiname) 
+    return methods 
+
+def formatdef(func):
+    formatargspec = py.std.inspect.formatargspec
+    getargspec = py.std.inspect.formatargspec
+    return "%s%s" %(
+        func.func_name, 
+        py.std.inspect.formatargspec(*py.std.inspect.getargspec(func))
+    )
+
+
+class PytestPluginHooks:
+    def __init__(self):
+        """ usually called only once per test process. """ 
+
+    def pytest_addoption(self, parser):
+        """ called before commandline parsing.  """
+
+    def pytest_configure(self, config):
+        """ called after command line options have been parsed. 
+            and all plugins and initial conftest files been loaded. 
+            ``config`` provides access to all such configuration values. 
+        """
+    def pytest_unconfigure(self, config):
+        """ called before test process is exited. 
+        """
+
+    def pytest_pyfunc_call(self, pyfuncitem, args, kwargs):
+        """ return True if we consumed/did the call to the python function item. """
+
+    def pytest_item_makereport(self, item, excinfo, when, outerr):
+        """ return ItemTestReport event for the given test outcome. """
+
+    # collection hooks
+    def pytest_collect_file(self, path, parent):
+        """ return Collection node or None. """
+
+    def pytest_collect_recurse(self, path, parent):
+        """ return True/False to cause/prevent recursion into given directory. 
+            return None if you do not want to make the decision. 
+        """ 
+
+    def pytest_collect_directory(self, path, parent):
+        """ return Collection node or None. """
+
+    def pytest_pymodule_makeitem(self, modcol, name, obj):
+        """ return custom item/collector for a python object in a module, or None.  """
+
+    # reporting hooks (invoked from pytest_terminal.py) 
+    def pytest_report_teststatus(self, event):
+        """ return shortletter and verbose word. """
+
+    def pytest_terminal_summary(self, terminalreporter):
+        """ add additional section in terminal summary reporting. """
+
+    # Events 
+    def pyevent(self, eventname, *args, **kwargs):
+        """ called for each testing event. """
+
+    def pyevent_gateway_init(self, gateway):
+        """ called after a gateway has been initialized. """
+
+    def pyevent_gateway_exit(self, gateway):
+        """ called when gateway is being exited. """
+
+    def pyevent_gwmanage_rsyncstart(self, source, gateways):
+        """ called before rsyncing a directory to remote gateways takes place. """
+
+    def pyevent_gwmanage_rsyncfinish(self, source, gateways):
+        """ called after rsyncing a directory to remote gateways takes place. """
+
+    def pyevent_trace(self, category, msg):
+        """ called for tracing events. """
+
+    def pyevent_internalerror(self, event):
+        """ called for internal errors. """
+
+    def pyevent_itemstart(self, item, node):
+        """ test item gets collected. """
+
+    def pyevent_itemtestreport(self, event):
+        """ test has been run. """
+
+    def pyevent_deselected(self, event):
+        """ item has been dselected. """
+
+    def pyevent_collectionstart(self, event):
+        """ collector starts collecting. """
+
+    def pyevent_collectionreport(self, event):
+        """ collector finished collecting. """
+
+    def pyevent_testrunstart(self, event):
+        """ whole test run starts. """
+
+    def pyevent_testrunfinish(self, event):
+        """ whole test run finishes. """
+
+    def pyevent_gwmanage_newgateway(self, gateway):
+        """ execnet gateway manager has instantiated a gateway. 
+            The gateway will have an 'id' attribute that is unique 
+            within the gateway manager context. 
+        """
+    def pyevent_testnodeready(self, node):
+        """ Node is ready to operate. """
+
+    def pyevent_testnodedown(self, node, error):
+        """ Node is down. """
+
+    def pyevent_rescheduleitems(self, event):
+        """ Items from a node that went down. """
+
+    def pyevent_looponfailinfo(self, event):
+        """ info for repeating failing tests. """
+
+    def pyevent_plugin_registered(self, plugin):
+        """ a new py lib plugin got registered. """
+        
+   
+# ===============================================================================
+# plugin tests 
+# ===============================================================================
+
+def test_generic(plugintester):
+    plugintester.apicheck(PlugintesterPlugin)
