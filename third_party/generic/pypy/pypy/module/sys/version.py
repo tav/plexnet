@@ -11,7 +11,7 @@ PYPY_VERSION               = (1, 1, 0, "beta", '?')
 # the last item is replaced by the svn revision ^^^
 
 TRIM_URL_UP_TO = 'svn/pypy/'
-SVN_URL = "$HeadURL: https://codespeak.net/svn/pypy/trunk/pypy/module/sys/version.py $"[10:-28]
+SVN_URL = "$HeadURL: svn+ssh://codespeak.net/svn/pypy/trunk/pypy/module/sys/version.py $"[10:-28]
 
 REV = "$LastChangedRevision: 64301 $"[22:-2]
 
