@@ -149,16 +149,21 @@ class Sensor(object):
             return False
       return True
 
-   def notify(self, changeset): 
-      matches = []
+   def notify(self, changeset):
+      matches = {}
       for pattern in self.patterns:
          for name, fields in changeset.iteritems():
             if pattern(fields):
-               matches.append(name)
+               matches.setdefault(name, 0)
+               matches[name] += 1
+
+      full = [match for match, count in matches.iteritems() if
+                  count == len(self.patterns)]
+
       identifier = 'Sensor(%s)' % id(self)
       obj, this = self.packet.object(identifier)
       obj.update({'notified': True})
-      obj.update({'matches': matches})
+      obj.update({'matches': full})
 
 class ObjectName(str): 
    def __call__(self, label): 
@@ -241,12 +246,25 @@ def sensor_test():
          if (label == 'message') and ('example' in value): 
             return True
       return False
+   def check_id(unit):
+      for label, value in unit.itervalues():
+         if (label == '__id__') and ('3' in value):
+            return True
+      return False
    sensor.pattern(example_message)
    packet.sensors.add(sensor)
+
+   sensor = Sensor(packet)
+   sensor.pattern(example_message)
+   sensor.pattern(check_id)
+   packet.sensors.add(sensor)
+
    packet.commit()
 
    print packet.objects.keys()
-   print packet.objects[packet.objects.keys()[0]]
+   for name in packet.objects.keys():
+       if 'Sensor' in name:
+           print packet.objects[name]
 
 def main(): 
    account_test()
