@@ -42,7 +42,7 @@ class Packet(object):
 
       for sensor in self.sensors: 
          if sensor.matches(changeset): 
-            sensor.notify()
+            sensor.notify(changeset)
 
 class Object(fieldtree.FieldTree): 
    "Generic object with Service calling code."
@@ -141,14 +141,24 @@ class Sensor(object):
       if not self.patterns: 
          return False
       for pattern in self.patterns: 
-         if not pattern(changeset): 
+         matches = True
+         for name, fields in changeset.iteritems(): 
+            if not pattern(fields): 
+               matches = False
+         if not matches:
             return False
       return True
 
-   def notify(self): 
+   def notify(self, changeset): 
+      matches = []
+      for pattern in self.patterns:
+         for name, fields in changeset.iteritems():
+            if pattern(fields):
+               matches.append(name)
       identifier = 'Sensor(%s)' % id(self)
       obj, this = self.packet.object(identifier)
       obj.update({'notified': True})
+      obj.update({'matches': matches})
 
 class ObjectName(str): 
    def __call__(self, label): 
@@ -212,23 +222,31 @@ def cycle_test():
 
 def sensor_test(): 
    packet = Packet()
-   example, this = packet.object('example')
-   example.update({
+   example1, this = packet.object('example1')
+   example1.update({
       'message': 'This is an example'
+   })
+   example2, this = packet.object('example3')
+   example2.update({
+      'message': 'This is completely unrelated'
+   })
+   example3, this = packet.object('example3')
+   example3.update({
+      'message': 'This is another example'
    })
 
    sensor = Sensor(packet)
-   def example_message(changeset): 
-      for name, fields in changeset.iteritems(): 
-         for label, value in fields.itervalues(): 
-            if (label == 'message') and ('example' in value): 
-               return True
+   def example_message(unit): 
+      for label, value in unit.itervalues(): 
+         if (label == 'message') and ('example' in value): 
+            return True
       return False
    sensor.pattern(example_message)
    packet.sensors.add(sensor)
    packet.commit()
 
    print packet.objects.keys()
+   print packet.objects[packet.objects.keys()[0]]
 
 def main(): 
    account_test()
