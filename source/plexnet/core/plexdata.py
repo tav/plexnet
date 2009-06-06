@@ -237,18 +237,19 @@ def sensor_test():
    })
    example3, this = packet.object('example3')
    example3.update({
-      'message': 'This is another example'
+      'message': 'This is another example',
+      'addendum': 'It has more information'
    })
 
    sensor = Sensor(packet)
-   def example_message(unit): 
-      for label, value in unit.itervalues(): 
-         if (label == 'message') and ('example' in value): 
+   def example_message(unit):
+      for label, value in unit.itervalues():
+         if (label == 'message') and ('example' in value):
             return True
       return False
    def check_id(unit):
       for label, value in unit.itervalues():
-         if (label == '__id__') and ('3' in value):
+         if (label == 'addendum'):
             return True
       return False
    sensor.pattern(example_message)
