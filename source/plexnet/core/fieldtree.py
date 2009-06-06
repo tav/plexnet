@@ -165,14 +165,15 @@ value using its key:
    >>> person.get_field(i)
    (Empty(), 'John Smith plays the trumpet')
 
-You can also delete values. You can't remove a whole field entirely,
-but delete replaces the current value with an Empty() object:
+You can also delete values using a similar method. You shouldn't
+remove a whole field entirely, so delete replaces the current value
+with an Empty() object:
 
    >>> del person['phone']
    >>> person['phone']
    Empty()
 
-You can remove a field entirely, but it's not really recommended:
+Though you can remove a field entirely, it's not really recommended:
 
    >>> example = FieldTree(('a', 'b'), ('p', 'q'))
    >>> first = example.get_key('a')

@@ -11,7 +11,7 @@ class Packet(object):
    def __init__(self): 
       self.objects = {}
       self.index = {}
-      self.sensors = None
+      self.sensors = set()
       Service.packet = self
 
    def object(self, name): 
@@ -39,6 +39,10 @@ class Packet(object):
             if not self.index.has_key(label): 
                self.index[label] = {}
             self.index[label].setdefault(value, set()).add(name)
+
+      for sensor in self.sensors: 
+         if sensor.matches(changeset): 
+            sensor.notify()
 
 class Object(fieldtree.FieldTree): 
    "Generic object with Service calling code."
@@ -125,6 +129,27 @@ def Sum(a, b):
 def Interest(a, b): 
    return a + (a * b)
 
+class Sensor(object): 
+   def __init__(self, packet): 
+      self.packet = packet
+      self.patterns = set()
+
+   def pattern(self, function): 
+      self.patterns.add(function)
+
+   def matches(self, changeset): 
+      if not self.patterns: 
+         return False
+      for pattern in self.patterns: 
+         if not pattern(changeset): 
+            return False
+      return True
+
+   def notify(self): 
+      identifier = 'Sensor(%s)' % id(self)
+      obj, this = self.packet.object(identifier)
+      obj.update({'notified': True})
+
 class ObjectName(str): 
    def __call__(self, label): 
       return ValueName(self, label)
@@ -185,9 +210,30 @@ def cycle_test():
    
    print cycle['first']
 
+def sensor_test(): 
+   packet = Packet()
+   example, this = packet.object('example')
+   example.update({
+      'message': 'This is an example'
+   })
+
+   sensor = Sensor(packet)
+   def example_message(changeset): 
+      for name, fields in changeset.iteritems(): 
+         for label, value in fields.itervalues(): 
+            if (label == 'message') and ('example' in value): 
+               return True
+      return False
+   sensor.pattern(example_message)
+   packet.sensors.add(sensor)
+   packet.commit()
+
+   print packet.objects.keys()
+
 def main(): 
    account_test()
    cycle_test()
+   sensor_test()
 
 if __name__ == '__main__': 
    main()
