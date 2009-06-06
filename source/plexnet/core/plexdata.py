@@ -141,10 +141,10 @@ class Sensor(object):
       if not self.patterns: 
          return False
       for pattern in self.patterns: 
-         matches = True
+         matches = False 
          for name, fields in changeset.iteritems(): 
             if not pattern(fields): 
-               matches = False
+               matches = True
          if not matches:
             return False
       return True
@@ -226,7 +226,7 @@ def sensor_test():
    example1.update({
       'message': 'This is an example'
    })
-   example2, this = packet.object('example3')
+   example2, this = packet.object('example2')
    example2.update({
       'message': 'This is completely unrelated'
    })
