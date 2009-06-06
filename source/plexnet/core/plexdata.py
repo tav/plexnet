@@ -143,7 +143,6 @@ def account_test():
    account, this = packet.object('account')
    total = Sum(this('savings'), this('creditcard'))
    account.update({
-      '__id__': this, 
       'savings': 5000,
       'creditcard': -3000, 
       'total': total, 
@@ -167,7 +166,6 @@ def cycle_test():
    packet = Packet()
    cycle, this = packet.object('cycle')
    cycle.update({
-      '__id__': this, 
       'first': Sum(this('zero'), this('second')), 
       'second': Sum(this('zero'), this('first')), 
       'zero': 0
