@@ -10,7 +10,7 @@ class Packet(object):
    "Generic object container."
    def __init__(self): 
       self.objects = {}
-      self.index = None
+      self.index = {}
       self.sensors = None
       Service.packet = self
 
@@ -27,6 +27,18 @@ class Packet(object):
 
    def get(self, n): 
       return self.objects[n.object][n.label]
+
+   def commit(self): 
+      changeset = {}
+      for name, object in self.objects.iteritems(): 
+         if object.has_changes(): 
+            changeset[name] = object.get_changes()
+
+      for name, fields in changeset.iteritems(): 
+         for label, value in fields.itervalues(): 
+            if not self.index.has_key(label): 
+               self.index[label] = {}
+            self.index[label].setdefault(value, set()).add(name)
 
 class Object(fieldtree.FieldTree): 
    "Generic object with Service calling code."
@@ -151,7 +163,6 @@ def account_test():
       'adj': Interest(total, this('interest')), 
    })
    
-   changes = account.get_changes()
    total = account['total'] # expect: 2000
    adjusted = account['adjusted'] # expect: 2020
    account['savings'] += 1000
@@ -159,8 +170,9 @@ def account_test():
    adj_ = account['adj'] # expect: 3030
    
    print total, adjusted, total_, adj_
-   print account.has_changes()
-   print account.get_changes()
+
+   packet.commit()
+   print packet.index
 
 def cycle_test(): 
    packet = Packet()
