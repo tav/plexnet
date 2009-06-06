@@ -6,26 +6,41 @@ Author: Sean B. Palmer, inamidst.com
 
 import fieldtree
 
-def computation(obj): 
-   "Test whether an object is a computation."
-   return callable(obj) and hasattr(obj, 'original')
+class Packet(object): 
+   "Generic object container."
+   def __init__(self): 
+      self.objects = {}
+      self.index = None
+      self.sensors = None
+      Service.packet = self
 
-class Unit(fieldtree.FieldTree): 
-   "A hashtable that calls services automatically."
-   units = {}
+   def object(self, name): 
+      this = ObjectName(name)
+      obj = Object({'__id__': this})
+      self.add(obj)
+      return obj, this
 
+   def add(self, obj): 
+      assert isinstance(obj, Object)
+      identifier = obj['__id__']
+      self.objects[identifier] = obj
+
+   def get(self, n): 
+      return self.objects[n.object][n.label]
+
+class Object(fieldtree.FieldTree): 
+   "Generic object with Service calling code."
    def __init__(self, fields): 
-      if isinstance(fields, dict): 
-         fields = fields.items()    
       self.__changes = {}
       self.__depth = 0
       self.__error = None
-      super(Unit, self).__init__(*fields)
-      identifier = self['__id__']
-      Unit.units[identifier] = self
 
-   def __getitem__(self, key): 
-      value = super(Unit, self).__getitem__(key)
+      if isinstance(fields, dict): 
+         fields = fields.items()    
+      super(Object, self).__init__(*fields)
+
+   def __getitem__(self, label): 
+      value = super(Object, self).__getitem__(label)
 
       if computation(value): 
          self.__depth += 1
@@ -40,10 +55,15 @@ class Unit(fieldtree.FieldTree):
          self.__error = None
       return value
 
-   def changed(self, *labels): 
-      for label in labels: 
-         field = self.get_field(label)
-         self.__changes[label] = field
+   def update(self, fields): 
+      if isinstance(fields, dict): 
+         fields = fields.items()    
+      super(Object, self).update(fields)
+
+   def changed(self, *keys): 
+      for key in keys: 
+         field = self.get_field(key)
+         self.__changes[key] = field
 
    def has_changes(self): 
       return len(self.__changes) > 0
@@ -53,26 +73,15 @@ class Unit(fieldtree.FieldTree):
       self.__changes = {}
       return changes
 
-class Error(object): 
-   def __init__(self, e): 
-      self.exception = e
-
-   def __repr__(self): 
-      args = (type(self.exception).__name__, str(self.exception))
-      return '%s(%r)' % args
-
-class CycleError(Exception): 
-   "Circular call structure was detected."
-
 def Service(original): 
    "Create a service definer from original."
    def compute(): 
-      "Compute a service, autocalled by Unit etc."
+      "Compute a service, autocalled by Object etc."
       def value(n): 
          if n.name in Service.accessed: 
             raise CycleError("Cycle detected: %s" % n.name)
          Service.accessed.add(n.name)
-         return Unit.units[n.unit][n.key]
+         return Service.packet.get(n)
 
       def evaluate(arg): 
          if isinstance(arg, ValueName): 
@@ -93,6 +102,7 @@ def Service(original):
       compute.args = args
       return compute
    return define
+Service.packet = None
 Service.accessed = set()
 
 @Service
@@ -103,20 +113,36 @@ def Sum(a, b):
 def Interest(a, b): 
    return a + (a * b)
 
-class UnitName(str): 
-   def __call__(self, key): 
-      return ValueName(self, key)
+class ObjectName(str): 
+   def __call__(self, label): 
+      return ValueName(self, label)
 
 class ValueName(object): 
-   def __init__(self, unit, key): 
-      self.unit = unit
-      self.key = key
-      self.name = unit + '.' + key
+   def __init__(self, object, label): 
+      self.object = object
+      self.label = label
+      self.name = object + '.' + label
+
+class Error(object): 
+   def __init__(self, e): 
+      self.exception = e
+
+   def __repr__(self): 
+      args = (type(self.exception).__name__, str(self.exception))
+      return '%s(%r)' % args
+
+class CycleError(Exception): 
+   "Circular call structure was detected."
+
+def computation(obj): 
+   "Test whether an object is a computation."
+   return callable(obj) and hasattr(obj, 'original')
 
 def account_test(): 
-   this = UnitName('account')
+   packet = Packet()
+   account, this = packet.object('account')
    total = Sum(this('savings'), this('creditcard'))
-   account = Unit({
+   account.update({
       '__id__': this, 
       'savings': 5000,
       'creditcard': -3000, 
@@ -138,8 +164,9 @@ def account_test():
    print account.get_changes()
 
 def cycle_test(): 
-   this = UnitName('cycle')
-   cycle = Unit({
+   packet = Packet()
+   cycle, this = packet.object('cycle')
+   cycle.update({
       '__id__': this, 
       'first': Sum(this('zero'), this('second')), 
       'second': Sum(this('zero'), this('first')), 
