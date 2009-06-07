@@ -134,6 +134,7 @@ class Sensor(object):
       self.packet = packet
       self.optional_patterns = set()
       self.mandatory_patterns = set()
+      self.matched = set()
 
    def optional(self, function): 
       self.optional_patterns.add(function)
@@ -144,32 +145,27 @@ class Sensor(object):
    def matches(self, changeset): 
       optional = set()
       mandatory = set()
+      self.matched = set()
 
       for opt in self.optional_patterns: 
-         for name, fields in changeset.iteritems(): 
-            optional.add(opt(fields))
+         o = [opt(fields) for name, fields in changeset.iteritems()]
+         optional.add(o.count(True))
+         if o.count(True): 
+            self.matched.add(opt.__name__)
 
       for man in self.mandatory_patterns: 
-         for name, fields in changeset.iteritems(): 
-            mandatory.add(man(fields))
+         m = [man(fields) for name, fields in changeset.iteritems()]
+         mandatory.add(m.count(True))
+         if m.count(True): 
+            self.matched.add(man.__name__)
 
-      return any(optional) and all(mandatory)
+      return any(optional or [True]) and all(mandatory or [True])
 
-   def notify(self, changeset):
-      matches = {}
-      for pattern in self.patterns:
-         for name, fields in changeset.iteritems():
-            if pattern(fields):
-               matches.setdefault(name, 0)
-               matches[name] += 1
-
-      full = [match for match, count in matches.iteritems() if
-                  count == len(self.patterns)]
-
+   def notify(self, changeset): 
       identifier = 'Sensor(%s)' % id(self)
       obj, this = self.packet.object(identifier)
       obj.update({'notified': True})
-      obj.update({'matches': full})
+      obj.update({'matches': self.matched})
 
 class ObjectName(str): 
    def __call__(self, label): 
