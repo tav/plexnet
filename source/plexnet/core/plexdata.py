@@ -132,22 +132,28 @@ def Interest(a, b):
 class Sensor(object): 
    def __init__(self, packet): 
       self.packet = packet
-      self.patterns = set()
+      self.optional_patterns = set()
+      self.mandatory_patterns = set()
 
-   def pattern(self, function): 
-      self.patterns.add(function)
+   def optional(self, function): 
+      self.optional_patterns.add(function)
+
+   def mandatory(self, function): 
+      self.mandatory_patterns.add(function)
 
    def matches(self, changeset): 
-      if not self.patterns: 
-         return False
-      for pattern in self.patterns: 
-         matches = False 
+      optional = set()
+      mandatory = set()
+
+      for opt in self.optional_patterns: 
          for name, fields in changeset.iteritems(): 
-            if not pattern(fields): 
-               matches = True
-         if not matches:
-            return False
-      return True
+            optional.add(opt(fields))
+
+      for man in self.mandatory_patterns: 
+         for name, fields in changeset.iteritems(): 
+            mandatory.add(man(fields))
+
+      return any(optional) and all(mandatory)
 
    def notify(self, changeset):
       matches = {}
@@ -241,24 +247,26 @@ def sensor_test():
       'addendum': 'It has more information'
    })
 
-   sensor = Sensor(packet)
    def example_message(unit):
       for label, value in unit.itervalues():
          if (label == 'message') and ('example' in value):
             return True
       return False
+
    def check_id(unit):
       for label, value in unit.itervalues():
          if (label == 'addendum'):
             return True
       return False
-   sensor.pattern(example_message)
-   packet.sensors.add(sensor)
 
-   sensor = Sensor(packet)
-   sensor.pattern(example_message)
-   sensor.pattern(check_id)
-   packet.sensors.add(sensor)
+   sensor1 = Sensor(packet)
+   sensor1.mandatory(example_message)
+   packet.sensors.add(sensor1)
+
+   sensor2 = Sensor(packet)
+   sensor2.mandatory(example_message)
+   sensor2.mandatory(check_id)
+   packet.sensors.add(sensor2)
 
    packet.commit()
 
