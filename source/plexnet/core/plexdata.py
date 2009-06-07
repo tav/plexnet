@@ -35,10 +35,10 @@ class Packet(object):
             changeset[name] = object.get_changes()
 
       for name, fields in changeset.iteritems(): 
-         for label, value in fields.itervalues(): 
-            if not self.index.has_key(label): 
-               self.index[label] = {}
-            self.index[label].setdefault(value, set()).add(name)
+         for key, (label, value) in fields.iteritems(): 
+            if not self.index.has_key(key): 
+               self.index[key] = {}
+            self.index[key].setdefault(value, set()).add(name)
 
       for sensor in self.sensors: 
          if sensor.matches(changeset): 
