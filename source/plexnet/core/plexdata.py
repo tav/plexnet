@@ -16,7 +16,8 @@ class Packet(object):
 
    def __str__(self): 
       objects = self.objects.iteritems()
-      return 'Packet{ %s }' % ', '.join('%s := %s' % (a, b) for a, b in objects)
+      items = ('%s := %s' % (a, b) for a, b in objects)
+      return 'Packet{ %s }' % ', '.join(items)
 
    def object(self, name): 
       this = ObjectName(name)
@@ -68,7 +69,9 @@ class Object(fieldtree.FieldTree):
       super(Object, self).__init__(*fields)
 
    def __str__(self): 
-      return 'Object{ %s }' % ', '.join('%s: %r' % (a, b) for a, b in self.fields())
+      items = ('%s: %r' % (a, b() if computation(b) else b) 
+               for a, b in self.fields())
+      return 'Object{ %s }' % ', '.join(items)
 
    def __getitem__(self, label): 
       value = super(Object, self).__getitem__(label)
@@ -146,6 +149,10 @@ def Sum(a, b):
 @Service
 def Interest(a, b): 
    return a + (a * b)
+
+@Service
+def Get(a, b): 
+   return a[b]
 
 class Sensor(object): 
    def __init__(self, obj): 
@@ -330,11 +337,31 @@ def schema_test():
    account = Account(account)
    print account.total()
 
+def derivation_test(): 
+   packet = Packet()
+   task1, this = packet.object('task1')
+   task1.update({
+      'start': 1, 
+      'length': 2, 
+      'end': Sum(this('start'), this('length'))
+   })
+   print task1
+   task1['start'] = 2
+   print task1
+
+   task2, this = packet.object('task2')
+   task2.update(task1)
+   task2.update({
+      'start': Get(task1, 'end')
+   })
+   print task2
+
 def main(): 
    account_test()
    cycle_test()
    sensor_test()
    schema_test()
+   derivation_test()
 
 if __name__ == '__main__': 
    main()
