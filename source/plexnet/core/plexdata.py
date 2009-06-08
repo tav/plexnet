@@ -20,7 +20,7 @@ class Packet(object):
 
    def object(self, name): 
       this = ObjectName(name)
-      obj = Object({'__id__': this})
+      obj = Object(self, {'__id__': this})
       self.add(obj)
       return obj, this
 
@@ -28,6 +28,10 @@ class Packet(object):
       assert isinstance(obj, Object)
       identifier = obj['__id__']
       self.objects[identifier] = obj
+
+   def add_sensor(self, sensor): 
+      sensor.packet = self
+      self.sensors.add(sensor)
 
    def get(self, n): 
       return self.objects[n.object][n.label]
@@ -53,7 +57,8 @@ class Packet(object):
 
 class Object(fieldtree.FieldTree): 
    "Generic object with Service calling code."
-   def __init__(self, fields): 
+   def __init__(self, packet, fields): 
+      self.packet = packet
       self.__changes = {}
       self.__depth = 0
       self.__error = None
@@ -83,7 +88,10 @@ class Object(fieldtree.FieldTree):
 
    def update(self, fields): 
       if isinstance(fields, dict): 
-         fields = fields.items()    
+         if fields.has_key('__id__'): 
+            del self.packet.objects[self['__id__']]
+            self.packet.objects[fields['__id__']] = self
+         fields = fields.items()
       super(Object, self).update(fields)
 
    def changed(self, *keys): 
@@ -141,6 +149,7 @@ def Interest(a, b):
 
 class Sensor(object): 
    def __init__(self, obj): 
+      self.packet = None
       self.output = obj
       self.optional_patterns = set()
       self.mandatory_patterns = set()
@@ -172,9 +181,9 @@ class Sensor(object):
       return any(optional or [True]) and all(mandatory or [True])
 
    def notify(self, changeset): 
-      identifier = 'Sensor(%s)' % id(self)
-      self.output.update({'notified': True})
-      self.output.update({'matches': self.matched})
+      self.output.update({'__id__': str(id(self))})
+      self.output.update({'__packet__': self.packet})
+      self.output.update({'___changes__': self.matched})
 
 class Schema(object): 
    def __init__(self, **kargs): 
@@ -285,14 +294,14 @@ def sensor_test():
    # sensor1 in first, to match example1, output to output1 in second
    sensor1 = Sensor(output1)
    sensor1.mandatory(example_message)
-   first.sensors.add(sensor1)
+   first.add_sensor(sensor1)
    first.commit()
 
    # sensor2 in second, to match example2, output to output1 in first
    sensor2 = Sensor(output2)
    sensor2.mandatory(example_message)
    sensor2.mandatory(check_id)
-   second.sensors.add(sensor2)
+   second.add_sensor(sensor2)
    second.commit()
 
    print first.objects.keys()
@@ -306,6 +315,7 @@ def sensor_test():
            print second.objects[name]
 
    print first
+   print second
 
 def schema_test(): 
    packet = Packet()
