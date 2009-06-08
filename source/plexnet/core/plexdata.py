@@ -14,6 +14,10 @@ class Packet(object):
       self.sensors = set()
       Service.packet = self
 
+   def __str__(self): 
+      objects = self.objects.iteritems()
+      return 'Packet{ %s }' % ', '.join('%s := %s' % (a, b) for a, b in objects)
+
    def object(self, name): 
       this = ObjectName(name)
       obj = Object({'__id__': this})
@@ -36,6 +40,9 @@ class Packet(object):
 
       for name, fields in changeset.iteritems(): 
          for key, (label, value) in fields.iteritems(): 
+            if isinstance(value, set): 
+               value = frozenset(value)
+
             if not self.index.has_key(key): 
                self.index[key] = {}
             self.index[key].setdefault(value, set()).add(name)
@@ -54,6 +61,9 @@ class Object(fieldtree.FieldTree):
       if isinstance(fields, dict): 
          fields = fields.items()    
       super(Object, self).__init__(*fields)
+
+   def __str__(self): 
+      return 'Object{ %s }' % ', '.join('%s: %r' % (a, b) for a, b in self.fields())
 
    def __getitem__(self, label): 
       value = super(Object, self).__getitem__(label)
@@ -130,8 +140,8 @@ def Interest(a, b):
    return a + (a * b)
 
 class Sensor(object): 
-   def __init__(self, packet): 
-      self.packet = packet
+   def __init__(self, obj): 
+      self.output = obj
       self.optional_patterns = set()
       self.mandatory_patterns = set()
       self.matched = set()
@@ -163,9 +173,20 @@ class Sensor(object):
 
    def notify(self, changeset): 
       identifier = 'Sensor(%s)' % id(self)
-      obj, this = self.packet.object(identifier)
-      obj.update({'notified': True})
-      obj.update({'matches': self.matched})
+      self.output.update({'notified': True})
+      self.output.update({'matches': self.matched})
+
+class Schema(object): 
+   def __init__(self, **kargs): 
+      self.properties = kargs
+
+   def __call__(self, obj): 
+      import new
+      for key, value in self.properties.iteritems(): 
+         function = lambda self=self, value=value: self[value]
+         method = new.instancemethod(function, obj, type(obj))
+         setattr(obj, key, method)
+      return obj
 
 class ObjectName(str): 
    def __call__(self, label): 
@@ -228,19 +249,25 @@ def cycle_test():
    print cycle['first']
 
 def sensor_test(): 
-   packet = Packet()
-   example1, this = packet.object('example1')
+   first = Packet()
+   example1, this = first.object('example1')
    example1.update({
       'message': 'This is an example'
    })
-   example2, this = packet.object('example2')
-   example2.update({
-      'message': 'This is completely unrelated'
+   output2, this = first.object('output2')
+   output2.update({
+      'message': 'This is the second output object'
    })
-   example3, this = packet.object('example3')
-   example3.update({
+
+   second = Packet()
+   example2, this = second.object('example2')
+   example2.update({
       'message': 'This is another example',
       'addendum': 'It has more information'
+   })
+   output1, this = second.object('output1')
+   output1.update({
+      'message': 'This is the first output object'
    })
 
    def example_message(unit):
@@ -255,26 +282,49 @@ def sensor_test():
             return True
       return False
 
-   sensor1 = Sensor(packet)
+   # sensor1 in first, to match example1, output to output1 in second
+   sensor1 = Sensor(output1)
    sensor1.mandatory(example_message)
-   packet.sensors.add(sensor1)
+   first.sensors.add(sensor1)
+   first.commit()
 
-   sensor2 = Sensor(packet)
+   # sensor2 in second, to match example2, output to output1 in first
+   sensor2 = Sensor(output2)
    sensor2.mandatory(example_message)
    sensor2.mandatory(check_id)
-   packet.sensors.add(sensor2)
+   second.sensors.add(sensor2)
+   second.commit()
 
-   packet.commit()
-
-   print packet.objects.keys()
-   for name in packet.objects.keys():
+   print first.objects.keys()
+   for name in first.objects.keys():
        if 'Sensor' in name:
-           print packet.objects[name]
+           print first.objects[name]
+
+   print second.objects.keys()
+   for name in second.objects.keys():
+       if 'Sensor' in name:
+           print second.objects[name]
+
+   print first
+
+def schema_test(): 
+   packet = Packet()
+   account, this = packet.object('account')
+   account.update({
+      'savings': 5000,
+      'creditcard': -3000, 
+      'total': Sum(this('savings'), this('creditcard'))
+   })
+
+   Account = Schema(total=account.get_key('total'))
+   account = Account(account)
+   print account.total()
 
 def main(): 
    account_test()
    cycle_test()
    sensor_test()
+   schema_test()
 
 if __name__ == '__main__': 
    main()
