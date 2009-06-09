@@ -366,9 +366,10 @@ class FieldTree(object):
       self.__order.append(key)
       return key
 
-   def update(self, args): 
+   def update(self, args, ignore = None): 
       for label, value in args: 
-         self[label] = value
+         if not ignore or label not in ignore:
+            self[label] = value
 
    def before(self, next, *args): 
       if not self.has_key(next): 
