@@ -1,9 +1,59 @@
 #!/usr/bin/env python
-'services.py - Services'
+"""
+services.py - Objects and Services
+Author: Sean B. Palmer, inamidst.com
+
+This module defines an Object class whose attributes can be set to
+dynamic values which get calculated when accessed or assigned. You
+can assign static attributes just by setting them:
+
+   >>> task1 = Object()
+   >>> task1.name = 'task1'
+   >>> task1.start = 1
+   >>> task1.length = 2
+
+To add a dynamic attribute, you have to create getter and setter
+functions, which will be called when the attribute is accessed or
+assigned respectively, and then wrap them up in a Function object to
+be assigned to an object attribute:
+
+   >>> get_end = Sum(local.start, local.length)
+   >>> set_end = { local.start: Difference(local.end, local.length) }
+   >>> task1.end = Formula(get_end, set_end)
+   >>> task1
+   Object{name: 'task1', start: 1, length: 2, end: 3}
+
+Here we've made it so that the end attribute computes the value of
+start and length added together. When we change start, end is
+automatically updated:
+
+   >>> task1.start = 2
+   >>> task1
+   Object{name: 'task1', start: 2, length: 2, end: 4}
+
+You can also derive a new object from an old object, making a kind of
+copy of the object. This will automatically copy over any old values,
+but if you want to refer to a dynamic value on the old object you can
+use a Reference to do so:
+
+   >>> task2 = task1()
+   >>> task2.name = 'task2'
+   >>> task2.start = Reference(task1, 'end')
+   >>> task2
+   Object{name: 'task2', start: 4, length: 2, end: 6}
+
+So that, putting this all together, the fields are interdependent in
+interesting ways:
+
+   >>> task2.end = 5
+   >>> print task2
+   Object{name: 'task2', start: 3, length: 2, end: 5}
+   >>> print task1
+   Object{name: 'task1', start: 1, length: 2, end: 3}
+
+"""
 
 import fieldtree
-
-author = ('Sean B. Palmer', 'inamidst.com')
 
 class Object(object): 
    def __init__(self, fields=None): 
@@ -76,7 +126,7 @@ class Reference(Special):
       return getattr(self.obj, self.attr)
 
    def react(self, obj, attr, value): 
-      setattr(self.obj, str(self.attr), value)
+      setattr(self.obj, self.attr, value)
 
 class Local(str): 
    pass
@@ -108,26 +158,30 @@ def Sum(a, b):
 def Difference(a, b): 
    return a - b
  
+def test(): 
+   import doctest
+   Documentation = type('Documentation', (object,), {'__doc__': __doc__})
+   doctest.run_docstring_examples(Documentation, globals(), verbose=True)
+
+def summary(): 
+   import sys, StringIO
+   stdout = sys.stdout
+   sys.stdout = StringIO.StringIO()
+   test()
+   buffer = sys.stdout
+   sys.stdout = stdout
+
+   buffer.seek(0)
+   success, failure = 0, 0
+   for line in buffer: 
+      if line.startswith('ok'): 
+         success += 1
+      elif line.startswith('Fail'): 
+         failure += 1
+   print "%s/%s Tests Passed" % (success, success + failure)
+
 def main(): 
-   task1 = Object()
-   task1.name = 'task1'
-   task1.start = 1
-   task1.length = 2
-   get_end = Sum(local.start, local.length)
-   set_end = { local.start: Difference(local.end, local.length) }
-   task1.end = Formula(get_end, set_end)
-   print 6, task1
-   task1.start = 2
-   print 9, task1
-
-   task2 = task1()
-   task2.name = 'task2'
-   task2.start = Reference(task1, 'end')
-   print 11, task2
-
-   task2.end = 5
-   print 13, task2
-   print 16, task1
+   summary()
 
 if __name__ == '__main__': 
    main()
