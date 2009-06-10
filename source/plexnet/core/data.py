@@ -47,16 +47,13 @@ So that, putting this all together, the fields are interdependent in
 interesting ways:
 
    >>> task2.end = 5
-   >>> print task2
+   >>> task2
    Object{name: 'task2', start: 3, length: 2, end: 5}
-   >>> print task1
+   >>> task1
    Object{name: 'task1', start: 1, length: 2, end: 3}
-
-And, this is broken:
-
    >>> task2.length = 3
-   >>> print task2
-   Object{name: 'task2', start: 3, length: 3, end: 6}
+   >>> task2.end
+   6
 
 """
 
@@ -78,6 +75,7 @@ class Object(object):
       if special is not None: 
          value = special.get_value(self, attr)
          self.__fields[attr] = (value, special)
+      # print '   %s.%s => %s' % (self.__fields.get('name', (None, None))[0], attr, value)
       return value
 
    def __setattr__(self, attr, value): 
@@ -115,13 +113,19 @@ class Dynamic(Special):
       self.setter = None
 
    def get_value(self, obj, attr): 
-      self.getter.obj = obj
-      return self.getter()
+      self.getter.objects.append(obj)
+      # print '<', obj['name'][0]
+      value = self.getter()
+      self.getter.objects.pop()
+      # print '>'
+      return value
 
    def set_value(self, obj, attr, value): 
+      # print '   set: %s %s' % (attr, value)
       for output, calculate in self.setter.iteritems(): 
-         calculate.obj = obj
+         calculate.objects.append(obj)
          setattr(obj, output, calculate())
+         calculate.objects.pop()
 
 class Attribute(Special): 
    def __init__(self, obj, attr): 
@@ -129,9 +133,13 @@ class Attribute(Special):
       self.attr = attr
 
    def get_value(self, obj, attr): 
-      return getattr(self.obj, self.attr)
+      # print '<', obj['name'][0]
+      value = getattr(self.obj, self.attr)
+      # print '>'
+      return value
 
    def set_value(self, obj, attr, value): 
+      # print '   set: %s %s' % (attr, value)
       setattr(self.obj, self.attr, value)
 
 class Local(str): 
@@ -147,11 +155,12 @@ def Computation(original):
       def compute(): 
          def evaluate(arg): 
             if isinstance(arg, Local): 
-               return getattr(compute.obj, arg)
+               return getattr(compute.objects[-1], arg)
             else: return arg
          return compute.original(*[evaluate(arg) for arg in compute.args])
       compute.original = define.original
       compute.args = args
+      compute.objects = []
       return compute
    define.original = original
    return define
