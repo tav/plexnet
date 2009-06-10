@@ -95,7 +95,9 @@ class Object(fieldtree.FieldTree):
             del self.packet.objects[self['__id__']]
             self.packet.objects[fields['__id__']] = self
          fields = fields.items()
-      super(Object, self).update(fields)
+         super(Object, self).update(fields)
+      else:
+         super(Object, self).update(fields, ignore='__id__')
 
    def changed(self, *keys): 
       for key in keys: 
