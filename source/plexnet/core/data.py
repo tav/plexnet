@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-objects.py - Object Type
+data.py - Object Datatype
 Author: Sean B. Palmer, inamidst.com
 
 This module defines an Object class whose attributes can be set to
@@ -34,8 +34,8 @@ automatically updated:
 
 You can also derive a new object from an old object, making a kind of
 copy of the object. This will automatically copy over any old values,
-but if you want to refer to a dynamic value on the old object you can
-use an Attribute to do so:
+but if you want to refer to a value on the old object you can use an
+Attribute to do so:
 
    >>> task2 = task1()
    >>> task2.name = 'task2'
