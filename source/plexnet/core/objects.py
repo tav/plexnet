@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-services.py - Objects and Services
+objects.py - Object Type
 Author: Sean B. Palmer, inamidst.com
 
 This module defines an Object class whose attributes can be set to
