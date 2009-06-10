@@ -75,7 +75,6 @@ class Object(object):
       if special is not None: 
          value = special.get_value(self, attr)
          self.__fields[attr] = (value, special)
-      # print '   %s.%s => %s' % (self.__fields.get('name', (None, None))[0], attr, value)
       return value
 
    def __setattr__(self, attr, value): 
@@ -114,14 +113,11 @@ class Dynamic(Special):
 
    def get_value(self, obj, attr): 
       self.getter.objects.append(obj)
-      # print '<', obj['name'][0]
       value = self.getter()
       self.getter.objects.pop()
-      # print '>'
       return value
 
    def set_value(self, obj, attr, value): 
-      # print '   set: %s %s' % (attr, value)
       for output, calculate in self.setter.iteritems(): 
          calculate.objects.append(obj)
          setattr(obj, output, calculate())
@@ -133,13 +129,10 @@ class Attribute(Special):
       self.attr = attr
 
    def get_value(self, obj, attr): 
-      # print '<', obj['name'][0]
       value = getattr(self.obj, self.attr)
-      # print '>'
       return value
 
    def set_value(self, obj, attr, value): 
-      # print '   set: %s %s' % (attr, value)
       setattr(self.obj, self.attr, value)
 
 class Local(str): 
