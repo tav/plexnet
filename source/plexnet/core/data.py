@@ -47,10 +47,13 @@ So that, putting this all together, the fields are interdependent in
 interesting ways:
 
    >>> task2.end = 5
-   >>> print task2
+   >>> task2
    Object{name: 'task2', start: 3, length: 2, end: 5}
-   >>> print task1
+   >>> task1
    Object{name: 'task1', start: 1, length: 2, end: 3}
+   >>> task2.length = 3
+   >>> task2.end
+   6
 
 """
 
@@ -109,13 +112,16 @@ class Dynamic(Special):
       self.setter = None
 
    def get_value(self, obj, attr): 
-      self.getter.obj = obj
-      return self.getter()
+      self.getter.objects.append(obj)
+      value = self.getter()
+      self.getter.objects.pop()
+      return value
 
    def set_value(self, obj, attr, value): 
       for output, calculate in self.setter.iteritems(): 
-         calculate.obj = obj
+         calculate.objects.append(obj)
          setattr(obj, output, calculate())
+         calculate.objects.pop()
 
 class Attribute(Special): 
    def __init__(self, obj, attr): 
@@ -123,7 +129,8 @@ class Attribute(Special):
       self.attr = attr
 
    def get_value(self, obj, attr): 
-      return getattr(self.obj, self.attr)
+      value = getattr(self.obj, self.attr)
+      return value
 
    def set_value(self, obj, attr, value): 
       setattr(self.obj, self.attr, value)
@@ -141,11 +148,12 @@ def Computation(original):
       def compute(): 
          def evaluate(arg): 
             if isinstance(arg, Local): 
-               return getattr(compute.obj, arg)
+               return getattr(compute.objects[-1], arg)
             else: return arg
          return compute.original(*[evaluate(arg) for arg in compute.args])
       compute.original = define.original
       compute.args = args
+      compute.objects = []
       return compute
    define.original = original
    return define
