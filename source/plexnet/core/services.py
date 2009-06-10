@@ -14,12 +14,13 @@ can assign static attributes just by setting them:
 
 To add a dynamic attribute, you have to create getter and setter
 functions, which will be called when the attribute is accessed or
-assigned respectively, and then wrap them up in a Function object to
+assigned respectively, and then wrap them up in a Dynamic object to
 be assigned to an object attribute:
 
-   >>> get_end = Sum(local.start, local.length)
-   >>> set_end = { local.start: Difference(local.end, local.length) }
-   >>> task1.end = Formula(get_end, set_end)
+   >>> end = Dynamic()
+   >>> end.getter = Sum(local.start, local.length)
+   >>> end.setter = { local.start: Difference(local.end, local.length) }
+   >>> task1.end = end
    >>> task1
    Object{name: 'task1', start: 1, length: 2, end: 3}
 
@@ -34,11 +35,11 @@ automatically updated:
 You can also derive a new object from an old object, making a kind of
 copy of the object. This will automatically copy over any old values,
 but if you want to refer to a dynamic value on the old object you can
-use a Reference to do so:
+use an Attribute to do so:
 
    >>> task2 = task1()
    >>> task2.name = 'task2'
-   >>> task2.start = Reference(task1, 'end')
+   >>> task2.start = Attribute(task1, 'end')
    >>> task2
    Object{name: 'task2', start: 4, length: 2, end: 6}
 
@@ -57,17 +58,11 @@ import fieldtree
 
 class Object(object): 
    def __init__(self, fields=None): 
-      if fields is not None: 
-         fields = fieldtree.FieldTree(*fields)
-      else: fields = fieldtree.FieldTree()
-      self.__fields = fields
+      self.__fields = fieldtree.FieldTree()
 
    def __repr__(self): 
       items = ((attr, getattr(self, attr)) for attr in self.__fields.labels())
       return 'Object{%s}' % ', '.join('%s: %r' % item for item in items)
-
-   def __getitem__(self, item): 
-      return self.__fields[item]
 
    def __getattr__(self, attr): 
       if attr.startswith('_'): 
@@ -75,7 +70,7 @@ class Object(object):
 
       value, special = self.__fields.get(attr)
       if special is not None: 
-         value = special.derive(self, attr)
+         value = special.get_value(self, attr)
          self.__fields[attr] = (value, special)
       return value
 
@@ -88,44 +83,49 @@ class Object(object):
          self.__fields[attr] = (None, value)
       elif isinstance(current, Special): 
          self.__fields[attr] = (value, None)
-         current.react(self, attr, value)
+         current.set_value(self, attr, value)
          self.__fields[attr] = (value, current)
       else: self.__fields[attr] = (value, None)
 
+   def __getitem__(self, item): 
+      return self.__fields[item]
+
+   def __setitem__(self, item, value): 
+      self.__fields[item] = value
+
    def __call__(self): 
       import copy
-      fields = []
+      obj = Object()
       for label, value in self.__fields.fields(): 
-         fields.append((label, copy.deepcopy(value)))
-      return Object(fields)
+         obj[label] = value
+      return obj
 
 class Special(object): 
    pass
 
-class Formula(Special): 
-   def __init__(self, derivation, reactions): 
-      self.derivation = derivation
-      self.reactions = reactions
+class Dynamic(Special): 
+   def __init__(self): 
+      self.getter = None
+      self.setter = None
 
-   def derive(self, obj, attr): 
-      self.derivation.obj = obj
-      return self.derivation()
+   def get_value(self, obj, attr): 
+      self.getter.obj = obj
+      return self.getter()
 
-   def react(self, obj, attr, value): 
-      for output, reaction in self.reactions.iteritems(): 
-         reaction.obj = obj
-         result = reaction()
-         setattr(obj, output, result)
+   def set_value(self, obj, attr, value): 
+      for output, calculate in self.setter.iteritems(): 
+         calculate.obj = obj
+         setattr(obj, output, calculate())
 
-class Reference(Special): 
+class Attribute(Special): 
    def __init__(self, obj, attr): 
       self.obj = obj
       self.attr = attr
 
-   def derive(self, obj, attr): 
+   def get_value(self, obj, attr): 
       return getattr(self.obj, self.attr)
 
-   def react(self, obj, attr, value): 
+   def set_value(self, obj, attr, value): 
       setattr(self.obj, self.attr, value)
 
 class Local(str): 
@@ -165,19 +165,18 @@ def test():
 
 def summary(): 
    import sys, StringIO
+
    stdout = sys.stdout
    sys.stdout = StringIO.StringIO()
    test()
    buffer = sys.stdout
    sys.stdout = stdout
-
    buffer.seek(0)
+
    success, failure = 0, 0
    for line in buffer: 
-      if line.startswith('ok'): 
-         success += 1
-      elif line.startswith('Fail'): 
-         failure += 1
+      success += int(line.startswith('ok'))
+      failure += int(line.startswith('Fail'))
    print "%s/%s Tests Passed" % (success, success + failure)
 
 def main(): 
