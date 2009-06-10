@@ -52,6 +52,12 @@ interesting ways:
    >>> print task1
    Object{name: 'task1', start: 1, length: 2, end: 3}
 
+And, this is broken:
+
+   >>> task2.length = 3
+   >>> print task2
+   Object{name: 'task2', start: 3, length: 3, end: 6}
+
 """
 
 import fieldtree
