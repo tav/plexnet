@@ -6,3 +6,8 @@
 
 """A standalone target for the Naaga interpreter."""
 
+import pypypath
+import pypy_startup
+pypy_startup.patch()
+
+from pypy.translator.goal.targetpypystandalone import *
