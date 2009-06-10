@@ -295,6 +295,11 @@ class FieldTree(object):
    def __getitem__(self, item): 
       return self.get_value(item)
 
+   def get(self, key, alternative=None): 
+      if key in self: 
+         return self[key]
+      return alternative
+
    def get_field(self, key): 
       "key -> field (deep)"
       assert isinstance(key, Key)
