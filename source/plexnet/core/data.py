@@ -55,6 +55,23 @@ interesting ways:
    >>> task2.end
    6
 
+Although seemingly non-sensical, the fact that you set a value does
+not require it to be the value actually set
+
+   >>> task3 = Object()
+   >>> task3.name = 'task3'
+   >>> task3.task1 = Attribute(task1, 'end')
+   >>> task3.task2 = Attribute(task2, 'end')
+   >>> total = Dynamic()
+   >>> total.getter = Sum(local.task1, local.task2)
+   >>> total.setter = { local.task1: Difference(local.total, local.task2) }
+   >>> task3.total = total
+   >>> task3
+   Object{name: 'task3', task1: 3, task2: 6, total: 9}
+   >>> task3.total = 10
+   >>> task3
+   Object{name: 'task3', task1: 4, task2: 7, total: 11}
+
 """
 
 import fieldtree
