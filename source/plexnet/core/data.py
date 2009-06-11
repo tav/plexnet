@@ -72,6 +72,22 @@ not require it to be the value actually set
    >>> task3
    Object{name: 'task3', task1: 4, task2: 7, total: 11}
 
+We also can catch if we are looping back on ourselves, partially.
+
+   >>> cycle = Object()
+   >>> cycle.name = 'cycle'
+   >>> first = Dynamic()
+   >>> first.getter = Sum(local.zero, local.second)
+   >>> cycle.first = first
+   >>> second = Dynamic()
+   >>> second.getter = Sum(local.zero, local.first)
+   >>> cycle.second = second
+   >>> cycle.zero = 0
+   >>> cycle.first
+   Traceback (most recent call last):
+       ...
+   CycleError: Cycle detected: cycle.first
+
 """
 
 import fieldtree
@@ -121,7 +137,10 @@ class Object(object):
       return obj
 
 class Special(object): 
-   pass
+   setted = None
+   getted = None
+   originals = None
+   unknown = None
 
 class Dynamic(Special): 
    def __init__(self): 
@@ -129,9 +148,33 @@ class Dynamic(Special):
       self.setter = None
 
    def get_value(self, obj, attr): 
+      first = (Special.originals == None)
+      myhash = str(hash(obj)) + '.' + str(hash(attr))
+      if first:
+         Special.setted = {}
+         Special.getted = set()
+         Special.originals = {}
+         Special.unknown = set()
+
+      if myhash in Special.getted:
+         return Special.getted[myhash]
+
+      if myhash in Special.unknown:
+         #if first: do unrolling, somehow
+         raise CycleError("Cycle detected: %s.%s" % (obj.name, attr))
+
+      Special.unknown.add(myhash)
+
       self.getter.objects.append(obj)
       value = self.getter()
       self.getter.objects.pop()
+
+      if myhash in Special.getted and Special.getted[myhash] != value:
+         #if first: do unrolling, somehow
+         raise CycleError("Cycle detected: %s.%s" % (obj.name, attr))
+
+      Special.unknown.discard(myhash)
+
       return value
 
    def set_value(self, obj, attr, value): 
@@ -182,7 +225,10 @@ def Sum(a, b):
 @Computation
 def Difference(a, b): 
    return a - b
- 
+
+class CycleError(Exception):
+   "Circular call structure was detected."
+
 def test(): 
    import doctest
    Documentation = type('Documentation', (object,), {'__doc__': __doc__})
