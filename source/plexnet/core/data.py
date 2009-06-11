@@ -88,6 +88,14 @@ We also can catch if we are looping back on ourselves, partially.
        ...
    CycleError: Cycle detected: cycle.first
 
+   >>> cycle2 = Object()
+   >>> cycle2.name = 'cycle2'
+   >>> cycle2.loop = Attribute(cycle2, 'loop')
+   >>> cycle2.loop
+   Traceback (most recent call last):
+       ...
+   CycleError: Cycle detected: cycle2.loop
+
 """
 
 import fieldtree
@@ -137,10 +145,10 @@ class Object(object):
       return obj
 
 class Special(object): 
-   setted = None
-   getted = None
-   originals = None
-   unknown = None
+   setted = {}
+   getted = set()
+   originals = {}
+   unknown = set()
 
 class Dynamic(Special): 
    def __init__(self): 
@@ -148,13 +156,7 @@ class Dynamic(Special):
       self.setter = None
 
    def get_value(self, obj, attr): 
-      first = (Special.originals == None)
       myhash = str(hash(obj)) + '.' + str(hash(attr))
-      if first:
-         Special.setted = {}
-         Special.getted = set()
-         Special.originals = {}
-         Special.unknown = set()
 
       if myhash in Special.getted:
          return Special.getted[myhash]
@@ -189,7 +191,25 @@ class Attribute(Special):
       self.attr = attr
 
    def get_value(self, obj, attr): 
+      myhash = str(hash(obj)) + '.' + str(hash(attr))
+
+      if myhash in Special.getted:
+         return Special.getted[myhash]
+
+      if myhash in Special.unknown:
+         #if first: do unrolling, somehow
+         raise CycleError("Cycle detected: %s.%s" % (obj.name, attr))
+
+      Special.unknown.add(myhash)
+
       value = getattr(self.obj, self.attr)
+
+      if myhash in Special.getted and Special.getted[myhash] != value:
+         #if first: do unrolling, somehow
+         raise CycleError("Cycle detected: %s.%s" % (obj.name, attr))
+
+      Special.unknown.discard(myhash)
+
       return value
 
    def set_value(self, obj, attr, value): 
