@@ -150,11 +150,6 @@ class Special(object):
    originals = {}
    unknown = set()
 
-class Dynamic(Special): 
-   def __init__(self): 
-      self.getter = None
-      self.setter = None
-
    def get_value(self, obj, attr): 
       myhash = str(hash(obj)) + '.' + str(hash(attr))
 
@@ -167,15 +162,25 @@ class Dynamic(Special):
 
       Special.unknown.add(myhash)
 
-      self.getter.objects.append(obj)
-      value = self.getter()
-      self.getter.objects.pop()
+      value = self._get_value(obj, attr) # do specific operations
 
       if myhash in Special.getted and Special.getted[myhash] != value:
          #if first: do unrolling, somehow
          raise CycleError("Cycle detected: %s.%s" % (obj.name, attr))
 
       Special.unknown.discard(myhash)
+
+      return value
+
+class Dynamic(Special): 
+   def __init__(self): 
+      self.getter = None
+      self.setter = None
+
+   def _get_value(self, obj, attr): 
+      self.getter.objects.append(obj)
+      value = self.getter()
+      self.getter.objects.pop()
 
       return value
 
@@ -190,26 +195,8 @@ class Attribute(Special):
       self.obj = obj
       self.attr = attr
 
-   def get_value(self, obj, attr): 
-      myhash = str(hash(obj)) + '.' + str(hash(attr))
-
-      if myhash in Special.getted:
-         return Special.getted[myhash]
-
-      if myhash in Special.unknown:
-         #if first: do unrolling, somehow
-         raise CycleError("Cycle detected: %s.%s" % (obj.name, attr))
-
-      Special.unknown.add(myhash)
-
+   def _get_value(self, obj, attr): 
       value = getattr(self.obj, self.attr)
-
-      if myhash in Special.getted and Special.getted[myhash] != value:
-         #if first: do unrolling, somehow
-         raise CycleError("Cycle detected: %s.%s" % (obj.name, attr))
-
-      Special.unknown.discard(myhash)
-
       return value
 
    def set_value(self, obj, attr, value): 
