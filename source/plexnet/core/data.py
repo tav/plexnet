@@ -159,13 +159,14 @@ class Object(object):
 class Special(object): 
    getted = set()
    originals = {}
-   unknown = set()
+   unknown = None
 
    def get_value(self, obj, attr): 
       myhash = str(hash(obj)) + '.' + str(hash(attr))
 
-      if myhash in Special.getted:
-         return Special.getted[myhash]
+      first = True if Special.unknown == None else False
+      if first:
+         Special.unknown = set()
 
       if myhash in Special.unknown:
          #if first: do unrolling, somehow
@@ -176,28 +177,40 @@ class Special(object):
       value = self._get_value(obj, attr) # do specific operations
 
       Special.unknown.discard(myhash)
+      Special.getted.add(myhash)
 
-      if myhash in Special.getted and Special.getted[myhash] != value:
-         #if first: do unrolling, somehow
-         raise CycleError("Cycle detected: %s.%s" % (obj.name, attr))
+      if first:
+         getted = set()
+         originals = {}
+         unknown = None
 
       return value
 
    def set_value(self, obj, attr, value): 
       myhash = str(hash(obj)) + '.' + str(hash(attr))
 
-      was = None if myhash not in Special.getted else Special.getted[myhash]
+      was = None if myhash not in Special.getted else getattr(obj, attr)
+      first = True if Special.unknown == None else False
+      if first:
+         was = None # we don't have a value if we are starting
+         Special.unknown = set()
 
       if myhash in Special.unknown:
          #if first: do unrolling, somehow
          raise CycleError("Cycle detected: %s.%s" % (obj.name, attr))
 
       self._set_value(obj, attr, value)
-      value = self._get_value(obj, attr) # do specific operations
+      value = getattr(obj, attr) # do specific operations
 
       if was != None and was != value:
          #if first: do unrolling, somehow
-         raise CycleError("Cycle detected: %s.%s" % (obj.name, attr))
+         raise CycleError("Cycle detected: %s.%s. was: %s, now: %s" %
+                 (obj.name, attr, was, value))
+
+      if first:
+         getted = set()
+         originals = {}
+         unknown = None
 
 class Dynamic(Special): 
    def __init__(self): 
