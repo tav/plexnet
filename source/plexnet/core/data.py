@@ -72,18 +72,25 @@ not require it to be the value actually set
    >>> task3
    Object{name: 'task3', task1: 4, task2: 7, total: 11}
 
-We also can catch if we are looping back on ourselves, partially.
+We also will error if we have a dependency chain which loops back onto itself.
 
    >>> cycle = Object()
    >>> cycle.name = 'cycle'
    >>> first = Dynamic()
    >>> first.getter = Sum(local.zero, local.second)
+   >>> first.setter = { local.second: Difference(local.first, local.zero) }
    >>> cycle.first = first
    >>> second = Dynamic()
    >>> second.getter = Sum(local.zero, local.first)
+   >>> second.setter = { local.first: Difference(local.second, local.zero) }
    >>> cycle.second = second
    >>> cycle.zero = 0
    >>> cycle.first
+   Traceback (most recent call last):
+       ...
+   CycleError: Cycle detected: cycle.first
+
+   >>> cycle.first = 1
    Traceback (most recent call last):
        ...
    CycleError: Cycle detected: cycle.first
@@ -92,6 +99,11 @@ We also can catch if we are looping back on ourselves, partially.
    >>> cycle2.name = 'cycle2'
    >>> cycle2.loop = Attribute(cycle2, 'loop')
    >>> cycle2.loop
+   Traceback (most recent call last):
+       ...
+   CycleError: Cycle detected: cycle2.loop
+
+   >>> cycle2.loop = 1
    Traceback (most recent call last):
        ...
    CycleError: Cycle detected: cycle2.loop
@@ -145,21 +157,16 @@ class Object(object):
       return obj
 
 class Special(object): 
-   setted = {}
    getted = set()
    originals = {}
-   unknown = set()
-
-class Dynamic(Special): 
-   def __init__(self): 
-      self.getter = None
-      self.setter = None
+   unknown = None
 
    def get_value(self, obj, attr): 
       myhash = str(hash(obj)) + '.' + str(hash(attr))
 
-      if myhash in Special.getted:
-         return Special.getted[myhash]
+      first = True if Special.unknown == None else False
+      if first:
+         Special.unknown = set()
 
       if myhash in Special.unknown:
          #if first: do unrolling, somehow
@@ -167,19 +174,57 @@ class Dynamic(Special):
 
       Special.unknown.add(myhash)
 
-      self.getter.objects.append(obj)
-      value = self.getter()
-      self.getter.objects.pop()
-
-      if myhash in Special.getted and Special.getted[myhash] != value:
-         #if first: do unrolling, somehow
-         raise CycleError("Cycle detected: %s.%s" % (obj.name, attr))
+      value = self._get_value(obj, attr) # do specific operations
 
       Special.unknown.discard(myhash)
+      Special.getted.add(myhash)
+
+      if first:
+         getted = set()
+         originals = {}
+         unknown = None
 
       return value
 
    def set_value(self, obj, attr, value): 
+      myhash = str(hash(obj)) + '.' + str(hash(attr))
+
+      was = None if myhash not in Special.getted else getattr(obj, attr)
+      first = True if Special.unknown == None else False
+      if first:
+         was = None # we don't have a value if we are starting
+         Special.unknown = set()
+
+      if myhash in Special.unknown:
+         #if first: do unrolling, somehow
+         raise CycleError("Cycle detected: %s.%s" % (obj.name, attr))
+
+      self._set_value(obj, attr, value)
+      value = getattr(obj, attr) # do specific operations
+
+      if was != None and was != value:
+         #if first: do unrolling, somehow
+         raise CycleError("Cycle detected: %s.%s. was: %s, now: %s" %
+                 (obj.name, attr, was, value))
+
+      if first:
+         getted = set()
+         originals = {}
+         unknown = None
+
+class Dynamic(Special): 
+   def __init__(self): 
+      self.getter = None
+      self.setter = None
+
+   def _get_value(self, obj, attr): 
+      self.getter.objects.append(obj)
+      value = self.getter()
+      self.getter.objects.pop()
+
+      return value
+
+   def _set_value(self, obj, attr, value): 
       for output, calculate in self.setter.iteritems(): 
          calculate.objects.append(obj)
          setattr(obj, output, calculate())
@@ -190,29 +235,10 @@ class Attribute(Special):
       self.obj = obj
       self.attr = attr
 
-   def get_value(self, obj, attr): 
-      myhash = str(hash(obj)) + '.' + str(hash(attr))
+   def _get_value(self, obj, attr): 
+      return getattr(self.obj, self.attr)
 
-      if myhash in Special.getted:
-         return Special.getted[myhash]
-
-      if myhash in Special.unknown:
-         #if first: do unrolling, somehow
-         raise CycleError("Cycle detected: %s.%s" % (obj.name, attr))
-
-      Special.unknown.add(myhash)
-
-      value = getattr(self.obj, self.attr)
-
-      if myhash in Special.getted and Special.getted[myhash] != value:
-         #if first: do unrolling, somehow
-         raise CycleError("Cycle detected: %s.%s" % (obj.name, attr))
-
-      Special.unknown.discard(myhash)
-
-      return value
-
-   def set_value(self, obj, attr, value): 
+   def _set_value(self, obj, attr, value): 
       setattr(self.obj, self.attr, value)
 
 class Local(str): 
