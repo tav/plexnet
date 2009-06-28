@@ -63,7 +63,7 @@ if [ "$PLEXNET_ROOT" ]; then
 
     if [ $UNAME == "Darwin" ]; then
         export PATH=$PLEXNET_ROOT/source/client/osx:$PATH
-        export DYLD_FALLBACK_LIBRARY_PATH=$PLEXNET_LOCAL/lib:$PLEXNET_LOCAL/freeswitch/lib:$DYLD_LIBRARY_PATH
+        export DYLD_FALLBACK_LIBRARY_PATH=$PLEXNET_LOCAL/lib:$PLEXNET_LOCAL/freeswitch/lib:$DYLD_LIBRARY_PATH:$HOME/lib:/usr/local/lib:/lib:/usr/lib
     fi
 
     if [ $UNAME == "Linux" ]; then
