@@ -2,7 +2,8 @@
 # Bash Support for Plexnet
 # ========================
 
-# Placed into the Public Domain by tav <tav@espians.com>
+# Released into the Public Domain. See documentation/legal.txt for more info.
+# Author: tav <tav@espians.com>
 
 # @/@ do ``man bash`` to get info on all from ``complete`` to ``compgen`` to ...
 
