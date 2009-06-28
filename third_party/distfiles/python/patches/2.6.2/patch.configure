@@ -1,0 +1,22 @@
+--- configure	2009-03-30 18:56:14.000000000 +0100
++++ configure.new	2009-06-28 08:32:36.000000000 +0100
+@@ -1987,10 +1987,6 @@
+ 		# files:
+ 		ac_config_files="$ac_config_files Mac/Makefile"
+ 
+-		ac_config_files="$ac_config_files Mac/PythonLauncher/Makefile"
+-
+-		ac_config_files="$ac_config_files Mac/IDLE/Makefile"
+-
+ 		ac_config_files="$ac_config_files Mac/Resources/framework/Info.plist"
+ 
+ 		ac_config_files="$ac_config_files Mac/Resources/app/Info.plist"
+@@ -25064,8 +25060,6 @@
+   case $ac_config_target in
+     "pyconfig.h") CONFIG_HEADERS="$CONFIG_HEADERS pyconfig.h" ;;
+     "Mac/Makefile") CONFIG_FILES="$CONFIG_FILES Mac/Makefile" ;;
+-    "Mac/PythonLauncher/Makefile") CONFIG_FILES="$CONFIG_FILES Mac/PythonLauncher/Makefile" ;;
+-    "Mac/IDLE/Makefile") CONFIG_FILES="$CONFIG_FILES Mac/IDLE/Makefile" ;;
+     "Mac/Resources/framework/Info.plist") CONFIG_FILES="$CONFIG_FILES Mac/Resources/framework/Info.plist" ;;
+     "Mac/Resources/app/Info.plist") CONFIG_FILES="$CONFIG_FILES Mac/Resources/app/Info.plist" ;;
+     "Makefile.pre") CONFIG_FILES="$CONFIG_FILES Makefile.pre" ;;

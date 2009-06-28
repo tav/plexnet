@@ -11,10 +11,10 @@ To update the sources:
   - Mac/IDLE (except for Makefile.in)
   - Mac/PythonLauncher (except for Makefile.in)
   - Misc (except for python.man and python-config.in)
-  - Tool (except for the scripts sub-directory)
+  - Tools (except for the scripts sub-directory)
 
-* Apply ``patch.Makefile.pre.in`` which skips the installation of utility
-  Applications on OS X.
+* Apply ``patch.configure`` and ``patch.Makefile.pre.in`` which skip the
+  installation of utility Applications on OS X.
 
 * Apply ``patch.Lib.site.py`` which adds support for the plexnetenv setup.
 
