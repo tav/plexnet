@@ -33,19 +33,17 @@ have() {
     type $1 &> /dev/null && have="yes"
 }
 
-# (have wget && export downloader='wget') || (have curl && export downloader='curl -O')
-
 have wget && _downloader="wget"
 if [ ! "$_downloader" ]; then
     have curl && _downloader="curl -O"
     if [ ! "$_downloader" ]; then
-        echo "!! Couldn't find either wget or curl. Please install one of them..."
+        echo "!! Couldn't find wget or curl. Please install one of them... !!"
         exit
     fi
 fi
 
 _exit_on_error() {
-    echo $error Something went wrong whilst installing $TARGET !! $normal
+    echo $error "!! Something went wrong whilst installing $TARGET !!" $normal
     exit
 }
 
@@ -65,7 +63,7 @@ _uncompress_tarball() {
     fi
     echo ${progress} Unpacking the $TARGET Source Code ${normal}
     tar -xzf $TARBALL_FILENAME
-    cd $TNAME-$TVERS
+    cd $TNAME
     echo ${progress} Compiling $TARGET ${normal}
 }
 
@@ -79,7 +77,7 @@ _compile_tarball() {
 _remove_directory() {
     echo ${success} Successfully installed $TARGET ${normal}
     cd ..
-    rm -rf $TNAME-$TVERS
+    rm -rf $TNAME
 }
 
 if [ ! -f $PLEXNET_LOCAL/bin/python2.6 ]; then
@@ -109,7 +107,7 @@ if [ ! -f $PLEXNET_LOCAL/bin/python2.6 ]; then
     make -f $BZIP2_MAKEFILE all PREFIX=$PLEXNET_LOCAL || _exit_on_error
     _remove_directory
 
-    _set_target "python" "2.6.1"
+    _set_target "python" "2.6.2"
     CONFIG_FLAGS="--enable-ipv6 --enable-unicode=ucs2 $EXTRA_PY_ARGS"
     _compile_tarball
 

@@ -1,3 +1,6 @@
+# Released into the Public Domain. See documentation/legal.txt for more info.
+# Author: tav <tav@espians.com>
+
 """
 [redpill %(__version__)s]
 
@@ -128,7 +131,7 @@ DEPENDENCIES = [(isinstance(i, tuple) and i[0] or i) for i in DOWNLOAD_MAP]
 __version__ = '0.1'
 __additional__ = ''
 
-DISTFILES_SERVER = "http://release.plexnet.org/distfiles"
+DISTFILES_SERVER = "http://cloud.github.com/downloads/tav/plexnet"
 
 STARTUP_DIRECTORY = plexnetenv.STARTUP_DIRECTORY
 PLEXNET_ROOT = plexnetenv.PLEXNET_ROOT
@@ -326,7 +329,7 @@ def untar(name, version):
     except:
         print_message("Downloading %s" % tarball_filename, PROGRESS)
         distfile = urlopen(
-            "%s/%s/%s" % (DISTFILES_SERVER, name.lower(), tarball_filename)
+            "%s/%s" % (DISTFILES_SERVER, tarball_filename)
             )
         tarball_source = distfile.read()
         tarball_file = open(tarball_filename, 'wb')
