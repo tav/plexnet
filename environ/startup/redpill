@@ -56,7 +56,7 @@ _set_target() {
 _uncompress_tarball() {
     echo ${action} Installing $TARGET ${normal}
     cd $PLEXNET_ROOT/third_party/distfiles/$TNAME
-    TARBALL_FILENAME=distfile.$TNAME-$TVERS.tar.gz
+    TARBALL_FILENAME=$TNAME-$TVERS.tar.gz
     if [ ! -f $TARBALL_FILENAME ]; then
         echo ${progress} Downloading the $TARGET Source Code ${normal}
         ${_downloader} ${DISTFILES_SERVER}/${TARBALL_FILENAME}
