@@ -1,0 +1,9 @@
+INFO = {
+  'site_url': 'http://www.espians.com',
+  'site_title': "Espians",
+  'site_nick': 'espians',
+  'site_description': "On The Road To Espia",
+  'site_analytics_code': 'UA-90176-9',
+  'site_author': 'Espians',
+  'site_author_nick': 'tav'
+}
