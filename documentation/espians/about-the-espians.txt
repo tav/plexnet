@@ -2,8 +2,6 @@
 About The Espians
 =================
 
-:X-Tags: @tav, Spam
-
 The Espians are a Metanational Collective of Visionaries, Artists, Engineers and
 Cultural Creatives. Led by `tav <http://tav.espians.com>`_, they have been
 working on Weapons of Mass Construction since 1999.
