@@ -1,3 +1,6 @@
+# Released into the Public Domain. See documentation/legal.txt for more info.
+# Author: tav <tav@espians.com>
+
 """Setup the common environment needed by scripts."""
 
 import sys

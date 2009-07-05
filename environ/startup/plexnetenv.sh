@@ -2,7 +2,8 @@
 # Bash Support for Plexnet
 # ========================
 
-# Placed into the Public Domain by tav <tav@espians.com>
+# Released into the Public Domain. See documentation/legal.txt for more info.
+# Author: tav <tav@espians.com>
 
 # @/@ do ``man bash`` to get info on all from ``complete`` to ``compgen`` to ...
 
@@ -63,7 +64,7 @@ if [ "$PLEXNET_ROOT" ]; then
 
     if [ $UNAME == "Darwin" ]; then
         export PATH=$PLEXNET_ROOT/source/client/osx:$PATH
-        export DYLD_FALLBACK_LIBRARY_PATH=$PLEXNET_LOCAL/lib:$PLEXNET_LOCAL/freeswitch/lib:$DYLD_LIBRARY_PATH
+        export DYLD_FALLBACK_LIBRARY_PATH=$PLEXNET_LOCAL/lib:$PLEXNET_LOCAL/freeswitch/lib:$DYLD_LIBRARY_PATH:$HOME/lib:/usr/local/lib:/lib:/usr/lib
     fi
 
     if [ $UNAME == "Linux" ]; then

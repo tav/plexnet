@@ -1,0 +1,9 @@
+// Copyright (c) 2009 Metanational Commons Ltd.
+// See LICENSE.txt for details.
+
+// Prefix header for all source files of the 'Espra' target in the 'Espra' project
+
+#ifdef __OBJC__
+    #import <Foundation/Foundation.h>
+    #import <UIKit/UIKit.h>
+#endif

@@ -1,5 +1,8 @@
 #! /usr/bin/env python2.6
 
+# Released into the Public Domain. See documentation/legal.txt for more info.
+# Author: tav <tav@espians.com>
+
 """
 Yatiblog -- Blog/Documentation Generator
 

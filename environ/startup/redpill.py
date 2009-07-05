@@ -1,3 +1,6 @@
+# Released into the Public Domain. See documentation/legal.txt for more info.
+# Author: tav <tav@espians.com>
+
 """
 [redpill %(__version__)s]
 
@@ -27,13 +30,15 @@ import os
 import shutil
 import sys
 import tarfile
+import traceback
 
 import plexnetenv
 import gclient
 
 from glob import glob
 from os import stat, getcwd, listdir
-from os.path import isdir, isfile, join as join_path, expanduser
+from os.path import abspath, dirname, exists, isdir, isfile, join as join_path
+from os.path import expanduser
 from posixpath import split as posix_split
 from shutil import rmtree
 from subprocess import Popen, PIPE
@@ -128,23 +133,28 @@ DEPENDENCIES = [(isinstance(i, tuple) and i[0] or i) for i in DOWNLOAD_MAP]
 __version__ = '0.1'
 __additional__ = ''
 
-DISTFILES_SERVER = "http://release.plexnet.org/distfiles"
+DISTFILES_SERVER = (
+    "http://cloud.github.com/downloads/tav/plexnet/distfile."
+    "%(name)s-%(version)s.tar.bz2"
+    )
 
 STARTUP_DIRECTORY = plexnetenv.STARTUP_DIRECTORY
 PLEXNET_ROOT = plexnetenv.PLEXNET_ROOT
 PLEXNET_LOCAL = plexnetenv.PLEXNET_LOCAL
+PLEXNET_INCLUDE = join_path(PLEXNET_LOCAL, 'include')
 PLEXNET_INSTALLED = join_path(PLEXNET_LOCAL, 'share', 'installed')
 PLEXNET_SOURCE = plexnetenv.PLEXNET_SOURCE
 PYTHON_SITE_PACKAGES = plexnetenv.PYTHON_SITE_PACKAGES
 THIRD_PARTY = plexnetenv.THIRD_PARTY
+THIRD_PARTY_PACKAGES_ROOT = join_path(THIRD_PARTY, 'distfiles')
 
 BASH_MESSAGE = """export PLEXNET_ROOT="%s"
 source $PLEXNET_ROOT/environ/startup/plexnetenv.sh install
 """ % PLEXNET_ROOT
 
 CURRENT_DIRECTORY = os.getcwd()
-USER_HOME = expanduser('~')
-PLAT_EXT = ['.so', '.dll'][os.name == 'nt']
+HOME = expanduser('~')
+LIB_EXTENSION = ['.so', '.dll'][os.name == 'nt']
 
 ACTION = '\x1b[34;01m>> '
 INSTRUCTION = '\x1b[31;01m!! '
@@ -152,6 +162,7 @@ ERROR = '\x1b[31;01m!! '
 NORMAL = '\x1b[0m'
 PROGRESS = '\x1b[30;01m## '
 SUCCESS = '\x1b[32;01m** '
+TERMTITLE = '\x1b]2;%s\x07'
 
 if sys.platform == 'win32':
     INSTRUCTION = ACTION = '>> '
@@ -173,30 +184,19 @@ else:
 
 MTIME_CACHE = {}
 LOCAL_FILELISTING = set()
+PACKAGES = {}
+FLAGGED = None
+
+# ------------------------------------------------------------------------------
+# exseptions
+# ------------------------------------------------------------------------------
 
 class AlreadyInstalled(Exception):
     """Error raised when a package is detected to have already been installed."""
 
-FLAGGED = None
-
 # ------------------------------------------------------------------------------
-# utility funktions
+# kommand line arguments parser
 # ------------------------------------------------------------------------------
-
-def get_mtime(file, directory=None, usecache=True):
-    """Return the last modified time of the given file."""
-    if directory is not None:
-        file = join_path(directory, *file.split('/')) # posixpath
-    if usecache:
-        if file in MTIME_CACHE:
-            return MTIME_CACHE[file]
-    try:
-        mtime = stat(file).st_mtime
-    except OSError:
-        mtime = 0
-    if usecache:
-        return MTIME_CACHE.setdefault(file, mtime)
-    return mtime
 
 def get_flag(flag, alter=True):
     """Return whether a specific flag is set in the command line parameters."""
@@ -218,11 +218,43 @@ def get_flag(flag, alter=True):
             FLAGGED = True
     return retval
 
+# ------------------------------------------------------------------------------
+# help
+# ------------------------------------------------------------------------------
+
+if get_flag('--help') or get_flag('help') or get_flag('-h') or get_flag('-H'):
+    print __doc__ % locals()
+    sys.exit(0)
+
+if get_flag('--version') or get_flag('version') or get_flag('-v') or get_flag('-V'):
+    print "redpill %s" % __version__
+    sys.exit(0)
+
+# ------------------------------------------------------------------------------
+# utility funktions
+# ------------------------------------------------------------------------------
+
+def get_mtime(file, directory=None, usecache=True):
+    """Return the last modified time of the given file."""
+
+    if directory is not None:
+        file = join_path(directory, *file.split('/')) # posixpath
+    if usecache:
+        if file in MTIME_CACHE:
+            return MTIME_CACHE[file]
+    try:
+        mtime = stat(file).st_mtime
+    except OSError:
+        mtime = 0
+    if usecache:
+        return MTIME_CACHE.setdefault(file, mtime)
+    return mtime
+
 def install_dot_file(file, force=False, directory=False):
     """Copy the .dotfile to the user's home directory."""
 
     source = join_path(STARTUP_DIRECTORY, 'config', *posix_split(file))
-    dest = join_path(USER_HOME, *posix_split('.'+file))
+    dest = join_path(HOME, *posix_split('.'+file))
     if directory:
         if (not isdir(dest)) or force:
             print('Writing: %s' % dest)
@@ -242,6 +274,33 @@ def print_message(message, type=ACTION):
     print(type + message + NORMAL)
     print('')
 
+def set_term_title(title):
+    """Set the Terminal with the given title."""
+
+    print TERMTITLE % title
+
+def download_distfile(distfile, distfile_location):
+    """Download the given distfile."""
+
+    if (distfile_location.startswith('http://') or
+        distfile_location.startswith('https://')):
+
+        print_message("Downloading %s" % distfile, PROGRESS)
+        distfile_obj = urlopen(distfile_location)
+        distfile_source = distfile_obj.read()
+        distfile_file = open(distfile, 'wb')
+        distfile_file.write(distfile_source)
+        distfile_obj.close()
+        distfile_file.close()
+
+    elif not isfile(distfile_location):
+
+        print_message(
+            "Couldn't find distfile for %s %s: %s" %
+            (name, version, distfile), ERROR
+            )
+        sys.exit(1)
+
 def gather_local_filelisting(directory=PLEXNET_LOCAL, gathered=None):
     """Return a set of all resources inside the given ``directory``."""
 
@@ -256,112 +315,9 @@ def gather_local_filelisting(directory=PLEXNET_LOCAL, gathered=None):
             gathered.add(path + '/')
             gather_local_filelisting(path, gathered)
         else:
-            if path.endswith('.pyc') or path.endswith('.pyo'):
-                continue
             gathered.add(path)
 
     return gathered
-
-def compile_from_source_tarball(
-    name, version, commands=None, config_command='./configure', config_flags='',
-    separate_make_install=False, make_flags="install"
-    ):
-    """Compile and install from a source tarball."""
-
-    try:
-        dest_dir, path_prefix = untar(name, version)
-    except AlreadyInstalled:
-        return
-
-    if commands is None:
-        commands = []; add = commands.append
-        add("%s %s --prefix=%s" % (config_command, config_flags, PLEXNET_LOCAL))
-        if separate_make_install:
-            add("make"); add("make %s" % make_flags)
-        else:
-            add("make %s" % make_flags)
-    else:
-        if isinstance(commands, basestring):
-            commands = [commands]
-        elif callable(commands):
-            commands = commands()
-
-    if not isinstance(commands, (tuple,list)):
-        raise ValueError("%r is not a tuple" % commands)
-
-    for command in commands:
-        print_message("Running: %s" % command, PROGRESS)
-        proc = Popen(command, shell=True)
-        status = proc.wait()
-        if status:
-            print_message("Error running: %s" % command, ERROR)
-            sys.exit(1)
-
-    return rmsource(name, version, dest_dir, path_prefix)
-
-def untar(name, version):
-    """Extract source files from a tarball and enter the source directory."""
-
-    global LOCAL_FILELISTING
-
-    if not LOCAL_FILELISTING:
-        LOCAL_FILELISTING = gather_local_filelisting()
-
-    if version:
-        path_prefix = "%s-%s" % (name.lower(), version)
-    else:
-        path_prefix = name.lower()
-
-    if os.path.exists(join_path(PLEXNET_INSTALLED, path_prefix)):
-        raise AlreadyInstalled(path_prefix)
-
-    print_message("Installing %s %s" % (name, version), ACTION)
-    dest_dir = join_path(THIRD_PARTY, 'distfiles', name.lower())
-    os.chdir(dest_dir)
-
-    tarball_filename = '%s.tar.bz2' % path_prefix
-
-    try:
-        tar = tarfile.open(tarball_filename, 'r:bz2')
-    except:
-        print_message("Downloading %s" % tarball_filename, PROGRESS)
-        distfile = urlopen(
-            "%s/%s/%s" % (DISTFILES_SERVER, name.lower(), tarball_filename)
-            )
-        tarball_source = distfile.read()
-        tarball_file = open(tarball_filename, 'wb')
-        tarball_file.write(tarball_source)
-        distfile.close()
-        tarball_file.close()
-        tar = tarfile.open(tarball_filename, 'r:bz2')
-        
-    print_message("Unpacking %s" % tarball_filename, PROGRESS)
-    tar.extractall()
-    tar.close()
-
-    os.chdir(path_prefix)
-
-    return dest_dir, path_prefix
-
-def rmsource(name, version, dest_dir, path_prefix):
-    """Remove the extracted source and build files and then write a receipt."""
-
-    os.chdir(dest_dir)
-    # gclient.RemoveDirectory(path_prefix)
-    rmtree(join_path(dest_dir, path_prefix))
-    print_message("Successfully Installed %s %s" % (name, version), SUCCESS)
-
-    global LOCAL_FILELISTING
-
-    new_listing = gather_local_filelisting()
-    receipt_data = new_listing.difference(LOCAL_FILELISTING)
-    LOCAL_FILELISTING = new_listing
-
-    receipt = open(join_path(PLEXNET_INSTALLED, path_prefix), 'wb')
-    receipt.write('\n'.join(receipt_data))
-    receipt.close()
-
-    return True
 
 def copy_from_resource_tarball(name, version, source, destination):
     """Extract and copy resource files from a tarball to a ``destination`` ."""
@@ -381,39 +337,6 @@ def copy_from_resource_tarball(name, version, source, destination):
 
     return rmsource(name, version, dest_dir, path_prefix)
 
-def get_boost_commands():
-    """Compile Boost Jam and Return the boost compile commands."""
-
-    cur_dir = os.getcwd()
-
-    user_config = open('user-config.jam', 'wb')
-    user_config.write("using python : 2.6 : %s ;\n" % sys.prefix)
-    user_config.close()
-
-    jam_dir = join_path(cur_dir, 'tools', 'jam', 'src')
-    os.chdir(jam_dir)
-
-    print_message("Compiling Boost Jam", PROGRESS)
-    proc = Popen('./build.sh', shell=True)
-    status = proc.wait()
-    if status:
-        print_message("Error compiling Boost Jam", ERROR)
-        sys.exit(1)
-
-    TOOLSET = Popen(['./build.sh', '--guess-toolset'], stdout=PIPE).communicate()[0].strip()
-
-    cmd = """./tools/jam/src/bin.*/bjam -sICU_PATH=%s --user-config=user-config.jam --prefix=%s --toolset=%s --with-thread --with-filesystem --with-regex --with-program_options --with-python --with-system --with-iostreams %s""" % (PLEXNET_LOCAL, PLEXNET_LOCAL, TOOLSET, PARALLEL)
-
-    os.chdir(cur_dir)
-
-    return ("%s stage" % cmd, "%s install" % cmd)
-
-def install_python_package(name, version):
-    """Compile and install the Python package from a source tarball."""
-    return compile_from_source_tarball(
-        name, version, '%s setup.py install' % PYTHON_EXE
-        )
-
 def install_python_package_in_directory(directory):
     """Compile and install the python package in the given ``directory``."""
 
@@ -423,7 +346,7 @@ def install_python_package_in_directory(directory):
     gclient.RemoveDirectory(path, 'build')
     os.chdir(CURRENT_DIRECTORY)
 
-def get_extensions(directory, source='.c', compiled=PLAT_EXT, filename_only=0):
+def get_extensions(directory, source='.c', compiled=LIB_EXTENSION, filename_only=0):
     """Return a list of Extensions that need to be compiled."""
 
     sep = os.sep
@@ -460,6 +383,29 @@ def do_action_in_directory(action, past_action, directory, function):
 # egg dependencies
 # ------------------------------------------------------------------------------
 
+def install_setuptools():
+    """Install setuptools if it's not already installed."""
+
+    try:
+        import pkg_resources
+    except:
+        SETUPTOOLS = 'setuptools-0.6c9'
+        EGG_PATH = '%s-py2.6.egg' % SETUPTOOLS
+        print_message("Installing %s" % EGG_PATH, ACTION)
+        os.chdir(join_path(THIRD_PARTY, 'distfiles', 'setuptools'))
+        proc = Popen(
+            'sh %s --script-dir=%s -O2' % (EGG_PATH, PLEXNET_BIN),
+            shell=True
+            )
+        status = proc.wait()
+        if status:
+            print_message("Error Installing %s" % SETUPTOOLS, ERROR)
+            sys.exit(1)
+        print_message("Successfully Installed %s" % SETUPTOOLS, SUCCESS)
+        for path in sys.path:
+            if isdir(path) and EGG_PATH in listdir(path):
+                sys.path.append(join_path(path, EGG_PATH))
+
 def install_dependencies_via_eggs(download_map=DOWNLOAD_MAP):
     """Install various dependencies available as Python Eggs."""
 
@@ -493,16 +439,386 @@ def install_dependencies_via_eggs(download_map=DOWNLOAD_MAP):
         return main(download_list)
 
 # ------------------------------------------------------------------------------
-# help
+# build file builtins
 # ------------------------------------------------------------------------------
 
-if get_flag('--help') or get_flag('help') or get_flag('-h') or get_flag('-H'):
-    print __doc__ % locals()
-    sys.exit(0)
+BUILTINS = {
 
-if get_flag('--version') or get_flag('version') or get_flag('-v') or get_flag('-V'):
-    print "redpill %s" % __version__
-    sys.exit(0)
+    'abspath': abspath,
+    'dirname': dirname,
+    'environ': os.environ,
+    'exists': exists,
+    'glob': glob,
+    'isdir': isdir,
+    'isfile': isfile,
+    'join_path': join_path,
+    'os': os,
+    'platform': sys.platform,
+    'print_message': print_message,
+    'sys': sys,
+
+    'Popen': Popen,
+    'PIPE': PIPE,
+
+    'INSTRUCTION': INSTRUCTION,
+    'ERROR': ERROR,
+    'NORMAL': NORMAL,
+    'PROGRESS': PROGRESS,
+    'SUCCESS': SUCCESS,
+
+    'CPUS': CPUS,
+    'CURRENT_DIRECTORY': CURRENT_DIRECTORY,
+    'HOME': HOME,
+    'LIB_EXTENSION': LIB_EXTENSION,
+    'PARALLEL': PARALLEL,
+
+    'PLEXNET_BIN': join_path(PLEXNET_LOCAL, 'bin'),
+    'PLEXNET_FRAMEWORK': join_path(PLEXNET_LOCAL, 'framework'),
+    'PLEXNET_INCLUDE': PLEXNET_INCLUDE,
+    'PLEXNET_LIB': join_path(PLEXNET_LOCAL, 'lib'),
+    'PLEXNET_LOCAL': PLEXNET_LOCAL,
+    'PLEXNET_MAN': join_path(PLEXNET_LOCAL, 'man'),
+    'PLEXNET_ROOT': PLEXNET_ROOT,
+    'PLEXNET_SOURCE': PLEXNET_SOURCE,
+
+    'PYTHON_EXE': sys.executable,
+    'PYTHON_SITE_PACKAGES': PYTHON_SITE_PACKAGES,
+    'SCONS_EXE': (
+        '%s -c "import SCons.Script; SCons.Script.main()"' % sys.executable
+        ),
+    'STARTUP_DIRECTORY': STARTUP_DIRECTORY,
+    'SYSTEM_INCLUDE': '/usr/include',
+    'SYSTEM_LIB': '/usr/lib',
+    'SYSTEM_LOCAL': '/usr',
+    'THIRD_PARTY': THIRD_PARTY,
+
+    }
+
+# ------------------------------------------------------------------------------
+# build types
+# ------------------------------------------------------------------------------
+
+type_base = {
+    'after_install': None,
+    'before_install': None,
+    'commands': None,
+    'distfile_location': DISTFILES_SERVER,
+    'distfile': "distfile.%(name)s-%(version)s.tar.bz2",
+    'env': None,
+    }
+
+def command_default(info):
+
+    commands = []; add = commands.append
+
+    add("%s %s --prefix=%s" %
+        (info['config_command'], info['config_flags'], PLEXNET_LOCAL))
+
+    if info['separate_make_install']:
+        add("make")
+        add("make %s" % info['make_flags'])
+    else:
+        add("make %s" % info['make_flags'])
+
+    return commands
+
+type_default = type_base.copy()
+type_default.update({
+    'commands': command_default,
+    'config_command': './configure',
+    'config_flags': '',
+    'make_flags': 'install',
+    'separate_make_install': False
+    })
+
+type_python = type_base.copy()
+type_python.update({
+    'before_install': install_setuptools,
+    'commands': "%s setup.py install" % sys.executable,
+    })
+
+def command_resources(info):
+    return []
+
+type_resources = type_base.copy()
+type_resources.update({
+    'commands': command_resources,
+    'source': '',
+    'destination': '',
+    })
+
+types = {
+    'default': type_default,
+    'python': type_python,
+    'resources': type_resources,
+    }
+
+# ------------------------------------------------------------------------------
+# kore install funktions
+# ------------------------------------------------------------------------------
+
+def install_package(name, packages_root=THIRD_PARTY_PACKAGES_ROOT):
+    """Read the build file for the given package name."""
+
+    package_name = name.lower()
+
+    if package_name in PACKAGES:
+        return
+
+    build_file = join_path(packages_root, package_name, 'build.py')
+    builtins = BUILTINS.copy()
+    local = {}
+
+    if not isfile(build_file):
+        print_message("Couldn't find %s" % build_file, ERROR)
+
+    execfile(build_file, builtins, local)
+
+    if 'versions' not in local:
+        print_message(
+            "Couldn't find 'versions' variable in build.py for %s" % name, ERROR
+            )
+
+    versions = local['versions']
+    latest = versions[-1]
+
+    if 'packages' not in local:
+        packages = {latest: {}}
+    else:
+        packages = local['packages']
+
+    PACKAGES[package_name] = {
+        'latest': latest,
+        'packages': packages,
+        'versions': versions
+        }
+
+    if 'deps' in packages:
+        for dep in packages['deps']:
+            install_package(dep)
+
+    for version in versions:
+        package = packages[version]
+        if 'deps' in package:
+            for dep in package['deps']:
+                install_package(dep)
+
+def get_package_dependencies(name, version=None, installed=None, gathered=None):
+    """Return a set of dependencies for the given package name."""
+
+    if gathered is None:
+        gathered = set()
+
+    packages = PACKAGES[name]['packages']
+    deps = packages.get('deps', [])[:]
+
+    if not installed:
+        version = PACKAGES[name]['latest']
+
+    installed_package = packages.get(version, {})
+    deps = deps + installed_package.get('deps', [])
+
+    for dep in deps:
+        if installed:
+            if dep in installed:
+                gathered.add(dep)
+                get_package_dependencies(dep, installed[dep], installed, gathered)
+        else:
+            gathered.add(dep)
+            get_package_dependencies(dep, gathered=gathered)
+
+    return gathered
+
+def uninstall_packages(uninstall, installed):
+    """Uninstall the given list of packages in uninstall."""
+
+    for name, version in uninstall.iteritems():
+        print_message("Uninstalling %s %s" % (name, version))
+        installed_version = '%s-%s' % (name, version)
+        receipt_path = join_path(PLEXNET_INSTALLED, installed_version)
+        receipt = open(receipt_path, 'rb')
+        for path in receipt:
+            path = path.strip()
+            if not path:
+                continue
+            if not exists(path):
+                continue
+            if isdir(path):
+                rmtree(path)
+            else:
+                os.remove(path)
+        receipt.close()
+        os.remove(receipt_path)
+        del installed[name]
+
+def install_packages(types=types):
+    """Handle the actual installation/uninstallation of appropriate packages."""
+
+    if not exists(PLEXNET_INSTALLED):
+        os.makedirs(PLEXNET_INSTALLED)
+
+    to_install = set()
+    to_install_iteration = None
+    inverse_dependencies = {}
+
+    for name in PACKAGES:
+        deps = get_package_dependencies(name)
+        for dep in deps:
+            inverse_dependencies.setdefault(dep, set()).add(name)
+
+    # @/@ assumes invariant that all packages only have one version installed
+
+    installed = dict([f.split('-', 1) for f in listdir(PLEXNET_INSTALLED)])
+    uninstall = {}
+
+    for name in list(installed):
+        version = installed[name]
+        if name not in PACKAGES:
+            uninstall[name] = version
+        elif PACKAGES[name]['latest'] != version:
+            uninstall[name] = version
+            for dep in get_package_dependencies(name, version, installed):
+                uninstall[dep] = installed[dep]
+
+    uninstall_packages(uninstall, installed)
+
+    while 1:
+        if ((to_install_iteration is not None) and
+            (to_install_iteration == to_install)):
+            to_install = to_install_iteration
+            break
+        else:
+            to_install, to_install_iteration = to_install_iteration, set()
+        uninstall = {}
+        to_install_iteration = set()
+        for name in PACKAGES:
+            if name in installed:
+                if installed[name] == PACKAGES[name]['latest']:
+                    continue
+            to_install_iteration.add(name)
+            for dep in inverse_dependencies.get(name, []):
+                if dep in installed:
+                    to_install_iteration.add(dep)
+                    uninstall[dep] = installed[dep]
+        uninstall_packages(uninstall, installed)
+
+    to_install_list = []
+
+    for name in to_install:
+        index = len(to_install_list)
+        for dep in inverse_dependencies.get(name, []):
+            try:
+                dep_index = to_install_list.index(dep)
+            except:
+                continue
+            else:
+                if dep_index < index:
+                    index = dep_index
+        to_install_list.insert(index, name)
+
+    local_filelisting = gather_local_filelisting()
+
+    for name in to_install_list:
+
+        meta = PACKAGES[name]
+        versions = meta['versions']
+        version = meta['latest']
+        packages = meta['packages']
+        package = packages[version]
+
+        print_message("Installing %s %s" % (name, version))
+
+        type = package.get('type', meta.get('type', 'default'))
+        info = types[type].copy()
+
+        for key in packages:
+            if key not in versions:
+                info[key] = packages[key]
+
+        info.update(package)
+
+        if info['before_install']:
+            info['before_install']()
+
+        dest_dir = join_path(THIRD_PARTY, 'distfiles', name)
+        distfile = info['distfile'] % {'name': name, 'version': version}
+
+        distfile_location = info['distfile_location'] % (
+            {'name': name, 'version': version}
+            )
+
+        os.chdir(dest_dir)
+
+        if distfile and distfile.endswith('.tar.bz2'):
+
+            try:
+                tar = tarfile.open(distfile, 'r:bz2')
+            except:
+                download_distfile(distfile, distfile_location)
+                tar = tarfile.open(distfile, 'r:bz2')
+                    
+            print_message("Unpacking %s" % distfile, PROGRESS)
+            tar.extractall()
+            tar.close()
+            os.chdir(name)
+
+        elif distfile:
+            download_distfile(distfile, distfile_location)
+
+        env = os.environ.copy()
+        if info['env']:
+            env.update(info['env'])
+
+        commands = info['commands']
+
+        if isinstance(commands, basestring):
+            commands = [commands]
+        elif callable(commands):
+            try:
+                commands = commands(info)
+            except Exception:
+                print_message(
+                    "Error calling build command for %s %s" %
+                    (name, version), ERROR
+                    )
+                traceback.print_exc()
+                sys.exit(1)
+
+        if not isinstance(commands, (tuple,list)):
+            print_message(
+                "Invalid build commands for %s %s: %r" %
+                (name, version, commands), ERROR
+                )
+            sys.exit(1)
+
+        for command in commands:
+            print_message("Running: %s" % command, PROGRESS)
+            proc = Popen(command, shell=True, env=env)
+            status = proc.wait()
+            if status:
+                print_message("Error running: %s" % command, ERROR)
+                sys.exit(1)
+
+        print_message("Successfully Installed %s %s" % (name, version), SUCCESS)
+
+        updated_local_filelisting = gather_local_filelisting()
+        receipt_data = updated_local_filelisting.difference(local_filelisting)
+        local_filelisting = updated_local_filelisting
+
+        receipt = open(
+            join_path(PLEXNET_INSTALLED, '%s-%s' % (name, version)), 'wb'
+            )
+        receipt.write('\n'.join(receipt_data))
+        receipt.close()
+
+        os.chdir(dest_dir)
+
+        if distfile.endswith('.tar.bz2'):
+            # gclient.RemoveDirectory(name)
+            rmtree(join_path(dest_dir, name))
+
+        if info['after_install']:
+            info['after_install']()
 
 # ------------------------------------------------------------------------------
 # init
@@ -512,192 +828,15 @@ if get_flag('--version') or get_flag('version') or get_flag('-v') or get_flag('-
 
 if get_flag('init'):
 
-    if not os.path.exists(PLEXNET_INSTALLED):
-        os.makedirs(PLEXNET_INSTALLED)
+    if not sys.argv[1:]:
+        install_package('boost')
+    else:
+        for package in sys.argv[1:]:
+            install_package(package)
 
-    PYTHON_EXE = sys.executable
-    SCONS_EXE = '%s -c "import SCons.Script; SCons.Script.main()"' % PYTHON_EXE
-
-    SYSTEM_LOCAL = '/usr'
-    SYSTEM_INCLUDE = '/usr/include'
-    SYSTEM_LIB = '/usr/lib'
-
-    PLEXNET_INCLUDE = join_path(PLEXNET_LOCAL, 'include')
-    PLEXNET_BIN = join_path(PLEXNET_LOCAL, 'bin')
-    PLEXNET_LIB = join_path(PLEXNET_LOCAL, 'lib')
-    PLEXNET_MAN = join_path(PLEXNET_LOCAL, 'man')
-    PLEXNET_FRAMEWORK = join_path(PLEXNET_LOCAL, 'framework')
-
-    LIBTIFF_EXTRA = ''
-    PYTHON3_EXTRA = ''
-    LIBJPEG_EXTRA = ''
-
-    if sys.platform == 'darwin':
-        ICU_PLATFORM = 'MacOSX'
-        LIBTIFF_EXTRA = ' --with-apple-opengl-framework'
-        PYTHON3_EXTRA = '--enable-framework=%s' % PLEXNET_FRAMEWORK
-    elif sys.platform == 'freebsd':
-        ICU_PLATFORM = 'FreeBSD'
-    elif sys.platform.startswith('linux'):
-        ICU_PLATFORM = 'Linux'
-        LIBJPEG_EXTRA = 'LIBTOOL=libtool'
-    elif sys.platform.startswith('cygwin'):
-        ICU_PLATFORM = 'Cygwin'
+    install_packages()
 
     # libxml2, libiconv, openssl/crypto, libexpat | curl, ncurses
-
-    compile_from_source_tarball(
-        'pkg-config', '0.23',
-        config_flags='--mandir=%s --enable-indirect-deps --with-pc-path=%s/lib/pkgconfig:%s/share/pkgconfig' % (PLEXNET_MAN, PLEXNET_LOCAL, PLEXNET_LOCAL)
-        )
-
-    compile_from_source_tarball(
-        'ICU', '4.0', config_command='./runConfigureICU',
-        config_flags='%s --disable-samples --disable-tests --sbindir=%s' % (ICU_PLATFORM, PLEXNET_BIN)
-        )
-
-    compile_from_source_tarball('Freetype', '2.3.7')
-
-    compile_from_source_tarball('Boost', '1.37', get_boost_commands)
-
-    compile_from_source_tarball(
-        'libPNG', '1.2.32', config_flags='--mandir=%s' % PLEXNET_MAN
-        )
-
-    compile_from_source_tarball(
-        'libJPEG', '6b', config_flags="--enable-shared --enable-static",
-        make_flags="%s install" % LIBJPEG_EXTRA
-        )
-
-    compile_from_source_tarball(
-        'TIFF', '3.8.2',
-        config_flags="--mandir=%s --with-jpeg-include-dir=%s --with-jpeg-lib-dir=%s --with-zlib-include-dir=%s --with-zlib-lib-dir=%s%s" % (PLEXNET_MAN, PLEXNET_INCLUDE, PLEXNET_LIB, SYSTEM_INCLUDE, SYSTEM_LIB, LIBTIFF_EXTRA)
-        )
-    # --with-docdir=${prefix}/share/doc/${name}-${version}
-
-    compile_from_source_tarball(
-        'PROJ', '4.6.0', config_flags='--mandir=%s' % PLEXNET_MAN
-        )
-
-    compile_from_source_tarball(
-        'libgeotiff', '1.2.1',
-        config_flags="--with-zip=%s --with-jpeg=%s --with-proj=%s --with-libtiff=%s --enable-incode-epsg" % (
-            SYSTEM_LOCAL, PLEXNET_LOCAL, PLEXNET_LOCAL, PLEXNET_LOCAL
-            ),
-        separate_make_install=True
-        )
-
-    compile_from_source_tarball(
-        'gdal', '1.5.1',
-        config_flags="--mandir=%s --with-libz=%s --with-png=%s --with-jpeg=%s --with-libtiff=%s --with-geotiff=%s --with-static-proj4=%s --without-sqlite3 --without-python --without-pg --without-mysql --without-sqlite" % (PLEXNET_MAN, SYSTEM_LOCAL, PLEXNET_LOCAL, PLEXNET_LOCAL, PLEXNET_LOCAL, PLEXNET_LOCAL, PLEXNET_LOCAL)
-        )
-
-    compile_from_source_tarball('speex', 'fs.svn.r10488')
-
-    copy_from_resource_tarball(
-        'dejavu', '2.14', 'dejavu', ('share', 'font', 'dejavu')
-        )
-
-    copy_from_resource_tarball(
-        'unicode', '5.1.0', 'unicode', ('share', 'unicode')
-        )
-
-    BOOST_TOOLKIT = glob(
-        '%s%slibboost_system*' % (PLEXNET_LIB, os.sep)
-        )[0].split('-')[1]
-
-    compile_from_source_tarball(
-        'mapnik', 'svn.r770',
-        "%s PREFIX=%s BOOST_INCLUDES=%s BOOST_TOOLKIT=%s ADDITIONAL_LIB_PATH=%s ADDITIONAL_INCLUDE_PATH=%s %s install" % (
-            SCONS_EXE, PLEXNET_LOCAL,
-            join_path(PLEXNET_LOCAL, 'include', 'boost-1_37'),
-            BOOST_TOOLKIT, PLEXNET_LIB, PLEXNET_INCLUDE, PARALLEL
-            )
-        )
-
-    compile_from_source_tarball(
-        'libevent', '1.4.8', config_flags='--mandir=%s' % PLEXNET_MAN
-        )
-
-    copy_from_resource_tarball(
-        'geoipdata', '2008.11', 'geoipdata', ('share', 'geoipdata')
-        )
-
-    compile_from_source_tarball('libgeoip', '1.4.5')
-
-    compile_from_source_tarball(
-        'miniupnpc', '1.2', (SCONS_EXE, 'make install')
-        )
-
-    compile_from_source_tarball(
-        'libnatpmp', '20081006', (SCONS_EXE, 'make install')
-        )
-
-    compile_from_source_tarball('liboil', 'git.200811')
-
-    compile_from_source_tarball(
-        'lame', 'cvs.200811',
-        config_flags='--mandir=%s --disable-gtktest' % PLEXNET_MAN
-        )
-
-    compile_from_source_tarball(
-        'x264', 'git.200811', config_flags='--disable-asm'
-        )
-
-    compile_from_source_tarball(
-        'faac', '1.26', config_command='./bootstrap && ./configure'
-        )
-
-    compile_from_source_tarball(
-        'libschroedinger', 'git.200811', config_command='./autogen.sh',
-        config_flags='--disable-gtk-doc'
-        )
-
-    compile_from_source_tarball(
-        'mplayer', 'svn.r27979',
-        config_flags='--codecsdir=%s/share/codecs --mandir=%s' % (PLEXNET_LOCAL, PLEXNET_MAN)
-        )
-
-    compile_from_source_tarball(
-        'freeswitch', 'svn.r10488',
-        ('./bootstrap.sh', './configure --prefix=%s --mandir=%s' %
-         (join_path(PLEXNET_LOCAL, 'freeswitch'), PLEXNET_MAN))
-        )
-
-    copy_from_resource_tarball('sounds', '1.0.6', 'sounds', ('share', 'sounds'))
-
-    copy_from_resource_tarball('win32codecs', '', 'codecs', ('share', 'codecs'))
-
-    compile_from_source_tarball(
-        'python', '3.0', config_flags='--enable-ipv6 %s' % PYTHON3_EXTRA
-        )
-
-    # @/@ fixup "Current" framework version on OS X ?
-
-    try:
-        import pkg_resources
-    except:
-        SETUPTOOLS = 'setuptools-0.6c9'
-        EGG_PATH = '%s-py2.6.egg' % SETUPTOOLS
-        print_message("Installing %s" % EGG_PATH, ACTION)
-        os.chdir(join_path(THIRD_PARTY, 'distfiles', 'setuptools'))
-        proc = Popen(
-            'sh %s --script-dir=%s -O2' % (EGG_PATH, PLEXNET_BIN),
-            shell=True
-            )
-        status = proc.wait()
-        if status:
-            print_message("Error Installing %s" % SETUPTOOLS, ERROR)
-            sys.exit(1)
-        print_message("Successfully Installed %s" % SETUPTOOLS, SUCCESS)
-        for path in sys.path:
-            if isdir(path) and EGG_PATH in listdir(path):
-                sys.path.append(join_path(path, EGG_PATH))
-
-    install_python_package('pyopenssl', '0.8')
-    install_python_package('pytz', '2009a')
-    install_python_package('pil', '1.1.6')
-    install_python_package('numpy', '1.2.1')
 
     original_argv = sys.argv
 
@@ -722,7 +861,7 @@ if get_flag('init'):
         EXTENSIONS['gdata.tlslite.utils.win32prng'] = ['gdata/tlslite/utils/win32prng.c']
 
     for name, sources in EXTENSIONS.iteritems():
-        dest_mtime = get_mtime(name.replace('.', '/') + PLAT_EXT)
+        dest_mtime = get_mtime(name.replace('.', '/') + LIB_EXTENSION)
         include_dirs = [PLEXNET_INCLUDE]
         if isinstance(sources, tuple):
             if len(sources) == 2:
@@ -804,9 +943,6 @@ if get_flag('init'):
 if get_flag('update'):
     pass
 
-if get_flag('commit'):
-    pass
-
 if get_flag('startupfiles'): # @/@ generate startup tarballs/zipfiles
     pass
 
@@ -821,7 +957,7 @@ if not os.environ.get('PLEXNET_INSTALLED', ''):
             print_message(
                 "Add the following %i lines to %s !!"
                 % (len(BASH_MESSAGE.splitlines()),
-                   join_path(USER_HOME, '.bash_profile')
+                   join_path(HOME, '.bash_profile')
                    ), INSTRUCTION
                 )
             print(BASH_MESSAGE)
@@ -857,7 +993,7 @@ if FLAGGED:
     sys.exit()
 
 if CURRENT_DIRECTORY != STARTUP_DIRECTORY:
-    if os.path.exists(join_path(CURRENT_DIRECTORY, 'SConstruct')):
+    if exists(join_path(CURRENT_DIRECTORY, 'SConstruct')):
         import SCons.Script
         SCons.Script.main()
         sys.exit()

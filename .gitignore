@@ -1,10 +1,13 @@
 # specific directories
 
 environ/local
+source/client/iphone/Espra/build
+source/client/osx/Espra/build
 third_party/python/docutils/writers/s5_html
 third_party/python/gdata/Crypto
 third_party/generic/pypy/demo
 third_party/generic/pypy/pypy/lang
+third_party/generic/pypy/pypy/_cache
 
 # general hidden files/directories
 
@@ -39,8 +42,6 @@ third_party/generic/pypy/pypy/lang
 *.perspectivev3
 *.swp
 *.tm_build_errors
-
-# build/ @/@ should we ignore specific xcode build directories?
 
 # file patterns (windows)
 
