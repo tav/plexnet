@@ -2,24 +2,146 @@
 Why App Engine Is Not Appropriate For Bootstrap
 ===============================================
 
-:X-Tags:
-  @sbp, UI, priority:1, foo, Spam, Hello Kitty, Yummy, Last Continuum, Mister
-  Helmet Mysteries, The Farside, Peeka, Boom Shaka
+:X-Tags: Article, Bootstrap
 
-In some ways, Google App Engine is a brilliant platform. Those who've tried it
+Google `App Engine <http://code.google.com/appengine/>`_ is a brilliant
+platform. One lesson every platform developer should definitely learn from it:
+is how easy they've made deployment. Just code your app and ``appcfg update`` --
+no server setup to worry about, no database configuration to worry about -- just
+code and go!
 
-And, yes [[About The espians|Fuck | yeah!]] foo::
+However the platform is fraught with growing pains. Some of the causes for
+concern include:
 
-  And [[foo bar]]
+1. **30 Second CPU Timeout**
 
-see
+   All request threads -- even background task ones -- time out after a piddling
+   30 seconds. Sure enough, for someone creating the next "Poke Your Buddy" app,
+   30 seconds is more than enough time. But serious apps demand serious number
+   crunching and a lot of CPU!
 
-.. syntax:: python
+   In the days when `EC2 instances <http://aws.amazon.com/ec2/>`_ automatically
+   fire up to satisfy load, such a minimal CPU quota seems defiantly archaic.
+   The problem here is that Google are trying to satisfy the lowest common
+   denominator -- they limit everyone's request to 30 seconds so that no single
+   app starves other apps of resources.
 
-  def foo(x):
-    x = [[foo]]
+   \[**Proposed Solution**: Let paying customers programatically specify an
+   optional ``request_timeout_time`` up to at least half an hour. If set, the
+   customer will be billed for ``max(30, request_timeout_time - 0.5 seconds)``
+   -- giving them an incentive to be more accurate -- and it will allow App
+   Engine servers to schedule requests in a manageable way.]
 
-.. syntax:: objective-c
+2. **Loading Large Entities Needlessly**
 
-  int Foo = [messge foo: @"Foo"];
+   If you have a really really large Entity with lots of properties which you
+   use for queries, but when serving the data you are only interested in some of
+   the properties, you currently end up having to load up the entire Entity.
 
+   Google recently added the ``key_only`` parameter to queries which helps in
+   this regard. Unfortunately this doesn't yet work with the `Remote API
+   <http://code.google.com/appengine/articles/remote_api.html>`_ and if you are
+   interested in other properties besides just the key, you have to use hacks
+   like encoding the extra data into the key -- adding needless complexity in
+   order to prevent needless resource usage.
+
+   \[**Proposed Solution**: Let a Key be optionally set for a new ``__index__``
+   property of an Entity. The Entity referred to by __index__ should be returned
+   in queries instead of the actual Entity -- allowing developers to create as
+   many shadow Entities as they want for different types of queries without
+   having to constantly load large Entities.]
+
+3. **Multiple Layers of Indirection**
+
+   If you decide to do offline processing on your own server by using the
+   `Remote API <http://code.google.com/appengine/articles/remote_api.html>`_,
+   you are subject to severe inefficiencies::
+
+      Offline Processing Server using the Remote API
+        --> Remote API Handler (App Engine Request)
+              --> RPC to Datastore Service
+                    --> BigTable
+
+   Now, it's understandable that Google would want you to go through some form
+   of indirection in order to satisfy billing/quota purposes, but why couldn't
+   this have been done by providing a more direct access to the Datastore
+   Service?
+
+   \[**Proposed Solution**: Provide the capability for direct RPC calls to be
+   made from remote servers to the Datastore without having to go through an App
+   Engine request handler. Whilst latency would still be an issue, this would
+   save on the pointless repeat serialisation/deserialisation and RPC call
+   setups and make life more efficient for all involved.]
+
+4. **1 MB Datastore Limit**
+
+   Any data you store in App Engine is limited to 1MB. Sure you can come up with
+   various ways of sharding it, but this comes at dramatically increased cost to
+   both the complexity and performance of your app.
+
+   Given that `BigTable <http://en.wikipedia.org/wiki/BigTable>`_, the
+   underlying technology of the App Engine Datastore, is used by Google to store
+   *Petabytes* of data, you'd think they'd be aware of the benefits of not
+   having such low limits!
+
+   \[**Proposed Solution:** Increase the Datastore limit to at least 1GB and
+   remove any limits on the number of indexes. Set the default ``indexed=False``
+   for all properties. All of this would be dependent on rethinking the indexing
+   layer -- moving to a map/reduce/merge operation with caching on top of basic
+   indexes instead of the current approach of creating lots of indexes which are
+   rarely used.]
+
+5. **Poor Async Support**
+
+   With developments like `Google Wave <http://wave.google.com/>`_, one might
+   mistakenly presume that other Google teams get the importance of event-driven
+   programming. App Engine's currently exposed support for asynchronous
+   behaviour is appalling and limited to an `async version of Urlfetch
+   <http://code.google.com/appengine/docs/python/urlfetch/asynchronousrequests.html>`_.
+
+   Want Comet? Want Map/Reduce? Want to fire off a thousand concurrent queries?
+   Tough luck. The recent `Task Queue API
+   <http://code.google.com/appengine/docs/python/taskqueue/overview.html>`_ is
+   definitely a step in the right direction -- but wait, that's currently
+   limited to an insanely low 10,000 tasks a day!! When even a moderately sized
+   app could easily make use of over a million such tasks in a day...
+
+   \[**Proposed Solution**: Expose the lower-level FIFO Queue that the Task
+   Queue API uses to developers and let developers use it to develop event
+   primitives themselves. Limit the max size of the Queue to 1GB with individual
+   items limited to a mere 5KB if need be. Even limit the data type to just a
+   dictionary which can only hold integers and strings, but please let
+   developers create as many of these Queues as they want and use it as many
+   times as they want -- they're paying for it after all!]
+
+6. **Unexplained Downtime**
+
+   Whilst the App Engine `Status Page
+   <http://code.google.com/status/appengine>`_ will tell you that everything is
+   hunky-dory, in the week following 26th June 2009, App Engine was effectively
+   down -- not `once
+   <http://www.techcrunch.com/2009/07/02/google-app-engine-broken-for-4-hours-and-counting/>`_,
+   but at least *twice*. The Status Page continued to claim an uptime of 7 days,
+   when core services like the Datastore, Memcache and Urlfetch had been not
+   working for hours!
+
+   And even more outrageously, they never bothered to blog explanations for the
+   cause of the problems! Instead developers were told on the mailing list about
+   yet another Exception they should catch when services like the Datastore are
+   down -- using the Datastore is the *prime* (and perhaps even the *only*)
+   reason that many developers started using App Engine in the first place!!
+
+   \[**Proposed Solution**: Better expectation management -- they should clearly
+   state that App Engine is Alpha and that startups/companies needing even basic
+   reliability should simply not use it. And they should most definitely
+   communicate a lot better and be more transparent about their downtimes.]
+
+The list goes on and none of this is taking into account that this is all
+sitting on top of a proprietary stack! Lock in would be fine *if* Google App
+Engine lived up to its claims of providing a scalable platform, but as it is,
+one can only wait and hope that App Engine will rectify their problems in time.
+
+Google has historically created great products and App Engine is definitely
+heading in the right direction -- with many brilliant design decisions. But
+sadly it's just not yet a viable choice for startups. And it is most definitely
+not something we can develop Bootstrap on =(

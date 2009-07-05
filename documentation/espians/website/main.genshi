@@ -98,7 +98,7 @@
 
   <div id="site-header">
 	<div id="site-info">
-		<a href="index.html" title="Espians: On The Road To Espia"><img
+		<a href="/" title="Espians: On The Road To Espia"><img
 		  id="site-logo" src="http://cloud.github.com/downloads/tav/blog/gfx.espia.png" alt="Espian Flag" width="64px" height="64px" /></a><form id="translation_form" class="menu-item-padding"><select id="lang_select" onchange="dotranslate(this);">
 		<option value="" id="select_language">Select Language</option>
 		<option value="&amp;langpair=en|ar" id="openar">العربية</option><option
@@ -135,7 +135,7 @@
 		value="&amp;langpair=en|vi" id="openvi">Tiếng Việt</option><option
 		value="&amp;langpair=en|zh-CN" id="openzh-CN">中文 (简体)</option><option
 		value="&amp;langpair=en|zh-TW" id="openzh-TW">中文 (繁體)</option>
-		</select></form><a href="index.html" class="menu-item"
+		</select></form><a href="/" class="menu-item"
 		title="${site_title}">Home</a><a class="menu-item"
 		title="About The Espians"
 		href="about-the-espians.html">About The Espians</a><a class="menu-item-final"
@@ -176,7 +176,7 @@
 		  </script>| <a href="#disqus_thread" rel="disqus:${page_url}">Add a Comment</a>
 	  </div>
 	  <div class="article-info">
-	  &#187; last updated by <span py:with="author=email2author[info.get('__by__', 'unknown')]"><a href="${author2link[author]}">${authors[author][0]}</a></span> on <span py:with="updated=info['__updated__']" class="post-date">${MONTHS[updated.month]} ${updated.day}, ${updated.year} @ <a href="http://github.com/tav/plexnet/commits/master/documentation/espians/${info['__name__']}.txt">${'%.2i:%.2i' % (updated.hour, updated.minute)}</a></span> <a href="http://creativecommons.org/licenses/publicdomain/"><img src="http://upload.wikimedia.org/wikipedia/commons/thumb/d/d1/Cc-pd.svg/64px-Cc-pd.svg.png" width="20px" height="20px" alt="Public Domain" class="absmiddle" /></a>
+	  &#187; last updated by <span py:with="author=email2author[info.get('__by__', 'unknown')]"><a href="${author2link[author]}">${authors[author][0]}</a></span> on <span py:with="updated=info['__updated__']" class="post-date">${MONTHS[updated.month]} ${updated.day}, ${updated.year} @ <a href="http://github.com/tav/plexnet/blob/master/documentation/espians/${info['__name__']}.txt">${'%.2i:%.2i' % (updated.hour, updated.minute)}</a></span> <a href="http://creativecommons.org/licenses/publicdomain/"><img src="http://upload.wikimedia.org/wikipedia/commons/thumb/d/d1/Cc-pd.svg/64px-Cc-pd.svg.png" width="20px" height="20px" alt="Public Domain" class="absmiddle" /></a>
 	<!--
 	last updated
 	<span py:with="created=info['__updated__']">
