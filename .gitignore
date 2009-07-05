@@ -30,6 +30,7 @@ third_party/generic/pypy/pypy/_cache
 *.so
 *.tar.gz
 *.tar.bz2
+*~
 
 # file patterns (xcode)
 
