@@ -243,6 +243,7 @@ replace_drop_shadows = re.compile(
 replace_abstract_attributes = re.compile('<div class="abstract topic">').sub
 replace_ampersands = re.compile('&(?![^\s&]*;)').sub
 replace_comments = re.compile(r'(?sm)\n?\s*<!--(.*?)\s-->\s*\n?').sub
+replace_plexlinks = re.compile('(?sm)\[\[(.*?)\]\]').sub
 replace_title_headings = re.compile('(?sm)<h1 class="title">(.*?)</h1>').sub
 replace_whitespace = re.compile('[\v\f]').sub
 
@@ -455,9 +456,12 @@ def convert(content):
         else:
             _space = False
 
-    return ''.join(content).replace('"', '&quot;')
+    content = ''.join(content).replace('"', '&quot;')
+    content = replace_plexlinks(render_plexlink, content)
 
     # perhaps === heading === stylee ?
+
+    return content
 
 # ------------------------------------------------------------------------------
 # the meta prettifier funktion which kalls the above ones
@@ -540,6 +544,18 @@ def render_drop_cap(content):
                    '</span>'  + content[1:]
 
     return '<p></p>'
+
+def render_plexlink(content):
+    """Render [[plexlinks]]."""
+
+    name = content.groups()[0]
+
+    if '|' in name:
+        name, linkname = name.split('|', 1)
+    else:
+        linkname = name
+
+    return u'<a href="%s.html">%s</a>' % (u'-'.join(name.split()), linkname)
 
 # ------------------------------------------------------------------------------
 # parse the :properties: included in a document
