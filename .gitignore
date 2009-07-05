@@ -27,6 +27,7 @@ third_party/generic/pypy/pypy/lang
 *.so
 *.tar.gz
 *.tar.bz2
+*~
 
 # file patterns (xcode)
 
