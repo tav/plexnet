@@ -23,3 +23,12 @@ class TestBasic(object):
         res = JSEvaluateScript(self.context, script, NULL)
         assert JSValueGetType(self.context, res) == kJSTypeNumber
         assert JSValueToNumber(self.context, res) == 3.0
+
+    def test_interpret_object(self):
+        script = '[1, 2, 3]'
+        res = JSEvaluateScript(self.context, script, NULL)
+        assert JSValueGetType(self.context, res) == kJSTypeObject
+        s0 = JSStringCreateWithUTF8CString('0')
+        fe = JSObjectGetProperty(self.context, res, s0)
+        assert JSValueGetType(self.context, fe) == kJSTypeNumber
+        assert JSValueToNumber(self.context, fe) == 1.0

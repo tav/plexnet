@@ -52,15 +52,17 @@ JSValueRef             = rffi.VOIDP
 JSValueRefP = rffi.CArrayPtr(JSValueRef)
 
 class Configure:
-    _compilation_info_ = eci
+    _compilation_info_   = eci
     
-    JSType           = platform.SimpleType('JSType', rffi.INT)
-    kJSTypeUndefined = platform.ConstantInteger('kJSTypeUndefined')
-    kJSTypeNull      = platform.ConstantInteger('kJSTypeNull')
-    kJSTypeBoolean   = platform.ConstantInteger('kJSTypeBoolean')
-    kJSTypeNumber    = platform.ConstantInteger('kJSTypeNumber')
-    kJSTypeString    = platform.ConstantInteger('kJSTypeString')
-    kJSTypeObject    = platform.ConstantInteger('kJSTypeObject')
+    JSType               = platform.SimpleType('JSType', rffi.INT)
+    JSPropertyAttributes = platform.SimpleType('JSPropertyAttributes', rffi.INT)
+
+for name in [
+    'kJSTypeUndefined', 'kJSTypeNull', 'kJSTypeBoolean', 'kJSTypeNumber',
+    'kJSTypeString', 'kJSTypeObject', 'kJSPropertyAttributeNone',
+    'kJSPropertyAttributeReadOnly', 'kJSPropertyAttributeDontEnum',
+    'kJSPropertyAttributeDontDelete']:
+    setattr(Configure, name, platform.ConstantInteger(name))
 
 globals().update(platform.configure(Configure))
 
@@ -69,8 +71,10 @@ NULL = lltype.nullptr(rffi.VOIDP.TO)
 # ------------------------------ globals ------------------------------
 
 _JSEvaluateScript = external('JSEvaluateScript',
-   [JSContextRef, JSStringRef, JSObjectRef, JSStringRef, rffi.INT, JSValueRefP],
-                            JSValueRef)
+                             [JSContextRef, JSStringRef,
+                              JSObjectRef, JSStringRef,
+                              rffi.INT, JSValueRefP],
+                             JSValueRef)
 # args are: context, script, this (can be NULL),
 # sourceURL (can be NULL, for exceptions), startingLineNumber,
 # exception pointer (can be NULL)
@@ -78,7 +82,8 @@ _JSEvaluateScript = external('JSEvaluateScript',
 class JSException(Exception):
     pass
 
-def _can_raise_wrapper(name, llf, exc_class=JSException):
+def _can_raise_wrapper(name, args, res, exc_class=JSException):
+    llf = external(name, args + [JSValueRefP], res)
     def f(*a):
         exc_data = lltype.malloc(JSValueRefP.TO, 1, flavor='raw')
         res = llf(*a + (exc_data,))
@@ -128,6 +133,10 @@ JSValueMakeNumber = external('JSValueMakeNumber', [JSContextRef, rffi.DOUBLE],
                              JSValueRef)
 JSValueGetType = external('JSValueGetType', [JSContextRef, JSValueRef],
                           JSType)
+JSValueProtect = external('JSValueProtect', [JSContextRef, JSValueRef],
+                          lltype.Void)
+JSValueUnprotect = external('JSValueUnprotect', [JSContextRef, JSValueRef],
+                            lltype.Void)
 
 # ------------------------------ objects ------------------------------
 
@@ -139,9 +148,23 @@ JSPropertyNameArrayGetNameAtIndex = external(
     [JSPropertyNameArrayRef, rffi.INT],
     JSStringRef)
 
+JSObjectHasProperty = external('JSObjectHasProperty',
+                               [JSContextRef, JSObjectRef, JSStringRef],
+                               lltype.Bool)
+# context, object, property name
+
+JSObjectGetProperty = _can_raise_wrapper('JSObjectGetProperty',
+                                         [JSContextRef,
+                                          JSObjectRef,
+                                          JSStringRef],
+                                         JSValueRef)
+
+JSObjectSetProperty = _can_raise_wrapper('JSObjectSetProperty',
+         [JSContextRef, JSObjectRef, JSStringRef, JSPropertyAttributes],
+                                         lltype.Void)
+
 # ------------------------------ numbers ------------------------------
 
-_JSValueToNumber = external('JSValueToNumber', [JSContextRef, JSValueRef,
-                                                JSValueRefP], rffi.DOUBLE)
-
-JSValueToNumber = _can_raise_wrapper('JSValueToNumber', _JSValueToNumber)
+JSValueToNumber = _can_raise_wrapper('JSValueToNumber',
+                                     [JSContextRef, JSValueRef],
+                                     rffi.DOUBLE)
