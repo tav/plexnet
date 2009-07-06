@@ -29,3 +29,4 @@ class AppTestBindings(object):
 
     def test_call(self):
         assert self.func(3, 4) == 7
+        assert self.func('a', 'bc') == 'abc'

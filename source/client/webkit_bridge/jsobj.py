@@ -13,6 +13,8 @@ class JavaScriptContext(object):
         space = self.space
         if space.is_true(space.isinstance(w_obj, space.w_int)):
             return JSValueMakeNumber(self._ctx, space.int_w(w_obj))
+        elif space.is_true(space.isinstance(w_obj, space.w_str)):
+            return JSValueMakeString(self._ctx, self.newstr(space.str_w(w_obj)))
         else:
             raise NotImplementedError()
 
@@ -23,6 +25,8 @@ class JavaScriptContext(object):
             return space.wrap(None)
         elif tp == kJSTypeNumber:
             return space.wrap(JSValueToNumber(self._ctx, js_obj))
+        elif tp == kJSTypeString:
+            return space.wrap(self.str_js(js_obj))
         else:
             raise NotImplementedError(tp)
 
