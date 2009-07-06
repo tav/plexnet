@@ -1,12 +1,13 @@
 
 from webkit_bridge.webkit_rffi import *
+from pypy.rpython.lltypesystem import lltype, rffi
 
 class TestBasic(object):
     def setup_method(cls, meth):
         cls.context = JSGlobalContextCreate()
 
-    def teardown_method(cls, meth):
-        JSGlobalContextRelease(cls.context)
+    #def teardown_method(cls, meth):
+    #    JSGlobalContextRelease(cls.context)
 
     def test_string(self):
         s = JSStringCreateWithUTF8CString('xyz')
@@ -50,3 +51,17 @@ class TestBasic(object):
         obj = JSEvaluateScript(self.context, script, NULL)
         s = JSValueToString(self.context, obj)
         assert JSStringGetUTF8CString(s) == '1,2,3'
+
+    def test_function(self):
+        script = 'this.x = function (a, b) { return (a + b); }'
+        this = JSEvaluateScript(self.context, '[]', NULL)
+        obj = JSEvaluateScript(self.context, script, this)
+        name = JSStringCreateWithUTF8CString('x')
+        f = JSObjectGetProperty(self.context, this, name)
+        assert JSValueGetType(self.context, f) == kJSTypeObject
+        args = [JSValueMakeNumber(self.context, 40),
+                JSValueMakeNumber(self.context, 2)]
+        res = JSObjectCallAsFunction(self.context, f, this, args)
+        assert JSValueGetType(self.context, res) == kJSTypeNumber
+        assert JSValueToNumber(self.context, res) == 42
+

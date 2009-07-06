@@ -4,41 +4,68 @@ from pypy.interpreter.gateway import interp2app
 from pypy.interpreter.typedef import TypeDef
 from webkit_bridge.webkit_rffi import *
 
-def wrap_js_object(space, js_ctx, js_obj):
-    tp = JSValueGetType(js_ctx, js_obj)
-    if tp == kJSTypeUndefined:
-        return space.wrap(None)
-    elif tp == kJSTypeNumber:
-        return space.wrap(JSValueToNumber(js_ctx, js_obj))
-    else:
-        raise NotImplementedError(tp)
+class JavaScriptContext(object):
+    def __init__(self, space, _ctx):
+        self._ctx = _ctx
+        self.space = space
 
-def unwrap_to_js_object(space, js_ctx, w_obj):
-    if space.is_true(space.isinstance(w_obj, space.w_int)):
-        return JSValueMakeNumber(js_ctx, space.int_w(w_obj))
-    else:
-        raise NotImplementedError()
+    def python_to_js(self, w_obj):
+        space = self.space
+        if space.is_true(space.isinstance(w_obj, space.w_int)):
+            return JSValueMakeNumber(self._ctx, space.int_w(w_obj))
+        else:
+            raise NotImplementedError()
+
+    def js_to_python(self, js_obj):
+        space = self.space
+        tp = JSValueGetType(self._ctx, js_obj)
+        if tp == kJSTypeUndefined:
+            return space.wrap(None)
+        elif tp == kJSTypeNumber:
+            return space.wrap(JSValueToNumber(self._ctx, js_obj))
+        else:
+            raise NotImplementedError(tp)
+
+    def newstr(self, s):
+        return JSStringCreateWithUTF8CString(s)
+
+    def str_js(self, js_s):
+        return JSStringGetUTF8CString(JSValueToString(self._ctx, js_s))
+
+    def get(self, js_obj, name):
+        return JSObjectGetProperty(self._ctx, js_obj, self.newstr(name))
+
+    def set(self, js_obj, name, js_val):
+        js_name = JSStringCreateWithUTF8CString(name)
+        JSObjectSetProperty(self._ctx, js_obj, js_name, js_val, 0)
+
+    def eval(self, s, this=NULL):
+        return JSEvaluateScript(self._ctx, s, this)
+
+    def call(self, js_val, args, this=NULL):
+        return JSObjectCallAsFunction(self._ctx, js_val, this, args)
 
 class JSObject(Wrappable):
-    def __init__(self, js_ctx, js_val):
-        self.js_ctx = js_ctx
+    def __init__(self, ctx, js_val):
+        self.ctx = ctx
         self.js_val = js_val
 
     def descr_get(self, space, w_name):
-        js_name = JSStringCreateWithUTF8CString(space.str_w(w_name))
-        return wrap_js_object(space, self.js_ctx,
-                              JSObjectGetProperty(self.js_ctx, self.js_val,
-                                                  js_name))
+        js_val = self.ctx.get(self.js_val, space.str_w(w_name))
+        return self.ctx.js_to_python(js_val)
 
     def descr_set(self, space, w_name, w_value):
-        js_val = unwrap_to_js_object(space, self.js_ctx, w_value)
-        js_name = JSStringCreateWithUTF8CString(space.str_w(w_name))
-        JSObjectSetProperty(self.js_ctx, self.js_val, js_name, js_val, 0)
+        js_val = self.ctx.python_to_js(w_value)
+        self.ctx.set(self.js_val, space.str_w(w_name), js_val)
         return space.w_None
 
+    def call(self, space, args_w):
+        js_res = self.ctx.call(self.js_val, [self.ctx.python_to_js(arg)
+                                             for arg in args_w])
+        return self.ctx.js_to_python(js_res)
+
     def str(self, space):
-        s = JSStringGetUTF8CString(JSValueToString(self.js_ctx, self.js_val))
-        return space.wrap('JSObject(' + s + ')')
+        return space.wrap('JSObject(' + self.ctx.str_js(self.js_val) + ')')
 
 JSObject.typedef = TypeDef("JSObject",
         __getattribute__ = interp2app(JSObject.descr_get,
@@ -51,4 +78,6 @@ JSObject.typedef = TypeDef("JSObject",
                               unwrap_spec=['self', ObjSpace, W_Root, W_Root]),
         __str__ = interp2app(JSObject.str,
                              unwrap_spec=['self', ObjSpace]),
+        __call__ = interp2app(JSObject.call,
+                              unwrap_spec=['self', ObjSpace, 'args_w'])
 )

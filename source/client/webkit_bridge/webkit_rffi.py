@@ -93,11 +93,10 @@ def _can_raise_wrapper(name, args, res, exc_class=JSException):
     def f(context, *a):
         exc_data = lltype.malloc(JSValueRefP.TO, 1, flavor='raw', zero=True)
         res = llf(context, *a + (exc_data,))
-        if exc_data[0]:
-            exc = exc_data[0]
-            lltype.free(exc_data, flavor='raw')
-            raise exc_class(context, exc)
+        exc = exc_data[0]
         lltype.free(exc_data, flavor='raw')
+        if exc:
+            raise exc_class(context, exc)
         return res
     f.func_name = name
     return f
@@ -106,11 +105,10 @@ def JSEvaluateScript(ctx, source, this):
     exc_data = lltype.malloc(JSValueRefP.TO, 1, flavor='raw')
     sourceref = JSStringCreateWithUTF8CString(source)
     res = _JSEvaluateScript(ctx, sourceref, this, NULL, 0, exc_data)
-    if res:
-        lltype.free(exc_data, flavor='raw')
-        return res
     exc = exc_data[0]
     lltype.free(exc_data, flavor='raw')
+    if exc:
+        return res
     raise JSException(ctx, exc)
 
 def empty_object(ctx):
@@ -187,8 +185,29 @@ JSObjectGetProperty = _can_raise_wrapper('JSObjectGetProperty',
                                          JSValueRef)
 
 JSObjectSetProperty = _can_raise_wrapper('JSObjectSetProperty',
-                                         [JSContextRef, JSObjectRef, JSStringRef, JSValueRef, JSPropertyAttributes],
+                                         [JSContextRef, JSObjectRef,
+                                          JSStringRef, JSValueRef,
+                                          JSPropertyAttributes],
                                          lltype.Void)
+
+_JSObjectCallAsFunction = external('JSObjectCallAsFunction',
+                                   [JSContextRef, JSObjectRef,
+                                    JSObjectRef, rffi.INT,
+                                    JSValueRefP], JSValueRef)
+
+def JSObjectCallAsFunction(ctx, object, this, args):
+    ll_args = lltype.malloc(JSValueRefP.TO, len(args), flavor='raw')
+    exc_data = lltype.malloc(JSValueRefP.TO, 1, flavor='raw', zero=True)
+    for i in range(len(args)):
+        ll_args[i] = args[i]
+    res = _JSObjectCallAsFunction(ctx, object, this, len(args), ll_args,
+                                  exc_data)
+    lltype.free(ll_args, flavor='raw')
+    exc = exc_data[0]
+    lltype.free(exc_data, flavor='raw')
+    if exc:
+        raise JSException(ctx, exc)
+    return res
 
 # ------------------------------ numbers ------------------------------
 
