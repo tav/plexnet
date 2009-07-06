@@ -2,6 +2,7 @@
 from pypy.interpreter.baseobjspace import Wrappable, W_Root, ObjSpace
 from pypy.interpreter.gateway import interp2app
 from pypy.interpreter.typedef import TypeDef
+from pypy.interpreter.error import OperationError
 from webkit_bridge.webkit_rffi import *
 
 class JavaScriptContext(object):
@@ -63,18 +64,36 @@ class JavaScriptContext(object):
     def call(self, js_val, args, this=NULL):
         return JSObjectCallAsFunction(self._ctx, js_val, this, args)
 
+    def propertylist(self, js_val):
+        return JSPropertyList(self._ctx, js_val)
+
+    def globals(self):
+        return JSObject(self, JSContextGetGlobalObject(self._ctx))
+
 class JSObject(Wrappable):
     def __init__(self, ctx, js_val):
         self.ctx = ctx
         self.js_val = js_val
 
     def descr_get(self, space, w_name):
-        js_val = self.ctx.get(self.js_val, space.str_w(w_name))
+        name = space.str_w(w_name)
+        if name == '__dict__':
+            proplist = self.ctx.propertylist(self.js_val)
+            w_d = space.newdict()
+            for name in proplist:
+                w_item = self.ctx.js_to_python(self.ctx.get(self.js_val, name))
+                space.setitem(w_d, space.wrap(name), w_item)
+            return w_d
+        js_val = self.ctx.get(self.js_val, name)
         return self.ctx.js_to_python(js_val)
 
     def descr_set(self, space, w_name, w_value):
+        name = space.str_w(w_name)
+        if name == '__dict__':
+            raise OperationError(space.w_ValueError,
+                                 space.wrap("Cannot change __dict__"))
         js_val = self.ctx.python_to_js(w_value)
-        self.ctx.set(self.js_val, space.str_w(w_name), js_val)
+        self.ctx.set(self.js_val, name, js_val)
         return space.w_None
 
     def call(self, space, args_w):

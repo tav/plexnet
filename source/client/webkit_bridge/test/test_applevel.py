@@ -4,16 +4,24 @@ from webkit_bridge.jsobj import JSObject, JavaScriptContext
 from webkit_bridge.webkit_rffi import (JSGlobalContextCreate,
                                        JSGlobalContextRelease,
                                        empty_object)
+from pypy.interpreter.gateway import interp2app
 
 class AppTestBindings(object):
-    def setup_method(cls, meth):
+    def setup_class(cls):
         ctx = JavaScriptContext(cls.space, JSGlobalContextCreate())
         cls.w_js_obj = cls.space.wrap(JSObject(ctx, ctx.eval('[]')))
         this = ctx.eval('[]')
         ctx.eval('this.x = function(a, b) { return(a + b); }', this)
         cls.w_func = cls.space.wrap(JSObject(ctx, ctx.get(this, 'x')))
         cls.w_js_obj_2 = cls.space.wrap(JSObject(ctx, ctx.eval('[]')))
-    
+
+        def interpret(source):
+            return ctx.js_to_python(ctx.eval(source))
+
+        space = cls.space
+        cls.w_interpret = space.wrap(interp2app(interpret, unwrap_spec=[str]))
+        cls.w_globals = ctx.globals()
+
     def test_getattr_none(self):
         assert self.js_obj.x == None
 
@@ -46,3 +54,20 @@ class AppTestBindings(object):
 
     def test_none(self):
         self.js_obj.x = None
+
+    def test_property_list(self):
+        x = self.interpret('''
+        function c () {
+            this.x = 1
+            this.y = 2
+            this.z = 3
+        }
+        new c()
+        ''')
+        assert x.__dict__ == {'x':1, 'y':2, 'z':3}
+
+    def test_global(self):
+        self.interpret('''
+        xxx = 3
+        ''')
+        assert self.globals.xxx == 3

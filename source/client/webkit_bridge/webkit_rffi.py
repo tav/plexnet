@@ -127,6 +127,9 @@ _JSGlobalContextCreate = external('JSGlobalContextCreate', [rffi.VOIDP],
 def JSGlobalContextCreate():
     return _JSGlobalContextCreate(lltype.nullptr(rffi.VOIDP.TO))
 
+JSContextGetGlobalObject = external('JSContextGetGlobalObject', [JSContextRef],
+                                    JSObjectRef)
+
 # ------------------------------ strings ------------------------------
 
 JSStringCreateWithUTF8CString = external('JSStringCreateWithUTF8CString',
@@ -175,10 +178,25 @@ JSValueToString = _can_raise_wrapper('JSValueToStringCopy',
 JSObjectCopyPropertyNames = external('JSObjectCopyPropertyNames',
                                      [JSContextRef, JSObjectRef],
                                      JSPropertyNameArrayRef)
+
+JSPropertyNameArrayGetCount = external('JSPropertyNameArrayGetCount',
+                                       [JSPropertyNameArrayRef],
+                                       rffi.INT)
+
 JSPropertyNameArrayGetNameAtIndex = external(
     'JSPropertyNameArrayGetNameAtIndex',
     [JSPropertyNameArrayRef, rffi.INT],
     JSStringRef)
+
+def JSPropertyList(ctx, obj):
+    propnames = JSObjectCopyPropertyNames(ctx, obj)
+    count = JSPropertyNameArrayGetCount(propnames)
+    res = []
+    for i in range(count):
+        js_str = JSPropertyNameArrayGetNameAtIndex(propnames, i)
+        s = JSStringGetUTF8CString(js_str)
+        res.append(s)
+    return res
 
 JSObjectHasProperty = external('JSObjectHasProperty',
                                [JSContextRef, JSObjectRef, JSStringRef],

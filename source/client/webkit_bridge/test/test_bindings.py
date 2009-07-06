@@ -65,3 +65,37 @@ class TestBasic(object):
         assert JSValueGetType(self.context, res) == kJSTypeNumber
         assert JSValueToNumber(self.context, res) == 42
 
+    def test_global(self):
+        glob = JSContextGetGlobalObject(self.context)
+        prop = JSStringCreateWithUTF8CString('prop')
+        JSObjectSetProperty(self.context, glob, prop,
+                            JSValueMakeNumber(self.context, 3.0), 0)
+        res = JSEvaluateScript(self.context, 'prop', NULL)
+        assert JSValueGetType(self.context, res) == kJSTypeNumber
+        assert JSValueToNumber(self.context, res) == 3.0
+
+    def test_property_list(self):
+        script = '''
+        function myobject() {
+            this.containedValue = 0;
+            this.othercontainedValue = 0;
+            this.anothercontainedValue = 0;
+        }
+        new myobject()
+        '''
+        x = JSEvaluateScript(self.context, script, NULL) 
+        assert JSValueGetType(self.context, x) == kJSTypeObject
+        nameref = JSObjectCopyPropertyNames(self.context, x)
+        count = JSPropertyNameArrayGetCount(nameref)
+        assert count == 3
+        one = JSStringGetUTF8CString(JSPropertyNameArrayGetNameAtIndex(nameref,
+                                                                       0))
+        assert one == 'containedValue'
+        three = JSStringGetUTF8CString(JSPropertyNameArrayGetNameAtIndex(nameref
+                                                                         , 2))
+        assert three == 'anothercontainedValue'
+        assert JSPropertyList(self.context, x) == [
+            'containedValue',
+            'othercontainedValue',
+            'anothercontainedValue'
+            ]
