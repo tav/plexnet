@@ -1,0 +1,293 @@
+<div xmlns:py="http://genshi.edgewall.org/">
+<?python
+
+  STATIC = 'http://tav.github.com/static'
+
+  MONTHS = [
+    'Zero Month',
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+    ]
+
+  last_post_name = ['']
+  def set_name(post):
+    last_post_name[0] = post['__name__']
+    return last_post_name[0]
+
+  seen_tags = {}
+  post2tagclasses = {}
+  valid_chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-_0123456789'
+
+  def parse_tags_for_post(post):
+    tags = filter(None, [tag.strip() for tag in post.get('x-tags', '').split(', ')])
+    if not tags:
+      post2tagclasses[post['__path__']] = ''
+      return
+    tag_classes = []; add_class = tag_classes.append
+    for tag in tags:
+      if tag in seen_tags:
+        add_class(seen_tags[tag])
+        continue
+      normalised_tag = ['tag-']; append = normalised_tag.append
+      for idx, char in enumerate(tag):
+        if idx == 0 and char == '@':
+          char = 'at--'
+        elif char not in valid_chars:
+          char = '-'
+        else:
+          char = char.lower()
+        append(char)
+      normalised_tag = ''.join(normalised_tag)
+      seen_tags[str(tag)] = str(normalised_tag)
+      add_class(normalised_tag)
+    post2tagclasses[post['__path__']] = ' '.join(tag_classes)
+
+  import sys
+
+  for post in items:
+    parse_tags_for_post(post)
+?>
+
+<style type="text/css">
+
+  .more { display: none; }
+  .more-link { display: block; }
+
+  #site-welcome {
+    line-height: 1.7em; border-bottom: 1px dashed #444;
+    padding-bottom: 1em; font-size: 1.2em;
+    margin-bottom: 1.7em;
+  }
+
+  .buttonclear {
+    overflow: hidden;
+    width: 100%;
+  }
+
+  #site-tags a {
+    margin-bottom: 0.7em;
+  }
+
+  #site-articles {
+    margin-top: 2em;
+  }
+
+  .site-article-links {
+    font-size: 1.2em;
+    line-height: 1.4em;    
+    text-decoration: none;
+  }
+
+  .site-article-comments, .site-article-comments a {
+    font-size: 0.8em;
+    text-decoration: none;
+    color: #778;
+  }
+
+  a.button {
+    background: transparent url('${STATIC}/gfx/bg_button_a.gif') no-repeat scroll top right;
+    color: #444;
+    display: block;
+    float: left;
+    font: normal 12px arial, sans-serif;
+    height: 24px;
+    margin-right: 6px;
+    padding-right: 18px; /* sliding doors padding */
+    text-decoration: none;
+  }
+
+  a.button span {
+    background: transparent url('${STATIC}/gfx/bg_button_span.gif') no-repeat;
+    display: block;
+    line-height: 14px;
+    padding: 5px 0 5px 18px;
+  }
+
+  a.button:active {
+    background-position: bottom right;
+    color: #000;
+    outline: none; /* hide dotted outline in Firefox */
+  }
+
+  a.button:active span {
+    background-position: bottom left;
+    padding: 6px 0 4px 18px; /* push text down 1px */
+  }
+
+  a.buttondown {
+    background: transparent url('${STATIC}/gfx/bg_button_a.gif') no-repeat scroll top right;
+    color: #444;
+    display: block;
+    float: left;
+    font: normal 12px arial, sans-serif;
+    height: 24px;
+    margin-right: 6px;
+    padding-right: 18px; /* sliding doors padding */
+    text-decoration: none;
+    background-position: bottom right;
+    color: #000;
+    outline: none; /* hide dotted outline in Firefox */
+  }
+
+  a.buttondown span {
+    background: transparent url('${STATIC}/gfx/bg_button_span.gif') no-repeat;
+    display: block;
+    line-height: 14px;
+    padding: 5px 0 5px 18px;
+    background-position: bottom left;
+    padding: 6px 0 4px 18px; /* push text down 1px */
+  }
+
+</style>
+
+<div id="site-welcome">
+  The Espians are a Metanational Collective of Visionaries, Artists, Engineers
+  and Cultural Creatives. Led by <a href="http://tav.espians.com">tav</a>, they
+  have been working on Weapons of Mass Construction since 1999 so that everyone
+  may Run, Dance and Frolic.
+</div>
+
+<div id="site-tags">
+  <a class="button" href="" id="tag-all"><span>All</span></a>
+  <py:for each="tag in sorted(seen_tags.keys(), key=lambda x: x.lower())">
+    <a class="button" href="" id="${seen_tags[tag]}"><span>${tag}</span></a>
+  </py:for>
+</div>
+
+<script type="text/javascript">
+/* <![CDATA[ */
+
+  ARTICLE_TAGS = ${repr(dict((value, key) for key, value in seen_tags.items()))};
+  CURRENT_TAGS = [];
+
+  var remove_item = function (array, item) {
+    var i = 0;
+    while (i < array.length) {
+      if (array[i] == item) {
+        array.splice(i, 1);
+      } else {
+        i++;
+      }
+    }
+  }
+
+  $('#site-tags a.button').click(function () {
+
+    var tag = this.id;
+    var self = $(this);
+
+    if (tag == 'tag-all') {
+      $('#site-articles li').show();
+      $('#site-tags a').removeClass("buttondown");
+      self.addClass("buttondown");
+      CURRENT_TAGS.length = 0;
+    } else {
+      $('#tag-all').removeClass('buttondown');
+      self.toggleClass("buttondown");
+      if (self.hasClass('buttondown')) {
+        CURRENT_TAGS.push(tag);
+      } else {
+        remove_item(CURRENT_TAGS, tag);
+      }
+      if (CURRENT_TAGS.length == 0) {
+        $('#site-articles li').show();
+        $('#site-tags a').removeClass("buttondown");
+        $('#tag-all').addClass("buttondown");
+        var hash = '#';
+      } else {
+        var articles = $('#site-articles li');
+        articles.hide();
+        $('#site-articles li.' + CURRENT_TAGS.join('.')).show();
+        var hash = "#";
+        for (var m=0; m < CURRENT_TAGS.length; m++) {
+          if (m != 0)
+            hash += ',';
+          hash += ARTICLE_TAGS[CURRENT_TAGS[m]];
+        }
+      }
+      window.location.hash = hash;
+    }
+
+    this.blur();
+    return false;
+
+  });
+
+  VALID_CHARS = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-_0123456789';
+  VALID_CHAR_DICT = {};
+
+  for (var j=0; j < VALID_CHARS.length; j++) {
+    VALID_CHAR_DICT[VALID_CHARS[j]] = true;
+  }
+
+  $(function () {
+
+    if (window.location.hash) {
+      var requested_tags = window.location.hash.substr(1).split(',');
+      for (var j=0; j < requested_tags.length; j++) {
+        var tag = requested_tags[j];
+        var new_tag = [];
+        for (var k=0; k < tag.length; k++) {
+          var char = tag[k];
+          if ((k == 0) && (char == '@')) {
+            new_tag.push('at--');
+          } else if (!(char in VALID_CHAR_DICT)) {
+            new_tag.push('-');
+          } else {
+            new_tag.push(char.toLowerCase());
+          }
+        }
+        $('#tag-' + new_tag.join('')).click();
+      }
+    } else {
+      $('#tag-all').click();
+    }
+
+  })
+
+/* ]]> */
+</script>
+
+<hr class="clear" />
+
+<ul id="site-articles">
+  <li class="${post2tagclasses.get(post['__path__'])}"
+	  py:for="post in sorted(items, key=lambda x: x.get('__updated__'), reverse=True)">
+	<a class="site-article-links" href="${set_name(post)}.html">${Markup(post['title'])}</a>
+	<span class="site-article-comments">[<a href="${post['__name__']}.html#disqus_thread" rel="disqus:${site_url + '/' + post['__name__']}.html">Comment!</a>]</span>
+  </li>
+</ul>
+
+<!--
+
+<div class="section-info buffer">
+  <table cellspacing="0" cellpadding="0" width="100%">
+	<tr>
+	  <td><strong>Recent Web Activity by Espians</strong></td>
+	  <td class="right">
+		<a href="http://friendfeed.com/espians">Friendfeed Archive</a>
+		<img class="absmiddle" src="${STATIC}/gfx/friendfeed-icon.png" alt="friendfeed" />
+	  </td>
+	</tr>
+  </table>
+</div>
+<script type="text/javascript" src="http://friendfeed.com/embed/widget/espians?v=2&amp;num=10&amp;hide_logo=1&amp;hide_subscribe=1"></script>
+
+-->
+
+<div class="section-info buffer">
+  <table cellspacing="0" cellpadding="0" width="100%">
+	<tr>
+	  <td><strong>Recent Blog Comments</strong></td>
+	  <td class="right">
+		<a href="http://espians.disqus.com">Disqus Archive</a>
+		<img class="absmiddle" src="${STATIC}/gfx/disqus-icon.png" alt="disqus" />
+	  </td>
+	</tr>
+  </table>
+</div>
+<div id="dsq-recentcomments" class="dsq-widget">
+  <script type="text/javascript" src="http://disqus.com/forums/espians/recent_comments_widget.js?num_items=20&amp;avatar_size=92"></script>
+</div>
+
+</div>

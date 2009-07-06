@@ -14,6 +14,17 @@ Authors
   * mamading@gmail.com
   * http://evangineer.agoraworx.com/blog/
 
+* **fijal**
+
+  * Maciej Fijalkowski
+  * fijall@gmail.com
+
+* **jeffarch**
+
+  * Jeffry Archambeault
+  * jjarchambeault@gmail.com
+  * http://www.openideaproject.org/jeffspace
+
 * **Killarny**
 
   * \H. Lucas Graybill
@@ -30,6 +41,7 @@ Authors
 
   * Mathew Ryden
   * mathew.ryden@gmail.com
+  * mathew@caffeine.(none)
   * http://www.oierw.net/
 
 * **sbp**
@@ -38,13 +50,20 @@ Authors
   * sean@miscoranda.com
   * http://inamidst.com/sbp/
 
+* **thruflo**
+
+  * James Arthur
+  * thruflo@gmail.com
+  * http://www.thruflo.com/
+
 * **tav**
 
   * tav (Vageesan Sivapathasundaram)
   * tav@espians.com
   * http://tav.espians.com/
 
-.. # end
+.. # end -- there can be anything after this, and no lines should begin with '*'
+.. until the previous block starts -- otherwise they get interpreted as authors.
 
 
 Additional Credits

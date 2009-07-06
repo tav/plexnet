@@ -137,6 +137,34 @@ def get_svn_info(path, pattern):
 
     return SVN_CACHE.setdefault((path, pattern), info)
 
+def get_git_info(filename, path):
+
+    environ['TZ'] = 'UTC'
+    git_info = getoutput('git log --pretty=raw "%s"' % filename)
+
+    info = {}
+    info['__path__'] = path
+    info['__url__'] = ''
+
+    if (not git_info) or git_info.startswith('fatal:'):
+        info['__updated__'] = datetime.utcfromtimestamp(
+            stat(filename).st_mtime
+            )
+        return info
+
+    info['__git__'] = 1
+
+    for line in git_info.splitlines():
+        if line.startswith('author'):
+            email, timestamp, tz = line.split()[-3:]
+            email = email.lstrip('<').rstrip('>')
+            if '(' in email:
+                email = email.split('(')[0].strip()
+            info['__by__'] = email
+            info['__updated__'] = datetime.utcfromtimestamp(float(timestamp))
+
+    return info
+
 def parse_authors_file(file):
     if file in AUTHORS_CACHE:
         return AUTHORS_CACHE[file]
@@ -159,7 +187,7 @@ def parse_authors_file(file):
             if line[0] == '\\':
                 line = line[1:]
             if '(' in line:
-                line = line.split('(')[0]
+                line = line.split('(')[0].strip()
             info.append(line)
     if author:
         authors[author] = info
@@ -283,6 +311,19 @@ def main(argv, genfiles=None):
         authors = parse_authors_file(authors)
     else:
         authors = {}
+
+    email2author = {'unknown': 'unknown'}
+    author2link = {'unknown': ''}
+
+    for author, author_info in authors.iteritems():
+        for _info in author_info:
+            if _info.startswith('http://') or _info.startswith('https://'):
+                if author not in author2link:
+                    author2link[author] = _info
+            elif '@' in _info:
+                email2author[_info] = author
+
+    authors['unknown'] = ['unknown']
 
     output_path = options.output_path.rstrip('/')
 
@@ -422,15 +463,10 @@ def main(argv, genfiles=None):
             else:
                 path = filename
 
-            try:
-                info = get_svn_info(path.split(SEP)[0], '*.txt')[path]
-            except KeyError:
-                info = {}
-                info['__path__'] = path
-                info['__url__'] = ''
-                info['__updated__'] = datetime.utcfromtimestamp(
-                    stat(filename).st_mtime
-                    )
+            info = get_git_info(filename, path)
+
+            # old svn support:
+            # info = get_svn_info(path.split(SEP)[0], '*.txt')[path]
 
             source_file = open(filename, 'rb')
             source = source_file.read()
@@ -475,6 +511,8 @@ def main(argv, genfiles=None):
                 content=output,
                 info=info,
                 authors=authors,
+                email2author=email2author,
+                author2link=author2link,
                 **siteinfo
                 ).render('xhtml', encoding=output_encoding)
         else:
@@ -565,6 +603,8 @@ def main(argv, genfiles=None):
             poutput = page_template.generate(
                 items=items[:],
                 authors=authors,
+                email2author=email2author,
+                author2link=author2link,
                 root_path=output_path,
                 **siteinfo
                 ).render(format)
