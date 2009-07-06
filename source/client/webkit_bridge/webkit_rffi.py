@@ -56,6 +56,7 @@ class Configure:
     
     JSType               = platform.SimpleType('JSType', rffi.INT)
     JSPropertyAttributes = platform.SimpleType('JSPropertyAttributes', rffi.INT)
+    c_bool = platform.SimpleType('bool', rffi.INT)
 
 for name in [
     'kJSTypeUndefined', 'kJSTypeNull', 'kJSTypeBoolean', 'kJSTypeNumber',
@@ -153,6 +154,12 @@ JSValueMakeString = external('JSValueMakeString', [JSContextRef, JSStringRef],
                              JSValueRef)
 JSValueMakeNumber = external('JSValueMakeNumber', [JSContextRef, rffi.DOUBLE],
                              JSValueRef)
+JSValueMakeBoolean = external('JSValueMakeBoolean', [JSContextRef, c_bool],
+                              JSValueRef)
+JSValueToBoolean = external('JSValueToBoolean', [JSContextRef, JSValueRef],
+                            c_bool)
+JSValueMakeUndefined = external('JSValueMakeUndefined', [JSContextRef],
+                                JSValueRef)
 JSValueGetType = external('JSValueGetType', [JSContextRef, JSValueRef],
                           JSType)
 JSValueProtect = external('JSValueProtect', [JSContextRef, JSValueRef],

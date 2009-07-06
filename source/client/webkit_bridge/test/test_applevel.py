@@ -12,6 +12,7 @@ class AppTestBindings(object):
         this = ctx.eval('[]')
         ctx.eval('this.x = function(a, b) { return(a + b); }', this)
         cls.w_func = cls.space.wrap(JSObject(ctx, ctx.get(this, 'x')))
+        cls.w_js_obj_2 = cls.space.wrap(JSObject(ctx, ctx.eval('[]')))
     
     def test_getattr_none(self):
         assert self.js_obj.x == None
@@ -30,3 +31,18 @@ class AppTestBindings(object):
     def test_call(self):
         assert self.func(3, 4) == 7
         assert self.func('a', 'bc') == 'abc'
+
+    def test_obj_wrap_unwrap(self):
+        self.js_obj['x'] = self.js_obj_2
+        assert str(self.js_obj.x) == 'JSObject()'
+
+    def test_floats(self):
+        self.js_obj.y = 3.5
+        assert self.js_obj.y == 3.5
+
+    def test_bools(self):
+        self.js_obj.x = True
+        assert self.js_obj.x
+
+    def test_none(self):
+        self.js_obj.x = None

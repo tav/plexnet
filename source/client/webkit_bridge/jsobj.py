@@ -11,10 +11,18 @@ class JavaScriptContext(object):
 
     def python_to_js(self, w_obj):
         space = self.space
-        if space.is_true(space.isinstance(w_obj, space.w_int)):
+        if space.is_w(w_obj, space.w_None):
+            return JSValueMakeUndefined(self._ctx)
+        elif space.is_true(space.isinstance(w_obj, space.w_bool)):
+            return JSValueMakeBoolean(self._ctx, space.is_true(w_obj))
+        elif space.is_true(space.isinstance(w_obj, space.w_int)):
             return JSValueMakeNumber(self._ctx, space.int_w(w_obj))
+        elif space.is_true(space.isinstance(w_obj, space.w_float)):
+            return JSValueMakeNumber(self._ctx, space.float_w(w_obj))
         elif space.is_true(space.isinstance(w_obj, space.w_str)):
             return JSValueMakeString(self._ctx, self.newstr(space.str_w(w_obj)))
+        elif isinstance(w_obj, JSObject):
+            return w_obj.js_val
         else:
             raise NotImplementedError()
 
@@ -22,11 +30,17 @@ class JavaScriptContext(object):
         space = self.space
         tp = JSValueGetType(self._ctx, js_obj)
         if tp == kJSTypeUndefined:
-            return space.wrap(None)
+            return space.w_None
+        elif tp == kJSTypeNull:
+            return space.w_None
+        elif tp == kJSTypeBoolean:
+            return space.wrap(JSValueToBoolean(self._ctx, js_obj))
         elif tp == kJSTypeNumber:
             return space.wrap(JSValueToNumber(self._ctx, js_obj))
         elif tp == kJSTypeString:
             return space.wrap(self.str_js(js_obj))
+        elif tp == kJSTypeObject:
+            return space.wrap(JSObject(self, js_obj))
         else:
             raise NotImplementedError(tp)
 
