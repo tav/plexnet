@@ -112,6 +112,9 @@ def JSEvaluateScript(ctx, source, this):
     exc = exc_data[0]
     lltype.free(exc_data, flavor='raw')
     raise JSException(ctx, exc)
+
+def empty_object(ctx):
+    return JSEvaluateScript(ctx, '[]', NULL)
                                                  
 JSGarbageCollect = external('JSGarbageCollect', [JSContextRef], lltype.Void)
 
