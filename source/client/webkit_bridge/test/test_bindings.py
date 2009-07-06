@@ -32,3 +32,16 @@ class TestBasic(object):
         fe = JSObjectGetProperty(self.context, res, s0)
         assert JSValueGetType(self.context, fe) == kJSTypeNumber
         assert JSValueToNumber(self.context, fe) == 1.0
+
+    def test_get_set(self):
+        script = '[]'
+        obj = JSEvaluateScript(self.context, script, NULL)
+        assert JSValueGetType(self.context, obj) == kJSTypeObject
+        prop = JSStringCreateWithUTF8CString('prop')
+        el = JSObjectGetProperty(self.context, obj, prop)
+        assert JSValueGetType(self.context, el) == kJSTypeUndefined
+        v = JSValueMakeNumber(self.context, 3)
+        JSObjectSetProperty(self.context, obj, prop, v, 0)
+        el = JSObjectGetProperty(self.context, obj, prop)
+        assert JSValueGetType(self.context, el) == kJSTypeNumber
+

@@ -80,17 +80,23 @@ _JSEvaluateScript = external('JSEvaluateScript',
 # exception pointer (can be NULL)
 
 class JSException(Exception):
-    pass
+    def __init__(self, context, jsexc):
+        self.context = context
+        self.jsexc   = jsexc
+
+    def __str__(self):
+        v = JSValueToString(self.context, self.jsexc)
+        return JSStringGetUTF8CString(v)
 
 def _can_raise_wrapper(name, args, res, exc_class=JSException):
     llf = external(name, args + [JSValueRefP], res)
-    def f(*a):
-        exc_data = lltype.malloc(JSValueRefP.TO, 1, flavor='raw')
-        res = llf(*a + (exc_data,))
-        if not res:
+    def f(context, *a):
+        exc_data = lltype.malloc(JSValueRefP.TO, 1, flavor='raw', zero=True)
+        res = llf(context, *a + (exc_data,))
+        if exc_data[0]:
             exc = exc_data[0]
             lltype.free(exc_data, flavor='raw')
-            raise exc_class(exc)
+            raise exc_class(context, exc)
         lltype.free(exc_data, flavor='raw')
         return res
     f.func_name = name
@@ -105,7 +111,7 @@ def JSEvaluateScript(ctx, source, this):
         return res
     exc = exc_data[0]
     lltype.free(exc_data, flavor='raw')
-    raise JSException(exc)
+    raise JSException(ctx, exc)
                                                  
 JSGarbageCollect = external('JSGarbageCollect', [JSContextRef], lltype.Void)
 
@@ -125,6 +131,21 @@ JSStringCreateWithUTF8CString = external('JSStringCreateWithUTF8CString',
                                          [rffi.CCHARP], JSStringRef)
 JSStringGetLength = external('JSStringGetLength', [JSStringRef], rffi.INT)
 
+_JSStringGetUTF8CString = external('JSStringGetUTF8CString',
+                                   [JSStringRef, rffi.CCHARP, rffi.INT],
+                                   rffi.INT)
+_JSStringGetMaximumUTF8CStringSize = external(
+    'JSStringGetMaximumUTF8CStringSize', [JSStringRef], rffi.INT)
+
+def JSStringGetUTF8CString(s):
+    # XXX horribly inefficient
+    lgt = _JSStringGetMaximumUTF8CStringSize(s)
+    buf = lltype.malloc(rffi.CCHARP.TO, lgt, flavor='raw')
+    newlgt = _JSStringGetUTF8CString(s, buf, lgt)
+    res = rffi.charp2strn(buf, newlgt)
+    lltype.free(buf, flavor='raw')
+    return res
+
 # ------------------------------ values -------------------------------
 
 JSValueMakeString = external('JSValueMakeString', [JSContextRef, JSStringRef],
@@ -137,6 +158,9 @@ JSValueProtect = external('JSValueProtect', [JSContextRef, JSValueRef],
                           lltype.Void)
 JSValueUnprotect = external('JSValueUnprotect', [JSContextRef, JSValueRef],
                             lltype.Void)
+JSValueToString = _can_raise_wrapper('JSValueToStringCopy',
+                                     [JSContextRef, JSValueRef],
+                                     JSStringRef)
 
 # ------------------------------ objects ------------------------------
 
@@ -160,7 +184,7 @@ JSObjectGetProperty = _can_raise_wrapper('JSObjectGetProperty',
                                          JSValueRef)
 
 JSObjectSetProperty = _can_raise_wrapper('JSObjectSetProperty',
-         [JSContextRef, JSObjectRef, JSStringRef, JSPropertyAttributes],
+                                         [JSContextRef, JSObjectRef, JSStringRef, JSValueRef, JSPropertyAttributes],
                                          lltype.Void)
 
 # ------------------------------ numbers ------------------------------
