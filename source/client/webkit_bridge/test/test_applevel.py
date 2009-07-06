@@ -6,10 +6,9 @@ from webkit_bridge.webkit_rffi import (JSGlobalContextCreate,
                                        empty_object)
 
 class AppTestBindings(object):
-    def setup_class(cls):
-        space = gettestobjspace()
+    def setup_method(cls, meth):
         ctx = JSGlobalContextCreate()
-        cls.w_js_obj = space.wrap(JSObject(ctx, empty_object(ctx)))
+        cls.w_js_obj = cls.space.wrap(JSObject(ctx, empty_object(ctx)))
     
     def test_getattr_none(self):
         assert self.js_obj.x == None
@@ -21,4 +20,6 @@ class AppTestBindings(object):
         self.js_obj.y = 3
         assert isinstance(self.js_obj['y'], float)
         assert self.js_obj['y'] == 3
-        
+
+    def test_str(self):
+        assert str(self.js_obj) == 'JSObject()'

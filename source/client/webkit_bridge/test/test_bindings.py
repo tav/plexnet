@@ -45,3 +45,8 @@ class TestBasic(object):
         el = JSObjectGetProperty(self.context, obj, prop)
         assert JSValueGetType(self.context, el) == kJSTypeNumber
 
+    def test_str(self):
+        script = '[1,2,     3]'
+        obj = JSEvaluateScript(self.context, script, NULL)
+        s = JSValueToString(self.context, obj)
+        assert JSStringGetUTF8CString(s) == '1,2,3'

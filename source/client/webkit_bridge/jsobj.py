@@ -36,6 +36,10 @@ class JSObject(Wrappable):
         JSObjectSetProperty(self.js_ctx, self.js_val, js_name, js_val, 0)
         return space.w_None
 
+    def str(self, space):
+        s = JSStringGetUTF8CString(JSValueToString(self.js_ctx, self.js_val))
+        return space.wrap('JSObject(' + s + ')')
+
 JSObject.typedef = TypeDef("JSObject",
         __getattribute__ = interp2app(JSObject.descr_get,
                                       unwrap_spec=['self', ObjSpace, W_Root]),
@@ -45,4 +49,6 @@ JSObject.typedef = TypeDef("JSObject",
                               unwrap_spec=['self', ObjSpace, W_Root, W_Root]),
         __setattr__ = interp2app(JSObject.descr_set,
                               unwrap_spec=['self', ObjSpace, W_Root, W_Root]),
+        __str__ = interp2app(JSObject.str,
+                             unwrap_spec=['self', ObjSpace]),
 )
