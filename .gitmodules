@@ -1,0 +1,3 @@
+[submodule "third_party/generic/webkit_titanium"]
+	path = third_party/generic/webkit_titanium
+	url = git://github.com/tav/webkit_titanium.git
