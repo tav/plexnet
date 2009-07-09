@@ -1,0 +1,173 @@
+========================
+Getting Started With Git
+========================
+
+:X-Tags: Howto, Git
+:Abstract:
+
+    All of our source code is managed through the use of the `Git
+    <http://git-scm.com/>`_ version control system and thus it is recommended
+    that all developers familiarise themselves with its use.
+
+.. contents::   Table of Contents
+                :depth: 2
+                :backlinks: none
+
+--------
+Why Git?
+--------
+
+The main reason that we've decided to use Git is because of `GitHub
+<http://github.com>`_, which -- unlike predecessors like `Sourceforge
+<http://sourceforge.net/>`_ or `Google Code <http://code.google.com/>`_ --
+recognises that coding is very much a social endeavour and provides a number of
+features to facilitate this.
+
+The GitHub home page gives a reasonable indication of the goodies that await
+you:
+
+.. raw:: html
+
+  <div class="center">
+    <img
+      src="http://cloud.github.com/downloads/tav/plexnet/gfx.espians.github.overview.png"
+      width="700px" height="479px" />
+  </div>
+
+Git is also a `distributed version control system
+<http://en.wikipedia.org/wiki/Distributed_revision_control>`_ (DVCS) and allows
+for decentralised development without much hassle. Not only does this reflect
+the Plexnet ethos, but it paves the way for an eventual PlexSource system.
+
+Git also outshines centralised version control system like `Subversion
+<http://subversion.tigris.org/>`_ in terms of performance:
+
+::
+
+  $ time git log > /dev/null
+  0.352s
+
+::
+
+  $ time svn log > /dev/null
+  3.709s
+
+Git is space efficient too. For example, the Git clone of the Django project is
+smaller than a Subversion checkout!! This is surprising because the Git clone
+has the *entire* repository history with *every* revision, whilst the Subversion
+checkout is only of a *single* revision!
+
+::
+
+  $ du -d 1 -h
+  108M  ./django-bzr
+   44M  ./django-git
+   53M  ./django-hg
+   53M  ./django-svn
+
+As for other competing DVCS systems, the one that is comparable to Git is the
+`Mercurial <http://www.selenic.com/mercurial/>`_ distributed version control
+system. Mercurial has the nice feature of being coded entirely in Python and
+being very extendable.
+
+And feature-wise, Git and Mercurial are very similar. In fact their object
+models are pretty identical. However, besides lacking a decent GitHub
+equivalent, Mercurial also currently lacks two really nice features of Git:
+
+* Super cheap/quick branching
+* Rebasing
+
+Eventually Mercurial may fix its broken branching model, but for now Git shines
+amongst the current flock of DVCS. And GitHub, with its social focus, makes it a
+true pleasure to use.
+
+Having said all this, Git's user interface sucks -- the worst of it are the
+appalling error messages it gives you. Thankfully this has gotten better in the
+1.6.x version and hopefully will continue to get better with time...
+
+-----------
+First Steps
+-----------
+
+If you don't have an account already, go sign up on `GitHub
+<http://github.com>`_. It only takes a minute and they provide a very generous
+`free account <https://github.com/signup/free>`_. Whilst a pain, please also add
+a profile image for the email address you signed up with on `Gravatar
+<http://www.gravatar.com/>`_. And, finally, upload your SSH key there and you're
+all set to go!
+
+The next step is to install Git if you don't already have it. It is RECOMMENDED
+that you install the 1.6.x version of Git as its user interface is much much
+better:
+
+* http://git-scm.com/download
+
+Then tell Git who you are -- this is used in commit messages, so provide the
+real info::
+
+  git config --global user.name 'tav'
+  git config --global user.email tav@espians.com
+
+Behind the scenes this will update your ``~/.gitconfig`` file. You might also
+want to extend this file with something like the following:
+
+.. syntax:: ini
+
+    [user]
+        email = tav@espians.com
+        name = tav
+    [color]
+        diff = auto
+        status = auto
+        branch = auto
+        interactive = auto
+        ui = auto
+    [github]
+        user = tav
+        token = 0cc175b9c0f1b6a831c399e269772661
+    [alias]
+        ch = checkout
+        co = commit
+        st = status
+        lp = log -p
+        diffall = diff HEAD
+        diffstaged = diff --staged
+        graph = log --pretty=oneline --graph
+        filelog = log --pretty=oneline --no-merges --
+        origin = push origin master
+        unstage = reset HEAD
+    [core]
+        webKitBranchBuild = true
+        plexnetBranchBuild = true
+
+The ``[color]`` section provides colour output when you run various git commands
+which can be quite useful.
+
+The ``[alias]`` section allows you to alias shortcuts, e.g. with the above alias
+definition, you can now just run ``git graph`` instead of the full ``git log
+--pretty=oneline --graph``. In combination with the git `bash completion
+<http://www.simplicidade.org/notes/archives/2008/02/git_bash_comple.html>`_
+script, aliases will make life much easier for your fingers.
+
+The ``[github]`` section is used by special GitHub powered tools -- you can find
+your token on your `GitHub account <https://github.com/account>`_ page. One
+GitHub powered tool that's super cool is `Gist <http://gist.github.com/>`_ --
+the best pastebin out there, with all of your pastes automatically becoming git
+repositories! Gist also has a number of command line and editor interfaces:
+
+* `Gist command-line (Ruby version)
+  <http://github.com/defunkt/gist/tree/master>`_
+
+* `Gist command-line (Python version)
+  <http://github.com/davglass/gist/tree/master>`_
+
+* `Emacs M gist-buffer@ support <http://github.com/defunkt/gist.el>`_
+
+* `Vim :Gist support <http://github.com/mattn/gist-vim/tree/master>`_
+
+And, finally, the ``core.webKitBranchBuild = true`` and
+``core.plexnetBranchBuild = true`` respectively tells the various WebKit and
+Plexnet build scripts to append the name of the git branch you are in to the
+build directory. This is especially useful so you don't clobber your previous
+branch's build when you switch branches.
+
