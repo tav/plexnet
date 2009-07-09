@@ -111,7 +111,7 @@ real info::
 Behind the scenes this will update your ``~/.gitconfig`` file. You might also
 want to extend this file with something like the following:
 
-.. syntax:: ini
+  .. syntax:: ini
 
     [user]
         email = tav@espians.com
@@ -170,4 +170,240 @@ And, finally, the ``core.webKitBranchBuild = true`` and
 Plexnet build scripts to append the name of the git branch you are in to the
 build directory. This is especially useful so you don't clobber your previous
 branch's build when you switch branches.
+
+-------------------
+Espian Repositories
+-------------------
+
+To simplify the development process, we are currently using centralised
+repositories which all core developers have write access to. The main
+repositories are:
+
+* http://github.com/tav/plexnet/
+* http://github.com/tav/webkit_titanium/
+
+If you would like write access, just ask `tav <http://tav.espians.com>`_. If
+you're not a core developer, you can simply fork the project. GitHub makes this
+very easy and you can send us `pull requests
+<http://github.com/guides/pull-requests>`_ with any changes you'd like us to
+merge.
+
+Note: The above are the links to the project pages on GitHub. To clone the
+repositories you'd need to use the special Git URIs. Whilst Git does support
+HTTP access, accessing Git repositories over HTTP is quite a poor experience.
+
+-------
+Cloning
+-------
+
+One usually starts off by cloning a Git repository. GitHub provides two
+different repository URIs -- one is read-only and the other provides read/write
+access. For example, if we take the Plexnet repository, the URIs are::
+
+  git://github.com/tav/plexnet.git    # read-only
+  git@github.com:tav/plexnet.git      # read/write
+
+So, if you had read/write access, you'd clone the repository by running::
+
+  $ git clone git@github.com:tav/plexnet.git
+
+This will create a ``plexnet`` directory in whatever directory you executed the
+command in and grab a copy of the repository for you, e.g.
+
+::
+
+  Initialized empty Git repository in /Users/tav/plexnet/.git/
+  remote: Counting objects: 7778, done.
+  remote: Compressing objects: 100% (5837/5837), done.
+  Receiving objects:   7% (545/7778), 1.47 MiB | 366 KiB/s     
+
+Once the command has finished running, you'll find that there's a fresh
+"checkout" of the repository inside the plexnet directory. You'll also find a
+special ``.git`` directory which actually contains the repository (config,
+objects and metadata).
+
+Of special note is the ``.git/config`` file which will look something like:
+
+  .. syntax:: ini
+
+    [core]
+        repositoryformatversion = 0
+        filemode = true
+        bare = false
+        logallrefupdates = true
+        ignorecase = true
+    [remote "origin"]
+        fetch = +refs/heads/*:refs/remotes/origin/*
+        url = git@github.com:tav/plexnet.git
+    [branch "master"]
+        remote = origin
+        merge = refs/heads/master
+
+What Git has effectively done is:
+
+* Grab a copy of the repository.
+
+* Setup a new ``remote`` reference called ``origin`` which points to the
+  original repository.
+
+* Linked your local ``master`` branch to the master branch on origin.
+
+Having a remote named "origin" and a branch named "master" is just the default
+Git convention -- you can name your remotes and branches however you want.
+
+-------
+Remotes
+-------
+
+Remotes are just references to other repositories. In Git you are always
+operating and committing on your *local* repository. Interaction with remote
+repositories is generally limited to simply fetching/pushing changes.
+
+And since these remotes are in relation to just *your* local repository, you can
+set up as many of these as is relevant without affecting anyone else's setup.
+Now you might wonder why you need multiple remotes to be configured. For this,
+let's take a look at the ``webkit_titanium`` repository.
+
+Our `webkit_titanium <http://github.com/tav/webkit_titanium/>`_ repository is
+actually a fork of:
+
+* http://github.com/appcelerator/webkit_titanium
+
+Just like other developers would have to with our respositories, we had to fork
+``appcelerator/webkit_titanium`` since we only have read-only access to it. So
+when we run the following we don't actually have any references to the original
+Appcelerator repository::
+
+  $ git clone git@github.com:tav/webkit_titanium.git
+
+The ``.git/config`` in the newly created repository directory would have
+something like the following in it:
+
+  .. syntax:: ini
+
+    [remote "origin"]
+        url = git@github.com:tav/webkit_titanium.git
+        fetch = +refs/heads/*:refs/remotes/origin/*
+
+Now if a developer wants to keep an eye on changes that Appcelerator make -- and
+possibly bring in some of those changes into our repository -- they should setup
+a new remote for it on *their* local repository.
+
+So let's call this new remote ``upstream`` and point it at the read-only
+reference for the Appcelerator repository::
+
+  $ git remote add upstream git://github.com/appcelerator/webkit_titanium.git
+
+The ``.git/config`` would now have a few additional lines:
+
+  .. syntax:: ini
+
+    [remote "upstream"]
+        url = git://github.com/appcelerator/webkit_titanium.git
+        fetch = +refs/heads/*:refs/remotes/upstream/*
+
+You can see a list of remotes you've setup by running::
+
+  $ git remote show
+  origin
+  upstream
+
+And get further detail on them using::
+
+  $ git remote show origin
+  * remote origin
+    URL: git@github.com:tav/webkit_titanium.git
+    HEAD branch: titanium_pr4
+    Remote branches:
+      master                 tracked
+      titanium_1.0           tracked
+      titanium_1.0_win32_osx tracked
+      titanium_pr4           tracked
+    Local branch configured for 'git pull':
+      master merges with remote master
+    Local ref configured for 'git push':
+      master pushes to master (up to date)
+
+The previous command does a remote query over the network, you can pass an
+additional ``-n`` parameter to just use the cached data instead, i.e.
+
+::
+
+  $ git remote show -n origin
+
+
+
+-----------
+Ignore This
+-----------
+
+Branches
+========
+
+Similarly, we can see a list of local branches::
+
+  $ git branch
+  * master
+
+$ git branch -r
+  origin/HEAD -> origin/master
+  origin/master
+
+And all (local and remote) branches::
+
+  $ git branch -a
+  * master
+    remotes/origin/HEAD -> origin/master
+    remotes/origin/master
+
+Basic Workflow
+==============
+
+.. image:: http://cloud.github.com/downloads/tav/plexnet/gfx.espians.git.staging.png
+           :class: float-right
+
+Git's workflow is quite different to traditional systems like Subversion.
+
+
+Submodules
+==========
+
+--------------------
+Additional Resources
+--------------------
+
+Hopefully this article has been useful in getting you up and running with Git.
+If you want to find out more, the best resource is generally the excellent man
+pages which come with Git. You can access these by running ``git help
+<command>``, e.g.
+
+::
+
+  $ git help diff
+
+If that doesn't help, then you might find the following web guides useful:
+
+* http://learn.github.com/
+* http://github.com/guides/home
+* http://www.kernel.org/pub/software/scm/git/docs/gittutorial.html
+* http://www.kernel.org/pub/software/scm/git/docs/user-manual.html
+* http://book.git-scm.com/
+* http://cworth.org/hgbook-git/tour/
+* http://git.or.cz/course/svn.html
+* http://www.spheredev.org/wiki/Git_for_the_lazy
+* http://www-cs-students.stanford.edu/~blynn/gitmagic/
+
+These cheatsheets in particular are rather invaluable:
+
+* http://cheat.errtheblog.com/s/git
+* http://git.or.cz/gitwiki/GitCheatSheet
+
+You can find a bunch of useful user generated tips and screencasts on these
+sites:
+
+* http://gitready.com/
+* http://gitcasts.com/
+
+And, finally, of course, there's good old Google to fall back upon. Good luck
+and happy cloning!
 
