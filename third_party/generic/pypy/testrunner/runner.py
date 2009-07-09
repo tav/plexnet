@@ -186,7 +186,7 @@ def execute_tests(run_param, testdirs, logfile, out):
 
     for testname in testdirs:
         out.write("-- %s\n" % testname)
-    out.write("-- %d to run\n" % len(testdirs))
+    out.write("-- total: %d to run\n" % len(testdirs))
 
     result_queue = start_workers(N, run_param, testdirs)
 
