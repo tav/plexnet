@@ -74,7 +74,8 @@ And feature-wise, Git and Mercurial are very similar. In fact their object
 models are pretty identical. However, besides lacking a decent GitHub
 equivalent, Mercurial also currently lacks two really nice features of Git:
 
-* Super cheap/quick branching
+* `Super cheap/quick branching
+  <http://whygitisbetterthanx.com/#cheap-local-branching>`_
 * Rebasing
 
 Eventually Mercurial may fix its broken branching model, but for now Git shines
@@ -137,6 +138,7 @@ want to extend this file with something like the following:
         origin = push origin master
         unstage = reset HEAD
     [core]
+        autocrlf = true
         webKitBranchBuild = true
         plexnetBranchBuild = true
 
@@ -165,6 +167,10 @@ repositories! Gist also has a number of command line and editor interfaces:
 
 * `Vim :Gist support <http://github.com/mattn/gist-vim/tree/master>`_
 
+The ``core.autocrlf = true`` setting tells Git to convert newlines to the
+system’s standard when checking out files, and to LF newlines when committing in
+changes.
+
 And, finally, the ``core.webKitBranchBuild = true`` and
 ``core.plexnetBranchBuild = true`` respectively tells the various WebKit and
 Plexnet build scripts to append the name of the git branch you are in to the
@@ -190,7 +196,8 @@ merge.
 
 Note: The above are the links to the project pages on GitHub. To clone the
 repositories you'd need to use the special Git URIs. Whilst Git does support
-HTTP access, accessing Git repositories over HTTP is quite a poor experience.
+HTTP access, accessing Git repositories over HTTP is quite a poor experience and
+is NOT RECOMMENDED.
 
 -------
 Cloning
@@ -246,10 +253,12 @@ What Git has effectively done is:
 * Setup a new ``remote`` reference called ``origin`` which points to the
   original repository.
 
-* Linked your local ``master`` branch to the master branch on origin.
+* Linked your local ``master`` branch to the master branch on origin (called
+  "tracking").
 
-Having a remote named "origin" and a branch named "master" is just the default
-Git convention -- you can name your remotes and branches however you want.
+Note: Having a remote named "origin" and a branch named "master" is just the
+default Git convention -- you can name your remotes and branches however you
+want.
 
 -------
 Remotes
@@ -269,10 +278,10 @@ actually a fork of:
 
 * http://github.com/appcelerator/webkit_titanium
 
-Just like other developers would have to with our respositories, we had to fork
-``appcelerator/webkit_titanium`` since we only have read-only access to it. So
-when we run the following we don't actually have any references to the original
-Appcelerator repository::
+Just like other developers would have to with *our* respositories, we had to
+fork ``appcelerator/webkit_titanium`` since we only have read-only access to it.
+But when we run the following command to clone our repository it doesn't come
+with any references to the original Appcelerator repository::
 
   $ git clone git@github.com:tav/webkit_titanium.git
 
@@ -308,7 +317,7 @@ You can see a list of remotes you've setup by running::
   origin
   upstream
 
-And get further detail on them using::
+And get further detail on any of them using::
 
   $ git remote show origin
   * remote origin
@@ -324,49 +333,763 @@ And get further detail on them using::
     Local ref configured for 'git push':
       master pushes to master (up to date)
 
-The previous command does a remote query over the network, you can pass an
+The previous command does a remote query over the network, so you can pass an
 additional ``-n`` parameter to just use the cached data instead, i.e.
 
 ::
 
   $ git remote show -n origin
 
+And, finally, to keep your copies of all of your remote repositories updated,
+simply run::
+
+  $ git remote update
+  Updating origin
+  remote: Counting objects: 73, done.
+  remote: Compressing objects: 100% (59/59), done.
+  remote: Total 64 (delta 38), reused 0 (delta 0)
+  Unpacking objects: 100% (64/64), done.
+  From git@github.com:tav/webkit_titanium
+     7e329e4..d262952  titanium_pr4 -> origin/titanium_pr4
+  Updating upstream
+  From git://github.com/appcelerator/webkit_titanium
+   * [new branch]      master     -> upstream/master
+   * [new branch]      titanium_1.0 -> upstream/titanium_1.0
+   * [new branch]      titanium_1.0_win32_osx -> upstream/titanium_1.0_win32_osx
+   * [new branch]      titanium_pr4 -> upstream/titanium_pr4
+
+--------------
+Basic Workflow
+--------------
+
+Whist remotes are important for sharing changes with other developers, it's
+``git add`` and ``git commit`` that you'll be using to make changes to your
+*local* repository.
+
+Unlike in Subversion, where you do ``svn add`` only once to add files to the
+repository, Git distinguishes your working directory from what it calls the
+"staging area".
+
+.. raw:: html
+
+  <div class="center">
+    <img
+    src="http://cloud.github.com/downloads/tav/plexnet/gfx.espians.git.staging.png"
+    />
+  </div>
 
 
------------
-Ignore This
------------
+So your general workflow would be to edit away in the working directory/tree -->
+add the changes you like to the staging area --> commit the changes.
 
+For example, let's say you started a few edits -- of 2 files which were already
+in the repository and one which was a brand new file::
+
+  $ edit documentation/credits.txt        # already in the repository
+  $ edit documentation/install.txt        # already in the repository
+  $ edit documentation/tests-guide.txt    # not yet in the repository
+
+Then to see what's changed::
+
+  $ git status
+  # On branch master
+  # Changed but not updated:
+  #   (use "git add <file>..." to update what will be committed)
+  #   (use "git checkout -- <file>..." to discard changes in working directory)
+  #
+  #       modified:   documentation/credits.txt
+  #       modified:   documentation/install.txt
+  #
+  # Untracked files:
+  #   (use "git add <file>..." to include in what will be committed)
+  #
+  #       documentation/tests-guide.txt
+  no changes added to commit (use "git add" and/or "git commit -a")
+
+You can then add just the credits.txt file to staging area::
+
+  $ git add documentation/credits.txt
+
+::
+
+  $ git status
+  # On branch master
+  # Changes to be committed:
+  #   (use "git reset HEAD <file>..." to unstage)
+  #
+  #       modified:   documentation/credits.txt
+  #
+  # Changed but not updated:
+  #   (use "git add <file>..." to update what will be committed)
+  #   (use "git checkout -- <file>..." to discard changes in working directory)
+  #
+  #       modified:   documentation/install.txt
+  #
+  # Untracked files:
+  #   (use "git add <file>..." to include in what will be committed)
+  #
+  #       documentation/tests-guide.txt
+
+You could "unstage" the file from the staging area by using::
+
+  $ git reset HEAD documentation/credits.txt
+
+But normally you'd just follow the git add with an informative commit::
+
+  $ git commit -m "Added myself (tav) to the credits list."
+  [master 593ff32] Added myself to the credits list.
+   1 files changed, 5 insertions(+), 0 deletions(-)
+
+This gives you a brief overview of the commit along with ``593ff32`` -- a
+shortened version of the full 40-character hexadecimal SHA-1 identifier for the
+commit/revision. You can use this in many places, e.g.
+
+::
+
+  $ git show 593ff32
+  commit 593ff32c3d865ab0787f21e0b86eed4752ef063a
+  Author: tav <tav@espians.com>
+  Date:   Thu Jul 9 23:22:00 2009 +0100
+
+      Added myself to the credits list.
+
+  diff --git a/documentation/credits.txt b/documentation/credits.txt
+  index fa2ce46..b94e35f 100644
+  --- a/documentation/credits.txt
+  +++ b/documentation/credits.txt
+  @@ -8,6 +8,11 @@ Credits
+   Authors
+   =======
+   
+  +* **tav**
+  +
+  +  * tav
+  +  * tav@espians.com
+  +
+  *
+
+You don't always need to explicitly re-add files which are already in the
+repository to a staging area. If you are happy to commit all changes to the
+files that are *already* in the repository, you can just pass the ``-a`` flag to
+git commit::
+
+  $ git commit -am "Updated the install instructioned for OS X."
+  [master ab408af] Updated the install instructioned for OS X.
+   1 files changed, 2 insertions(+), 0 deletions(-)
+
+In the above example this would've only added and committed ``install.txt``
+since ``tests-guide.txt`` wasn't already known to the repository. You'd need to
+add it to the repository using the normal::
+
+  $ git add documentation/tests-guide.txt
+
+Or if you wanted to add all untracked files to the index (staging area), you
+could just run::
+
+  $ git add .
+
+This will add all files underneath the current directory which wasn't excluded
+by any patterns in any ``.gitignore`` files set in any parent directories --
+leading all the way up to the root working directory (i.e. the directory with
+the ``.git`` subdirectory).
+
+We have relevant ``.gitignore`` files set in all of our repositories, but a
+decent general one to use is:
+
+  .. syntax:: bash
+
+    # general hidden files/directories
+
+    .DS_Store
+    .sconsign*
+    .svn
+
+    # file patterns
+
+    *.dylib
+    *.la
+    *.lo
+    *.o
+    *.pyc
+    *.pyo
+    *.so
+    *.tar.gz
+    *.tar.bz2
+    *~
+
+    # file patterns (xcode)
+
+    *.mode1v3
+    *.mode2v3
+    *~.nib
+    *.pbxuser
+    *.perspective
+    *.perspectivev3
+    *.swp
+    *.tm_build_errors
+
+    # file patterns (windows)
+
+    *.dll
+    *.exe
+    *.ilk
+    *.lib
+    *.ncb
+    *.pdb
+    *.suo
+    *.vcproj.*.*.user
+
+In contrast to adding files, you can of course remove files from the project by
+running ``git rm <files>``. This will remove the physical file(s) from your
+working tree as well as add a deletion to your staging area for the next commit.
+
+If you've manually deleted a bunch of files already but not told Git about it,
+you can run ``git rm $(git ls-files --deleted)`` to remove all the files which
+you've deleted but are still referred to in the project.
+
+And for those instances when you don't want to delete the physical file, but do
+want to remove it from the project, you can run ``git rm --cached <files>``,
+e.g.
+
+::
+
+  $ ls *.txt 
+  README.txt
+
+::
+
+  $ git rm --cached README.txt
+  rm 'README.txt'
+
+::
+
+  $ git-status 
+  # On branch master
+  # Changes to be committed:
+  #   (use "git reset HEAD <file>..." to unstage)
+  #
+  #       deleted:    README.txt
+  #
+  # Untracked files:
+  #   (use "git add <file>..." to include in what will be committed)
+  #
+  #       README.txt
+
+::
+
+  $ git commit -m "Removed the pointless README.txt file."
+  [master 85a2f0b] Removed the pointless README.txt file.
+   1 files changed, 0 insertions(+), 38 deletions(-)
+   delete mode 100644 README.txt
+
+::
+
+  $ ls *.txt
+  README.txt
+
+As you can see, with ``git rm --cached``, the physical file is still there --
+just not in the project... whilst with a plain ``git rm`` it'd have been deleted
+from the working tree too.
+
+And at any point you could have checked the exact changes in files by using::
+
+  $ git diff
+
+By default this shows the changes in your working tree which have not yet been
+staged for the next commit. If you want to see changes between the staging area
+and your last commit, i.e. what you would be committing if you ran ``git commit``
+without the ``-a`` option::
+
+  $ git diff --staged
+
+And to see all changes in your working tree since your last commit, i.e. what
+you would be committing if you ran ``git commit`` with the ``-a`` option::
+
+  $ git diff HEAD
+
+The beauty of the separate staging area is that cool features like ``git add
+-p`` are possible which allows you to choose to add only specific hunks from
+your changes in a file to the staging area in order to commit!
+
+--------------------
+Revision Identifiers
+--------------------
+
+Earlier we saw that each commit has a unique identifier. The identifier in the
+example was ``593ff32c3d865ab0787f21e0b86eed4752ef063a``. You can use any unique
+prefix of the identifier in various commands. For most reasonably-sized
+repositories, the first 7 characters, e.g. ``593ff32``, are good enough to be
+unique within the repository.
+
+These identifiers are permanent and will always point to the same commit. Git
+also provides support for more transient identifiers in the way of "branches"
+and "tags". Collectively we can refer to all of these identifiers as "revision
+identifiers" and denote them as ``<rev>``.
+
+In addition to commit identifiers, branches and tags, there are also a few
+special identifiers:
+
+* HEAD
+* FETCH_HEAD
+* ORIG_HEAD
+* MERGE_HEAD
+
+Of these the most important is ``HEAD`` which points to the commit your working
+tree is currently based on. This can point to either a commit identifier or a
+branch. For example, in this case it's pointing to the local master branch which
+in turn would point to a commit identifier::
+
+  $ cat .git/HEAD
+  ref: refs/heads/master
+
+You can refer to the "parent" of a commit, by appending a ``^`` to the revision
+identifier, e.g. ``HEAD^`` or ``master^`` or ``593ff32^``. You can add as many
+``^`` as you want to refer to the parent of the parent and so on. For example,
+``HEAD^^^`` would refer to the great-grandparent of the commit you're currently
+working from.
+
+In most commands where a revision identifier is expected and one is not given,
+the command will generally implicitly assume that you meant HEAD. For example,
+if you just ran ``git show`` without any specific revision identifier, it'd
+assume that you meant ``git show HEAD``.
+
+There is a lot of other synax related to revision identifiers and you can find
+out more by running ``git help rev-parse``.
+
+--------
 Branches
-========
+--------
 
-Similarly, we can see a list of local branches::
+Now the branches and tags introduced earlier are simply just named pointers to
+permanent commit identifiers. Tags are generally expected to be stable pointers
+-- used to indicate a specific public "version" of a project -- whilst branches
+tend to evolve over time and point to different commit identifiers.
+
+The latest committed version of a branch is referred to as its "head" (not to be
+confused with the special HEAD) and you can find a file in
+``.git/refs/heads/<branch-name>`` (for local branches) or
+``.git/refs/remotes/<branch-name>`` (for remote branches) which will contain the
+commit identifier that the branch is currently pointing to.
+
+You can see a list of local branches by running::
 
   $ git branch
   * master
 
-$ git branch -r
+Since this is a fresh clone, nothing's been done locally, so only the default
+``master`` branch has been created. You can see the remote branches you've
+fetched using::
+
+  $ git branch -r
   origin/HEAD -> origin/master
   origin/master
+  origin/titanium_1.0
+  origin/titanium_1.0_win32_osx
+  origin/titanium_pr4
+  upstream/master
+  upstream/titanium_1.0
+  upstream/titanium_1.0_win32_osx
+  upstream/titanium_pr4
 
-And all (local and remote) branches::
+You can even see a list of all branches (locally and in remotes) by using ``git
+branch -a``. Of course knowing what branches are available is only of so much
+use. You are more likely interested in switching to a branch, for which you can
+use ``git checkout <branch-name>``, e.g.
 
-  $ git branch -a
-  * master
-    remotes/origin/HEAD -> origin/master
-    remotes/origin/master
+::
 
-Basic Workflow
-==============
+  $ git checkout origin/titanium_1.0
+  Note: moving to 'origin/titanium_1.0' which isn't a local branch
+  If you want to create a new branch from this checkout, you may do so
+  (now or later) by using -b with the checkout command again. Example:
+    git checkout -b <new_branch_name>
+  HEAD is now at cb03eaa... Spaces -> Tabs
 
-.. image:: http://cloud.github.com/downloads/tav/plexnet/gfx.espians.git.staging.png
-           :class: float-right
+Or something like::
 
-Git's workflow is quite different to traditional systems like Subversion.
+  $ git checkout origin/titanium_1.0_win32_osx 
+  Previous HEAD position was cb03eaa... Spaces -> Tabs
+  HEAD is now at 5cbb8e9... readding build script for osx/windows
 
+Or something like::
 
-Submodules
-==========
+  $ git checkout origin/master 
+  Checking out files: 100% (2095/2095), done.
+  Previous HEAD position was 5cbb8e9... readding build script for osx/windows
+  HEAD is now at ba9014e... WebCore:
+
+Since you'd "checked out" remote branches, Git would have updated your working
+tree with the state of the latest commit in the remote branch, set your HEAD to
+the commit identifier and set your local branch reference to "no branch"::
+
+  $ git branch
+  * (no branch)
+    master
+
+The ``*`` indicates which local branch (if any) you are currently on. You can
+branch off from a specific revision into a new branch at any time by using ``git
+checkout -b <new-branch-name> <rev>``. If no revision identifier is specified,
+then the implicit HEAD (where you currently are) is used::
+
+  $ git checkout -b testing
+  Switched to a new branch 'testing'
+
+::
+
+  $ git branch
+    master
+  * testing
+
+You could also use the alternative syntax of ``git branch <new-branch-name>
+<ref>``, but in that case Git doesn't "switch" to the branch, i.e. update your
+working tree. It will simply create a pointer for the new branch name to point
+to the commit idenifier for the revision and leave it at that.
+
+You can delete local branches using ``git branch -d <branch-name>``. You can't
+use this to delete branches you are currently on or for branches which are not
+"reachable" from your current branch. For that you'd need to use ``git branch -D
+<branch-name>`` -- DO NOT use this unless you know what you're doing.
+
+Similarly, you can delete remote branches using ``git push <remote>
+:<branch-name>``, e.g.
+
+::
+
+  $ git push origin :titanium_1.0_win32_osx
+
+Anytime you are working in a local named branch and do a commit, Git will
+automatically update the pointer for the branch to the new commit identifier.
+Branching is super cheap and quick in Git -- take advantage of it!
+
+----
+Tags
+----
+
+Tags are similar and should be used to denote public-facing versions or
+releases. You can create a annotated tag (i.e. a tag with a message/note) using
+``git tag -a <new-tag-name> <ref>``::
+
+  $ git tag -a plexnet-0.1.3.2 -m "Alpha Release 0.1.3.2 of the Plexnet."
+
+Or perhaps::
+
+  $ git tag -a milestone-base-layout 4a7f7f2092   # will prompt you for a message
+
+And you can list the various tags using::
+
+  $ git tag -l
+  milestone-base-layout
+  plexnet-0.1.3.2
+
+Or specific tags matching a certain pattern, e.g.
+
+::
+
+  $ git tag -l plexnet*
+  plexnet-0.1.3.2
+
+And you can "switch" to a tag just like with remote branches, using ``git
+checkout``::
+
+  $ git checkout plexnet-0.1.3.2
+
+----
+Push
+----
+
+Your commits, branches and tags are "private" by default. That is, they stay in
+just your local repository until you explicitly ``git push`` them to a remote
+repository.
+
+To do this you can use the explicit command form ``git push <remote>
+<name-of-a-local-branch>`` to update the remote with commits made to the local
+branch since your last push, e.g.
+
+::
+
+  $ git push origin master
+  Counting objects: 9, done.
+  Delta compression using up to 2 threads.
+  Compressing objects: 100% (5/5), done.
+  Writing objects: 100% (5/5), 5.49 KiB, done.
+  Total 5 (delta 3), reused 0 (delta 0)
+  To git@github.com:tav/plexnet.git
+     ba7f069..912ce7a  master -> master
+
+For *new* branches you MUST use the above form for the very first time you push
+to a remote repository. After the first explicit push you can just do a plain
+``git push``. To further control what happens when you do a plain ``git push``,
+you can configure ``push.default`` to one of:
+
+* ``matching`` -- push all commits across all *matching* branches, i.e. branches
+  that are *common* between the local *and* remote repositories (this is the
+  default behaviour).
+
+* ``nothing`` -- do not push anything.
+
+* ``tracking`` -- push the current branch to whatever it is tracking.
+
+* ``current`` -- push the current branch.
+
+You can even use ``git push <remote>`` to push to a specific remote repository::
+
+  $ git push origin
+
+If GitHub is down for some reason, you might see an error like::
+
+  Could not chdir to home directory /data/git: No such file or directory
+  bash: gerve: command not found
+  fatal: The remote end hung up unexpectedly
+
+The best thing to do in such a case is to alert #github (on
+irc://irc.frenode.net) about it and then wait... In other times you might see an
+error like::
+
+  ! [rejected] master -> master (non-fast forward)
+  error: failed to push some refs to 'git@github.com:tav/plexnet.git'
+
+There are a number of possible causes for this. The first is simply that someone
+else has made a commit since you last updated your local repository with changes
+from the remote repository. This can result in what git refers to as "non-fast
+forward".
+
+The term "fast forward" simply means that changes in a branch can be advanced
+along a linear sequence. That is, there was never any divergence or simultaneous
+commits created in parallel in multiple repositories.
+
+You can therefore normally fix non-fast foward errors on pushs by simply
+fetching and merging changes from the remote repository before pushing your
+changes, i.e. ``git pull`` before you ``git push`` again.
+
+But you might also get the above error if you've rewritten a branch history in
+some way, e.g. by rebasing or by using ``git reset`` to change the branch head
+to something other than the equivalent on the remote repository.
+
+So, for example, if your revisions look something like::
+
+            A--B--C    <-- master (on the local repository)
+           /
+    o--o--X
+           \
+            Y-Z    <-- remotes/origin/master
+
+You can then rewrite it using ``git rebase <branch-name>``, e.g.
+
+::
+
+  $ git rebase origin/master
+
+Which would try to turn the changes back into a linear progression, e.g.
+
+::
+
+                  A'--B'--C'  <-- master (on the local repository)
+                 /
+    o--o--X--Y--Z  <-- remotes/origin/master
+
+And, finally, your tags are never pushed by default. To push your tags to a
+remote repository, you'd need to add the ``--tags`` parameter::
+
+  $ git push --tags
+
+----
+Pull
+----
+
+The flip side to a git push is of course a ``git pull``. This grabs changes from
+remote repositories and merges them into the current branch. This is dependent
+on a few lines being in the ``.git/config`` file for the given branch which
+specifies which remote "tracking" branch should be merged automatically.
+
+So, if we were on the local "testing" branch and if the following lines where in
+your ``.git/config``, Git would fetch changes from the "origin" remote
+repository and merge in changes from the remote "master" branch:
+
+  .. syntax:: ini
+
+    [branch "testing"]
+        remote = origin
+        merge = refs/heads/master
+
+Git sets this up automatically for the local "master" branch when you clone a
+remote repository. It also adds those lines automatically whenever you create
+new branches using ``git branch`` or ``git checkout -b`` *if* you'd configured
+``branch.autosetupmerge = true``.
+
+Otherwise you need to add these lines manually or create new branches using the
+command ``git branch --track <new-branch-name> <remote-branch-name>``, e.g.
+
+::
+
+  $ git branch --track testing origin/master
+
+Now whilst it's nice that ``git pull`` automatically does all this for you, it's
+often better to simply do manually what git pull is doing for you automatically.
+That is, to do ``git fetch`` followed by a ``git merge``.
+
+A fetch command updates your copy of a remote repository with all the objects
+necessary to access all of the branches and heads in the remote repository. The
+command is of the form ``git fetch <remote>`` -- and by default it uses "origin"
+if no remote was specified::
+
+  $ git fetch -v
+  From git://github.com/tav/webkit_titanium
+   = [up to date]      master     -> origin/master
+   = [up to date]      titanium_1.0 -> origin/titanium_1.0
+   = [up to date]      titanium_1.0_win32_osx -> origin/titanium_1.0_win32_osx
+   = [up to date]      titanium_pr4 -> origin/titanium_pr4
+
+But even better than doing several git fetch commands is to run the following
+which updates your copies of *all* of your remote repositories, i.e. equivalent
+to ``git fetch origin && git fetch upstream`` for our previous example::
+
+  $ git remote update
+  Updating origin
+  Updating upstream
+
+Doing a manual git merge is also quite easy. A command of the form ``git merge
+<remote-branch-name>`` will merge any changes from the remote branch into your
+current branch, e.g.
+
+::
+
+  $ git merge origin/master
+
+If there were changes and they were "fast forwardable" (i.e. linear), Git will
+apply them for you cleanly. Otherwise Git would automatically create a new
+commit -- called a "merge commit" -- which would commit the changes caused by
+the merge operation.
+
+If for some reason Git couldn't automatically merge the changes, it'll notify
+you of the various conflicts and leave it up to you to resolve the conflicts --
+the conflicted files will have special conflict markers which you'd need to
+decide between -- before doing a manual merge commit yourself.
+
+Yu can pass an optional ``--no-commit`` parameter to tell Git to not autocommit
+the resulting merge commit -- allowing you to do sanity checks on the changes
+being applied::
+
+  $ git merge origin/master --no-commit
+
+A ``git merge`` might sometimes fail with the following rather bizarre error
+message::
+
+  $ git merge origin/master
+  some/file: needs update
+  some/other/file: needs update
+  fatal: Entry 'some/file' not uptodate. Cannot merge.
+  Merge with strategy recursive failed.
+
+What this means is that the merge operation is trying to apply changes to a file
+in your local working tree, however that file has changes which your local git
+repository doesn't know about -- becuase you haven't committed the changes
+locally!!
+
+The simple solution is just to commit the changes in your working tree to your
+local repository before re-running the merge command. But if you don't want to
+commit the changes, but still want to keep your changes around for some purpose,
+you can use the ``git stash`` command to "stash" anything not in your HEAD.
+
+-------------
+Revision Info
+-------------
+
+There are 2 commands which will become you best friends when you start to dig
+deeper into your repositories and want to know more about revision info: ``git
+diff`` and ``git log``. They both take an optional ``<rev>`` parameter which
+defaults to HEAD and can be any form of identifier mentioned above: commit,
+branch, tag, etc.
+
+But perhaps the most useful revision identifier is of the form ``<rev>..<rev>``
+-- for example ``master..testing`` will incorporate all the revisions since
+"testing" diverged from "master". If you leave out a revision identifier on
+either side, then HEAD is implicitly assumed, e.g. ``master..`` is equivalent to
+``master..HEAD`` and ``..master`` is equivalent to ``HEAD..master``.
+
+The ``git log`` command shows commit logs::
+
+  $ git log
+  commit aeb0fbcb02ea0a6e0cba683cfb8364661e69b83e
+  Author: tav <tav@espians.com>
+  Date:   Tue Jul 7 21:30:40 2009 +0100
+
+      Fixed line-endings and removed extraneous }s and it now compiles!!
+
+You can tweak the command with a lot of optional parameters, but the most useful
+are ``git log -p`` -- which shows you the relevant diffs for the commits as well
+-- and the following, which shows you the commit log in a compressed form along
+with a small graph of the revision relations::
+
+  $ git log --pretty=oneline --graph
+  * aeb0fbcb02ea0a6e0cba683cfb8364661e69b83e Fixed line-endings and removed ...
+  *   20db6feaa24ed7eb16675140340974ca0b615599 Merging in changes ...
+  |\  
+  | * 72e060fc59a467527dc1d80894e31108114c716f Added support to get PyPy ...
+  | * 43285ab9faa57e66a5f6df2778b1fb2846a64160 Adding references to PyPy.cpp ...
+  | * 21a2a65ba694fc58eae1efaea380deaf8b88f400 Adding our default ...
+  * | 8ac5155984b0203a859002e251c82a1e33066b67 Some basic mods to get...
+  |/  
+  * 0a1dfdc9eb2f9162eb820699ccca1d9edd094fcf Add pypy bindings
+
+You can see the commit logs between two branches, e.g.
+
+::
+
+  $ git log master..testing --pretty=oneline
+
+You can even review the changes in specific files since a certain point, e.g.
+
+::
+
+  $ git log -p ORIG_HEAD.. some/file some/other/file
+
+Or if you just want to just see the diffs between two branches, you can for
+example do::
+
+  $ git diff master..testing
+
+---------------------------
+Less Commonly Used Commands
+---------------------------
+
+Git has dozens of commands with lots of options, so it'll take anyone a little
+while to get familiar with it all. This section describes some of the less
+commonly used commands that are useful nevertheless.
+
+If you want to revert any changes you've made to a file in your working tree and
+want to go back to the version in the repository, the ``git checkout`` command
+which you've seen be used to switch to (and sometimes even create) branches, can
+also be used to re-checkout file(s) from HEAD into your current working tree.
+
+This is the Git equivalent of ``svn revert`` and is of the form ``git checkout
+-- <files>``. If the filename(s) don't conflict with any ``<rev>`` revision
+identifier, then you can leave out the additional ``--``. To re-checkout *all*
+files, you can run the expected::
+
+  $ git checkout .
+
+Sometimes one messes up with a commit message. Git lets you fix this by simply
+running ``git commit --amend`` which will allow you to edit the commit message
+of your most recent commit. You SHOULD NOT do this if you've pushed your commit
+to a remote repository.
+
+If you are interested in who authored each line in a file, you can use ``git
+blame <file>`` or even ``git blame <file> <rev>`` if you are interested in
+seeing the blame for the file in a particular revision, e.g.
+
+::
+
+  $ git blame README.txt
+  ^c406460 (tav 2009-01-21 06:59:34 +0000 33) All of the work, except for ..
+  02b5ca49 (tav 2009-06-06 11:15:38 +0100 34) placed into the Public Domain ..
+  02b5ca49 (tav 2009-06-06 11:15:38 +0100 35) Public Domain Dedication ..
+
+Or perhaps if you wanted to selectively merge a single commit from another
+branch into the current branch, you could use ``git cherry-pick <rev>``, e.g.
+
+::
+
+  $ git cherry-pick 036da1f
 
 --------------------
 Additional Resources
@@ -403,6 +1126,10 @@ sites:
 
 * http://gitready.com/
 * http://gitcasts.com/
+
+You might also find that it really helps with understanding Git if you look at
+it as just sugar coating on top of a `directed acyclic graph
+<http://en.wikipedia.org/wiki/Directed_acyclic_graph>`_.
 
 And, finally, of course, there's good old Google to fall back upon. Good luck
 and happy cloning!
