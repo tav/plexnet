@@ -13,7 +13,6 @@ third_party/generic/pypy/pypy/_cache
 
 .articlestore
 .DS_Store
-.gendate
 .last_self_update
 .latest
 .sconsign*
