@@ -140,7 +140,7 @@ def get_svn_info(path, pattern):
 def get_git_info(filename, path):
 
     environ['TZ'] = 'UTC'
-    git_info = getoutput('git log --pretty=raw "%s"' % filename)
+    git_info = getoutput('git log --pretty=raw -- "%s"' % filename)
 
     info = {}
     info['__path__'] = path
@@ -162,6 +162,7 @@ def get_git_info(filename, path):
                 email = email.split('(')[0].strip()
             info['__by__'] = email
             info['__updated__'] = datetime.utcfromtimestamp(float(timestamp))
+            break
 
     return info
 
