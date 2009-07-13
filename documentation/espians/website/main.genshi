@@ -99,7 +99,7 @@
   <div id="site-header">
 	<div id="site-info">
 		<a href="/" title="Espians: On The Road To Espia"><img
-		  id="site-logo" src="http://cloud.github.com/downloads/tav/blog/gfx.espia.png" alt="Espian Flag" width="64px" height="64px" /></a><form id="translation_form" class="menu-item-padding"><select id="lang_select" onchange="dotranslate(this);">
+		  id="site-logo" src="http://cloud.github.com/downloads/tav/plexnet/gfx.espian-flag-embossed.png" alt="Espian Flag" width="64px" height="60px" /></a><form id="translation_form" class="menu-item-padding"><select id="lang_select" onchange="dotranslate(this);">
 		<option value="" id="select_language">Select Language</option>
 		<option value="&amp;langpair=en|ar" id="openar">العربية</option><option
 		value="&amp;langpair=en|bg" id="openbg">български</option><option
