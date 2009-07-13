@@ -40,7 +40,9 @@ for decentralised development without much hassle. Not only does this reflect
 the Plexnet ethos, but it paves the way for an eventual PlexSource system.
 
 Git also outshines centralised version control system like `Subversion
-<http://subversion.tigris.org/>`_ in terms of performance:
+<http://subversion.tigris.org/>`_ in terms of performance. This is mainly due to
+the fact that Git doesn't have to make needless network requests since it has an
+entire copy of the repository available locally, e.g.
 
 ::
 
