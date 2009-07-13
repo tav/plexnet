@@ -1,0 +1,935 @@
+=======
+Plexnet
+=======
+
+A Set of Open Web Standards
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+:Abstract:
+
+    The Plexnet is a set of open web standards that will hopefully allow for
+    richer and more interoperable applications to be developed over the Open
+    Web.
+
+.. contents::   Table of Contents
+                :depth: 2
+                :backlinks: none
+
+---------
+Rationale
+---------
+
+The Plexnet is intended as an open source competitor to the various proprietary
+platforms that currently threaten to fragment the Open Web [Neuberg-2008]_.
+Whilst the various proprietary efforts have lots of beautiful innovations, they
+suffer due to:
+
+* Not being cross-platform -- `Nokia S60`_
+* Not being truly open source -- `Microsoft Silverlight`_
+* Having single-vendor "lock-in" -- `Facebook F8`_
+* Lacking distributed extensibility -- `Apple iPhone`_
+* Not carrying the spirit of the original internet -- `Adobe Flash`_
+
+The Open Web is the only pervasive platform which doesn't suffer [Eich-2007]_.
+But then, why do these alternative platforms exist? Because the Web is nearly 20
+years old [Berners-Lee-1989]_. Many of today's applications weren't expected
+back then.
+
+Countless developers have had to independently solve the same problems over and
+over, e.g. identity, scalability, structured data, social networking, &c. And a
+lot of useful functionality isn't handled natively by most browsers, e.g. media
+delivery, better interfaces, voip, &c.
+
+This is where many of the proprietary platform providers fit in. Unfortunately,
+innovation slows down as developers try to assess, learn, code, test and deploy
+for the various platforms. Again and again and again. Our collective efforts are
+wasted on working around technical incompatabilities and shortcomings instead of
+tackling the real problems of life.
+
+.. class:: sidebox
+
+  "Ease developer pain and take innovation to the next curve"
+
+Thus the time has come to take the Open Web to the next level [Leggett-2008]_.
+To ease developer pain *and* take innovation to the next curve [Kawasaki-2006]_.
+Letting the focus be on creating truly innovative, useful, fun applications
+again.
+
+-----
+Nodes
+-----
+
+Begin With HTTP
+===============
+
+It should come as no surprise that a central element of the Plexnet is a web
+server. AKA, a Plexnet ``Node``. Nodes MUST be fully conformant to the HTTP/1.1
+specification [RFC-2616]_. Support for the following functionality, in
+particular, are key:
+
+* The basic HTTP verbs: GET, HEAD, PUT, POST, DELETE, OPTIONS.
+* Asynchronous file-serving (including range requests).
+* Gzip compression to save on the bandwidth bill.
+* Larger than 512 byte response bodies for errors like 404s.
+* SSL/TLS connections [RFC-4346]_ for authentication/privacy.
+* Inclusion of ``[Plexnet]`` in the Server field of response headers.
+
+Given the high scalability needs of the modern web [Kegel-2001]_, it is
+RECOMMENDED that an event-driven approach is taken when implementing Nodes. If
+other approaches are used, care should be taken to ensure that the Node can
+support at least 10,000 concurrent persistent HTTP 1.1 connections on a modern
+computer.
+
+
+IPv6 Native
+===========
+
+.. raw:: html
+
+  <div class="float-right">
+    <p><a href="http://xkcd.com/195/"
+    title="A Map of the fast disappearing IPv4 space">
+    <img src="http://imgs.xkcd.com/comics/map_of_the_internet.jpg"
+         width="420px" height="610px"
+         alt="A Map of the fast disappearing IPv4 space" />
+    </a></p>
+  </div>
+
+With the coming crunch of the IPv4 address space [Bush-2007]_, it is vital that
+the transition to IPv6 [RFC-2460]_ is fully supported. Therefore Plexnet Nodes
+MUST support access via an IPv6 address.
+
+If a native IPv6 address cannot be used, tunnelling protocols like 6to4
+[RFC-3056]_ or Teredo [RFC-4380]_ are available.
+
+One of the side-benefits of using Teredo is that it allows for better access of
+Nodes than is often possible with NAT-ed IPv4 web servers. Thus, direct
+Node-to-Node communication would be possible without expensive relays.
+
+Of course the flip side is that the surface for attack vectors is increased. But
+that is a risk for operators of *any* internet service. Plexnet Nodes are no
+special in this regard.
+
+The following public Teredo servers are available for use:
+
+* debian-miredo.progsoc.org (Australia)
+* teredo.ipv6.microsoft.com (USA)
+* teredo.remlab.net (France)
+* teredo.plexnet.org (Germany)
+* 203.233.154.10 (Korea)
+
+
+Accessible Globally & Locally
+=============================
+
+All Plexnet Nodes SHOULD be accessible over the "Public Internet". This might
+seem like a rather draconian requirement, but it should be understandable given
+that net neutrality [Cerf-2006]_ may soon just be a beautiful dream we all once
+had.
+
+A sample configuration file for a Node may look like:
+
+.. syntax:: ini
+
+    node.id = '6409808a-3548-11db-f2fd-0016cb90e4dc'
+    node.ipv4 = '64.233.187.99'
+    node.ipv6 = '2001:4860:0:1001::68'
+
+    node.teredo_server = 'teredo.plexnet.org'
+    node.stun_server = 'stun.plexnet.org'
+
+In the event that a Node's public IPv4 and IPv6 addresses are not set, its IPv4
+address will be auto-detected through the use of STUN [RFC-3489]_. Likewise,
+with the use of Teredo for IPv6. If both of these fail to resolve, then the Node
+SHOULD fail to operate.
+
+The following public STUN servers are available for use:
+
+* stunserver.org
+* stun.plexnet.org
+
+In addition to binding to the given public addresses, a Node MUST also bind to
+localhost -- 127.0.0.1 (IPv4) [RFC-3330]_ and ::1 (IPv6) [RFC-3513]_. This is to
+ensure that Nodes are always accessible locally.
+
+Nodes MUST run on the ports ``8010`` (HTTP) *and* ``9010`` (HTTPS). These ports
+have been registered with the `IANA Port Registry`_ and the harmonisation allows
+for ease of discoverability of Plexnet Nodes.
+
+Thus the Node from the example configuration above, should be globally
+accessible via:
+
+* http://64.233.187.99:8010/
+* https://64.233.187.99:9010/
+* http://[2001:4860:0:1001::68]:8010/
+* https://[2001:4860:0:1001::68]:9010/
+
+And locally accessible via:
+
+* http://127.0.0.1:8010/
+* https://127.0.0.1:9010/
+
+
+Node Identity
+=============
+
+.. class:: sidebox
+
+  "Nodes will behave in a P2P (Peer-to-Peer) manner"
+
+Nodes have traditionally acted as just servers -- responding to requests from
+browser clients. In contrast, Plexnet Nodes will behave in a P2P (Peer-to-Peer)
+manner.
+
+It is expected that, instead of directly accessing web sites, users will access
+various resources through a Plexnet Node running locally. The Node will then
+access the resources from other Nodes using direct Node-to-Node communication.
+
+To facilitate this, Nodes MUST generate a 128-bit ``node.id`` -- using the
+MAC-based version 1 UUID protocol [RFC-4122]_. Whilst this reveals the
+MAC-address, there is no requirement for the UUID to be generated on the same
+host machine as the Node.
+
+These Node Identifiers serve a similar purpose to host names in the Domain Name
+System [RFC-1034]_. DNS has served extremely well as the "phone book" of the
+internet. But, despite all of ICANN's great work, it is tainted by greed
+[Cheng-2008]_ and censorship [Ardia-2008]_ by the Registrars.
+
+This should have been expected. "Projecting our notion of names onto DNS
+[subjects] the stability of links to the whims of political and social policy"
+[Frankston-2001]_. The Plexnet solves this by handling the issue of naming with
+a separate Plexnames_ mechanism.
+
+.. raw:: html
+
+  <div class="float-right">
+    <p><a href="http://geekandpoke.typepad.com/geekandpoke/2008/01/memories.html"
+    title="The threat posed by being dependent on domain names">
+    <img src="http://geekandpoke.typepad.com/geekandpoke/images/2008/01/07/memories1.jpg"
+         alt="The threat posed by being dependent on domain names" />
+    </a></p>
+  </div>
+
+This separation also helps the longevity of URIs [Berners-Lee-1998]_ -- which
+are currently dependent on yearly renewal of associated domain names. It is
+shocking that we entrust so much to a mechanism that is guaranteed to decay!
+
+A side-benefit of all this is an expected decrease in crime. Cybersquatting and
+phishing cease to have any value in a world where Node Identifiers no longer
+represent people-friendly .com handles.
+
+
+Node Registry
+=============
+
+In addition, Nodes MUST generate a public/private keypair in the form of X.509
+certificates [RFC-3280]_ for the purposes of acting as a Certificate Authority
+(CA). The Common Name (CN) field MUST be the 36-byte human readable format of
+the Node Identifier, e.g.
+
+::
+
+  6409808a-3548-11db-f2fd-0016cb90e4dc
+
+Standard precautions should be taken to ensure appropriate key length, duration
+and protection of the keys. The public key ``node.certificate`` MUST be DER
+encoded and ``node.fingerprint`` should be an ordered pair of the hash algorithm
+used, e.g. SHA-1 [FIPS-180-1]_, and the unencoded digest:
+
+  >>> node.fingerprint
+  ('sha1', '\xa5\xcaX\xaf\xb9\x98Zcv\xa80\xf3\x97\x03ro\xab/\xc8\xdf')
+
+When printed on paper for out-of-band exchange of certificates, the fingerprint
+SHOULD be presented in the format::
+
+  SHA1: A5CA 58AF B998 5A63 76A8 30F3 9703 726F AB2F C8DF
+
+Ideally all exchange and verification of unknown certificates would happen in
+person. But given how lazy we all are, it is RECOMMENDED that Node operators at
+least use the phone to verify the fingerprint of new Trusted Nodes.
+Man-in-the-middle attacks are very real.
+
+
+-----------
+Ignore This
+-----------
+
+Private key -- passphrase protected
+
+.. syntax:: python
+
+  def foo(entity_id, passphrase):
+      return sha256("%s:%s" % (entity_id, passphrase)).hexdigest()
+
+.. class:: sidebox
+
+  "We need to learn new designs, design frameworks, and design approaches from
+  naturally occurring, ultra large scale systems (e.g. biology, ecology)"
+  [Gabriel-2007]_
+
+Trusted Nodes
+
+Level 3 -- for self-authenticating services.
+
+DHT
+
+Node lookup
+
+But special Seed Node will be available at https://seed.plexnet.org
+
+First Contact.
+
+Locality Detector.
+
+Social routing.
+
+In addition, Nodes are expected to:
+
+* Support file upload monitoring via AJAX.
+* Support powerful proxying and redirect (internal/external) capabilities.
+* Have very simple request handlers -- just register and go!
+* Provide a pluggable logging/monitoring/statistics system.
+
+
+Plexnet Sockets
+
+Plexnet Sockets are similar in purporse to P2P sockets [Neuberg-2003]_.
+
+Defence mechanism -- drop connections if a primary violation is detected.
+
+Proxy Nodes are intended to act as public-facing...
+
+In addition to the official ports, a Proxy Node MUST also run on ports 80 and
+443 for HTTP and HTTPS traffic.
+
+.. syntax:: ini
+
+  node.host = 'tav.espians.com'
+
+
+Storage
+
+Event Server
+
+Peers
+
+Virtual Hosting
+
+Also helps in enabling better interfaces. For example, imagining being able to
+transfer a file to someone working on the multi-touch console in front of you.
+Instead of having to resort to emailing the file to her, you could just throw
+the virtual file in the direction of her console.
+
+Entity
+
+http://en.wikipedia.org/wiki/Sybil_attack
+
+http://open-content.net/specs/draft-jchapweske-thex-02.html
+
+http://wiki.freenetproject.org/FreenetConnections
+
+
+.. class:: sidebox
+
+  "The vast majority of programmers are those building end-user applications,
+  and the even greater population of potential programmers are the end-users
+  themselves" [Edwards-2004]_
+
+OpenID
+
+External Providers
+
+Facebook
+
+Google Auth
+
+Contexts
+
+Trust Maps
+
+.. _plexnames: #
+
+Plexnames
+
+Plexlinks
+
+Objects
+
+Code is data. Data is code. This is a truth that Lisp hackers have known for
+decades. But it applies to all of computing [Cawley-2008]_.
+
+http://apidoc.zope.org/++apidoc++/Code/BTrees/OOBTree/OOTreeSet/index.html
+
+Builtin types
+
+Plexnet Serialisation Format
+
+Versioning
+
+"A different performance issue is that the set of root inclusions grows
+monotonically, journaling all changes. It will be necessary to gradually forget
+the details of history by summarizing them into coarser versions, based on some
+configurable policy. In an end-user production environment, the policy might be
+to immediately forget history, enabling special optimizations."
+
+Schema
+
+Sensors
+
+Functional reactive programming
+
+Indexes
+
+Ordering
+
+Views
+
+Query
+
+Services
+
+Piping
+
+Typed
+
+Typed Text -- Markdown
+
+Service Definition -- Help -- Testing
+
+Service migration
+
+Templates
+
+Location Awareness
+
+Whether that be on a computer or a post-PC device.
+
+VoIP
+
+S.A.F.E
+
+Sanitisation
+
+xss, csrf
+
+Javascript
+
+Back button
+
+JS events
+
+Search
+
+UI
+
+Live preview
+
+App Launcher
+
+Mimetype Handler
+
+Slots
+
+Offline support
+
+Local device/drives support
+
+FS support
+
+CSS Layout
+
+Security
+
+OAuth
+
+Capability
+
+http://interconnected.org/notes/2005/06/reboot7/3steps/
+
+I18N
+
+Cache
+
+Services
+
+.. syntax:: python
+
+  @test_decorator()
+  def hello_world(var, foobar="hmz"):
+      """This is just to test the syntax highlighting -- ignore."""
+
+      if var == 'foo' and (foobar < 20) or len(foobar) == sum([var]):
+          return 'Yes'
+
+Formatting:
+
+.. syntax:: html
+
+   Foo <strong>Bar</strong> Yeah.
+
+Gestures
+========
+
+Gestures have been a key innovation in digital interaction. From the "drag"
+feature implemented on the early Apple Macintoshes to the implementations in the
+likes of Lionhead's Black & White game and the Opera browser to the recent day
+iPhone and Wii. [Saffer-2007]_
+
+
+
+
+--------------
+Implementation
+--------------
+
+.. class:: sidebox
+
+  "It only takes a couple of smart engineers to create quality software of
+  immense value" [Iskold-2008]_
+
+A reference implementation is currently being developed using `Python
+<http://www.python.org>`_, `PyPy <http://codespeak.net/pypy>`_, `C
+<http://en.wikipedia.org/wiki/C_(programming_language)>`_, `C++
+<http://en.wikipedia.org/wiki/C++>`_ and `Javascript
+<http://en.wikipedia.org/wiki/JavaScript>`_:
+
+* http://code.google.com/p/plexnet
+
+Downloadable packages will eventually be available at http://plexnet.org for all
+major modern platforms.
+
+In order to minimise bugs and maximise stability, test-driven [Beck-2002]_ and
+crash-only [Candea-2003]_ design approaches will be taken. The aim is for the
+reference implementation to be deployable within production environments.
+
+Others are strongly encourage to port it to their favourite programming
+environments *once* a stable version has been released. This Plexnet
+specification is intended to be language-agnostic and fully portable.
+
+
+-----------
+Future Work
+-----------
+
+Alternatives to TCP
+===================
+
+Anyone who has suffered congestion caused by heavy TCP traffic on a wireless
+network will be aware of TCP's shortcomings. In some applications, e.g. VoIP, it
+doesn't matter if packets are dropped but that they are delivered in
+"real-time".
+
+Airhook [Egnor-2001]_ is an alternative to TCP [RFC-793]_ -- implemented on top
+of UDP [RFC-768]_ -- which may offer a solution to these problems. And since
+HTTP is protocol independent, Nodes can start supporting Airhook for
+Node-to-Node communications without need for support from operating system or
+browser vendors.
+
+One interesting problem to solve would be to figure out how applications could
+take advantage of Airhook's flexibility from the HTTP level. Of course, even if
+Airhook does turn out to be a viable alternative, TCP won't disappear overnight.
+Both protocols would have to be concurrently supported for a while.
+
+
+-----------
+Conventions
+-----------
+
+Whilst this document is not meant to be normative_, it hopefully provides a basis
+for an official Plexnet set of Open Web standards to eventually emerge.
+
+In the meantime, the key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL
+NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "MAY", and "OPTIONAL" should be
+interpreted as described in RFC 2119 [RFC-2119]_.
+
+The use of Python syntax in code snippets is only for the purposes of clarity in
+expression. It seemed to make better sense than inventing some arbitary
+pseudo-code syntax [Norvig-2000]_.
+
+
+----------
+References
+----------
+
+.. [Ardia-2008]
+
+    `Court Orders Wikileaks.org Shutdown
+    <http://www.citmedialaw.org/blog/2008/court-orders-wikileaksorg-shutdown-then-grants-limited-reprieve>`_
+
+    David Ardia, Citizen Media Law Project, February 2008.
+
+.. [Beck-2002]
+
+    `Test Driven Development: By Example
+    <http://www.amazon.com/Test-Driven-Development-Addison-Wesley-Signature/dp/0321146530>`_
+
+    Kent Beck, Addison-Wesley Professional, 2002.
+
+.. [Berners-Lee-1989]
+
+    `Information Management: A Proposal
+    <http://www.w3.org/History/1989/proposal.html>`_
+
+    Tim Berners-Lee, CERN, 1989.
+
+.. [Berners-Lee-1998]
+
+    `Cool URIs Don't Change <http://www.w3.org/Provider/Style/URI>`_
+
+    Tim Berners-Lee, W3C, 1998.
+
+.. [Bush-2007]
+
+    `IPv6 Transition & Operational Reality
+    <http://www.nanog.org/mtg-0710/presentations/Bush-v6-op-reality.pdf>`_
+
+    Randy Bush, NANOG, 2007.
+
+.. [Candea-2003]
+
+    `Crash-Only Software
+    <http://web.archive.org/web/20060110174009/http://swig.stanford.edu/~candea/papers/crashonly/>`_
+
+    George Candea and Armando Fox, Proceedings of the 9th Workshop on Hot Topics
+    in Operating Systems (HotOS-IX), Lihue, Hawaii, May 2003.
+
+.. [Cawley-2008]
+
+    `Code is Data, and It Always Has Been
+    <http://www.bofh.org.uk/articles/2008/04/07/code-is-data-and-it-always-has-been>`_
+
+    Piers Cawley, April 2008.
+
+.. [Cerf-2006]
+
+    `Prepared Statement of Vinton G. Cerf
+    <http://commerce.senate.gov/pdf/cerf-020706.pdf>`_
+
+    Vinton G. Cerf, U.S. Senate Committee on Commerce, Science, and
+    Transportation Hearing on “Network Neutrality”, February 2006.
+
+.. [Cheng-2008]
+
+    `Keeping Network Solutions from Cashing in on Your Subdomains
+    <http://arstechnica.com/news.ars/post/20080410-keeping-network-solutions-from-cashing-in-on-your-subdomains.html>`_
+
+    Jacqui Cheng, Ars Technica, April 2008.
+
+.. [Edwards-2004]
+
+    `Manifesto of the Programmer Liberation Front
+    <http://alarmingdevelopment.org/index.php?p=5>`_
+
+    Jonathan Edwards, June 2004.
+
+.. [Edwards-2006]
+
+    `First Class Copy & Paste <http://hdl.handle.net/1721.1/32980>`_
+
+    Jonathan Edwards, MIT CSAIL, May 2006.
+
+.. [Edwards-2007]
+
+    `No Ifs, Ands, or Buts <http://subtextual.org/OOPSLA07.pdf>`_
+
+    Jonathan Edwards, OOPSLA, October 2007.
+
+.. [Eich-2007]
+
+    `What Does "Open" Mean?
+    <http://developer.mozilla.org/presentations/sxsw2007/the_open_web/>`_
+
+    Brendan Eich, Mozilla Corporation, 2007.
+
+.. [Egnor-2001]
+
+    `Airhook -- Reliable, efficient transmission control for networks that suck
+    <http://airhook.ofb.net/>`_
+
+    Dan Egnor, 2001.
+
+.. [FIPS-180-1]
+
+    `Secure Hash Standard <http://www.itl.nist.gov/fipspubs/fip180-1.htm>`_
+
+    National Institute of Standards and Technology, U.S. Department Of Commerce,
+    April 1995.
+
+.. [Fitzpatrick-2007]
+
+    `Thoughts on the Social Graph <http://bradfitz.com/social-graph-problem/>`_
+
+    Brad Fitzpatrick, August 2007.
+
+.. [Frankston-2001]
+
+    `DNS: A Safe Haven for URLs and Internet Identifiers
+    <http://www.frankston.com/?name=DNSSafeHaven>`_
+
+    Bob Frankston, August 2001.
+
+.. [Gabriel-2007]
+
+    `Design Beyond Human Abilities
+    <http://dreamsongs.com/Files/DesignBeyondHumanAbilitiesSimp.pdf>`_
+
+    Richard P. Gabriel, November 2007.
+
+.. [Iskold-2008]
+
+    `Top 10 Traits of a Rockstar Software Engineer
+    <http://www.readwriteweb.com/archives/top_10_software_engineer_traits.php>`_
+
+    Alex Iskold, ReadWriteWeb, 2008.
+
+.. [Kawasaki-2006]
+
+    `The Art of Innovation
+    <http://blog.guykawasaki.com/2006/01/the_art_of_inno.html>`_
+
+    Guy Kawasaki, 2006
+
+.. [Kegel-2001]
+
+    `The C10K Problem <http://www.kegel.com/c10k.html>`_
+
+    Dan Kegel, 2001.
+
+.. [Leggett-2008]
+
+    `Let's Get Crackin'!
+    <http://www.fightfortheopenweb.com/2008/04/10/lets-get-crackin/>`_
+
+    Russell Leggett, April 2008.
+
+.. [Levien-2000]
+
+    `Advogato's Trust Metric <http://advogato.org/trust-metric.html>`_
+
+    Raph Levien, February 2000.
+
+.. [Levien-2004]
+
+    `Attack Resistant Trust Metrics <http://www.levien.com/thesis/compact.pdf>`_
+
+    Raph Levien, Draft Thesis, 2004.
+
+.. [Miller-1988]
+
+    `Markets and Computation: Agoric Open Systems
+    <http://www.agorics.com/Library/agoricpapers/aos/aos.0.html>`_
+
+    Mark S. Miller and K. Eric Drexler, The Ecology of Computation, Bernardo
+    Huberman (ed.) Elsevier Science Publishers/North-Holland, 1988.
+
+.. [Neuberg-2003]
+
+    `Introduction to the Peer-to-Peer Sockets Project
+    <http://www.onjava.com/pub/a/onjava/2003/12/03/p2psockets.html>`_
+
+    Brad Neuberg, March 2003.
+
+.. [Neuberg-2008]
+
+    `What Is the Open Web and Why Is It Important?
+    <http://codinginparadise.org/weblog/2008/04/whats-open-web-and-why-is-it-important.html>`_
+
+    Brad Neuberg, April 2008.
+
+.. [Norvig-2000]
+
+    `Python for Lisp Programmers <http://norvig.com/python-lisp.html>`_
+
+    Peter Norvig, 2000.
+
+.. [RFC-768]
+
+    `User Datagram Protocol <http://www.rfc-editor.org/rfc/rfc768.txt>`_
+
+    Jon Postel, August 1980.
+
+.. [RFC-793]
+
+    `Transmission Control Protocol <http://www.rfc-editor.org/rfc/rfc793.txt>`_
+
+    IST, DARPA, September 1981.
+
+.. [RFC-1034]
+
+    `Domain names - Concepts and Facilities
+    <http://www.rfc-editor.org/rfc/rfc1034.txt>`_
+
+    Paul Mockapetris, November 1987.
+
+.. [RFC-2119]
+
+    `Key words for use in RFCs to Indicate Requirement Levels
+    <http://www.rfc-editor.org/rfc/rfc2119.txt>`_
+
+    Scott Bradner, March 1997.
+
+.. [RFC-2460]
+
+    `Internet Protocol, Version 6 (IPv6) Specification
+    <http://www.rfc-editor.org/rfc/rfc2460.txt>`_
+
+    Stephen E. Deering and Robert M. Hinden, December 1998.
+
+.. [RFC-2616]
+
+    `Hypertext Transfer Protocol -- HTTP/1.1
+    <http://www.rfc-editor.org/rfc/rfc2616.txt>`_
+
+    Roy Fielding, et al., June 1999.
+
+.. [RFC-3056]
+
+    `Connection of IPv6 Domains via IPv4 Clouds
+    <http://www.rfc-editor.org/rfc/rfc3056.txt>`_
+
+    Brian E. Carpenter and Keith Moore, February 2001.
+
+.. [RFC-3280]
+
+    `Internet X.509 Public Key Infrastructure Certificate and Certificate
+    Revocation List (CRL) Profile <http://www.rfc-editor.org/rfc/rfc3280.txt>`_
+
+    Russell Housley, et al., April 2002.
+
+.. [RFC-3330]
+
+    `Special-Use IPv4 Addresses <http://www.rfc-editor.org/rfc/rfc3330.txt>`_
+
+    IANA, September 2002.
+
+.. [RFC-3489]
+
+    `STUN - Simple Traversal of User Datagram Protocol (UDP) Through Network
+    Address Translators (NATs) <http://www.rfc-editor.org/rfc/rfc3489.txt>`_
+
+    Jonathan Rosenberg, et al., March 2003.
+
+.. [RFC-3513]
+
+    `Internet Protocol Version 6 (IPv6) Addressing Architecture
+    <http://www.rfc-editor.org/rfc/rfc3513.txt>`_
+
+    Robert M. Hinden & Stephen E. Deering, April 2003.
+
+.. [RFC-4122]
+
+    `A Universally Unique IDentifier (UUID) URN Namespace
+    <http://www.rfc-editor.org/rfc/rfc4122.txt>`_
+
+    Paul J. Leach, et al., July 2005.
+
+.. [RFC-4346]
+
+    `The Transport Layer Security (TLS) Protocol Version 1.1
+    <http://www.rfc-editor.org/rfc/rfc4346.txt>`_
+
+    Tim Dierks and Eric Rescorla, April 2006.
+
+.. [RFC-4380]
+
+    `Teredo: Tunneling IPv6 over UDP through Network Address Translations (NATs)
+    <http://www.rfc-editor.org/rfc/rfc4380.txt>`_
+
+    Christian Huitema, February 2006.
+
+.. [Saffer-2007]
+
+    `A Call to Arms for Interaction Designers
+    <http://www.adaptivepath.com/blog/2007/08/28/a-call-to-arms-for-interaction-designers/>`_
+
+    Dan Saffer, Adaptive Path, 2007.
+
+.. [Slee-2007]
+
+    `Thrift: Scalable Cross-Language Services Implementation
+    <http://developers.facebook.com/thrift/thrift-20070401.pdf>`_
+
+    Mark Slee, Aditya Agarwal and Marc Kwiatkowski, Facebook, 2007.
+
+.. # hyperlinks
+
+.. _Nokia S60: http://www.s60.com/
+.. _Microsoft Silverlight: http://silverlight.net/
+.. _Facebook F8: http://developers.facebook.com/
+.. _Apple iPhone: http://developer.apple.com/iphone/
+.. _Adobe Flash: http://www.adobe.com/devnet/
+.. _IANA Port Registry: http://www.iana.org/assignments/port-numbers
+.. _net neutrality: http://en.wikipedia.org/wiki/Net_neutrality
+.. _normative: http://en.wikipedia.org/wiki/Normative
+
+.. # we render the above hyperlinks with back references
+
+.. # target-notes::
+
+------------
+Related Work
+------------
+
+There are many individuals and groups who are tackling similar and relevant
+issues. It would be good to work with many of them. Here is a brief list of some
+of them:
+
+* http://codespeak.net/pypy
+* http://www.dataportability.org
+* http://www.divmod.org
+* http://www.erights.org
+* http://freenetproject.org
+* http://www.identitycommons.net
+* http://www.interactivegestures.com
+* http://ipv6.internet2.edu
+* http://www.libavg.de
+* http://www.opencroquet.org
+* http://www.openlaszlo.org
+* http://peak.telecommunity.com
+* http://www.rubyonrails.org
+* http://wiki.secondlife.com/wiki/Architecture_Working_Group
+* http://www.voip-info.org
+* http://www.w3.org/2001/sw/
+* http://www.whatwg.org
+* http://www.xdi.org
+
+There is also some very cool work being done at the major companies:
+
+* http://aws.amazon.com (Dynamo, S3, SimpleDB, &c.)
+* http://research.google.com/pubs/papers.html (MapReduce, BigTable, GFS, &c.)
+* http://developer.yahoo.com (Hadoop, FireEagle, &c.)
+
+---------------
+Acknowledgments
+---------------
+
+For their inspiration:
+
+* Allen Short, Bryce Wilcox-O'Hearn, Daniel Biddle, Douglas Crockford, Luke
+  Graybill, Mark S. Miller, Øyvind Selbek, Peter-Paul Koch, Simon Michael, Steve
+  Alexander, Tavin Cole and Tim Jenks.
+
+For being there when the Plexnet vision came to be, back in summer 2001:
+
+* Mathew Ryden and Fenton Whelan.
+
+For having had the balls to try something equally ambitious decades ago:
+
+* Ted Nelson.
+
+For having created the Open Web in the first place:
+
+* Tim Berners-Lee.
+
+For improvements to this document:
+
+* Mark Poole, Simeon Scott.
+
+For being instrumental in forging the Plexnet from abstract vision to technical
+realism:
+
+* Alex Tomkins, James Arthur, Jeffry Archambeault, Luke Graybill, Mathew Ryden,
+  Øyvind Selbek, Phillip J. Eby, Sean B. Palmer, Stefan Plantikow, Thomas
+  Salfield and Yan Minagawa.
+
+Thank you!

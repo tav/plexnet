@@ -1,0 +1,331 @@
+=====
+Toman
+=====
+
+A Constitution for the Commons
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+:Abstract:
+
+    This Member Agreement ("Constitution") serves as the organising framework
+    for the Members ("Espians") of Metanational Commons Ltd. ("The Metanational
+    Commons") -- incorporated as Company No. 6834341 in the United Kingdom.
+
+    It has been ratified by the Espians: Tav (Vageesan Sivapathasundaram) and
+    Sofia Bustamante.
+
+.. contents::   Table of Contents
+                :depth: 2
+                :backlinks: none
+
+.. raw:: html
+
+  <style type="text/css">
+    body { counter-reset: legalese; }
+    h1, h2, h3 { font-family: Georgia; border-bottom: 0px; color: #620000; }
+    #content em { color: #620000; font-style: normal; }
+    #content h1 { border-bottom: 0px; margin-top: 0em; font-size: 1.2em; }
+    h1.title { counter-reset: legalese; }
+    .document h1:before {
+      counter-increment: legalese; content: counter(legalese) ". " ;
+    }
+    h1.title:before { content: ""; }
+    ol { counter-reset: legalsection; list-style-type: none; }
+    ol li:before {
+      counter-increment: legalsection; color: #620000;
+      content: counter(legalese) "." counters(legalsection, ".") " ";
+    }
+    ol li { margin-top: 12px; padding-left: 2em; text-indent: -2em; }
+    ol li > ol li { padding-left: 2em; text-indent: -3em; }
+    #header { background-color: #620000; }
+    #header img { display: none; }
+    #header h1 { padding-left: 100px; }
+  </style>
+
+--------
+Preamble
+--------
+
+The right of humanity to survive in this Universe is neither inalienable nor
+guaranteed. It is by our actions
+
+
+----------
+Principles
+----------
+
+1. Melanin is a social enterprise committed to enabling and nurturing "true
+   communities" around sustainable social, economic and environmental values.
+
+2. Melanin is designed as a robust, network-based organisation that has at its
+   core, a team and infrastructure that provides leadership, innovation and
+   support services for this purpose.
+
+1. Melanin is an "enabling organisation" that is built on shared principles of
+   practise which all Espians subscribe to.
+
+   1. *Rule of Ethics.*
+
+   1. *Social Business.* Combining elements of a commercial enterprise with
+      elements of a not-for-profit organisation, Melanin will not distribute
+      profits to shareholders -- it has no shareholders -- and instead shares
+      the financial and other values it produces equitably amongst Espians to
+      further their social objectives.
+
+   2. *Dignity.* By enabling people to have the freedom to access opportunities,
+      contribute and be heard, Melanin seeks to raise the inherent value in
+      local communities in a way that respects human dignity and potential. It's
+      not just what you do but how you do it. A deep ecology approach.
+
+   3. *Integrity.* The health of all communities, including Melanin's, is
+      dependent on the inner and outer awareness and well-being of its members.
+      An integral, holistic approach needs to be taken -- healing past damages
+      appropriately -- in the process of becoming whole.
+
+   4. *Peer-to-Peer.* Social technologies and processes can enable communities
+      to self-organise and tack complex, real-world situations in pragmatic ways
+      that is mutually beneficial for all involved -- so that higher values of
+      social and economic justice can prevail.
+
+   5. *United Diversity.* Melanin's decentralised and flexible structure is
+      powered from the periphery and unified from the core -- fostering
+      diversity, complexity and change in a way that counters the paradigm of
+      command and control.
+
+   6. *Self-Rule & Democracy.* Power, rights, responsibility and rewards are
+      distributed equitably amongst Espians whilst ensuring that the cultures
+      and conditions for learning, risk-taking and inter-disciplinary innovation
+      are cultivated in ever expanding circles.
+
+   7. *Transparency.* By being open and transparent, Melanin will act as an
+      ethical bridge to help rebuild trust within communities -- trust often
+      lost due to a lack of accountability by those in positions of
+      responsibility regarding the commitments they have made towards achieving
+      social equity.
+
+   8. *Emergence.* The most meaningful connections and some of the most powerful
+      outcomes happen without being planned. Melanin cultivates a dynamic mix
+      of old and new worldviews, of top down and bottom up, of chaos and order
+      and of leadership and participation -- such that higher forms of value and
+      life unfold.
+
+   9. *Cooperative Values.* Melanin recognises that "together, we have
+      everything" and subscribes to the 1995 Statement of Cooperative Identity
+      of the International Cooperative Alliance.
+
+----------
+Membership
+----------
+
+.. sidebar::  Attention
+
+  Espians should understand that LLPs are tax transparent. Therefore it is up to
+  all Espians to ensure that they pay the appropriate Income Tax, NI
+  Contributions, Capital Gains Tax, &c. in their locality.
+
+1. Melanin rests on equitable and mutual value exchange between Espians. A
+   "Give-Get" framework guides this reciprocity.
+
+   1. Membership is open to all who are willing to accept the associated
+      responsibilities.
+
+   2. Membership is made available without gender, social, racial, political or
+      religious discrimination.
+
+2. The efforts of Espians occur under specific Operational Contexts ("Contexts")
+   and is valued in terms of Work Units ("Units").
+
+   1. Rich picture.
+
+   2. Registry ("Registry") -- transparent.
+
+   3. The shared goals  work is carried out through policies approved by the democratic
+      Membership body of Melanin.
+
+3. Melanin is structured around three distinct classes of Membership. The first
+   two classes are collectively referred to as the "Operational Espians".
+
+   1. *Core Espians.* The servant leaders who provide the vision and embody the
+      principles articulated in § 2.
+
+   2. *Open Espians.* Individuals who are engaged on a full-time or near
+      full-time basis.
+
+   3. *Stakeholder Espians.* External parties who have enabled or benefited from
+      the efforts by Operational Espians and thus.
+
+4. Core Espians: Give
+
+   1. Ensure quarterly reports are produced that include but that are not
+      limited to: management accounts, strategic learning and priorities for the
+      following quarter.
+
+   2. Ensure that annual returns and accounts are filed with Companies House and
+      partnership tax returns are sent to Her Majesty's Revenue & Customs.
+
+5. Core Espians: Get
+
+6. Open Espians: Give
+
+   1. Tav a lot of love and attention.
+
+   2. Responsive participation in online spaces framed around communities of
+      practice.
+
+7. Open Espians: Get
+
+8. Stakeholder Espians: Give
+
+9. Stakeholder Espians: Get
+
+.. This Constitution shall commence on the Effective Date and shall continue in
+   force for a year (at which point it will be renewed subject to review), or
+   until terminated by either of the parties giving 6 months notice of
+   termination in writing to the other party.
+
+-------------------------------
+Common Socio-Economic Protocols
+-------------------------------
+
+-------------------
+Resource Management
+-------------------
+
+-------------------
+Conflict Resolution
+-------------------
+
+1. Conflicts are a natural part of all endeavours.
+
+2. Conflicts are seen as creative -- indicating differences of perspective from
+   which all participants can learn. Solutions that best satisfy the underlying
+   needs and desires of all related Espians will be attained using methods and
+   processes that ensure that all parties are heard and understood.
+
+3. Mediation.
+
+4. Arbitration.
+
+---------------------
+Intellectual Property
+---------------------
+
+1. All original works ("Works") of authorship created by Espians (solely or
+   jointly with others) -- except Stakeholder Espians -- within the scope of and
+   during the period of Membership within Melanin and which are protectable by
+   copyright are "works made for hire" for Melanin as that term is defined in
+   the Copyright, Designs and Patents Act 1988.
+
+2. Melanin dedicates all copyright held in the Works to the public domain.
+
+   1. Melanin makes this dedication for the benefit of the public at large and
+      intends this dedication to be an overt act of relinquishment in perpetuity
+      of all present and future rights under copyright law, whether vested or
+      contingent, in the Work. Melanin understands that such relinquishment of
+      all rights includes the relinquishment of all rights to enforce (by
+      lawsuit or otherwise) those copyrights in the Work.
+
+   2. Melanin recognizes that, once placed in the public domain, the Work may be
+      freely reproduced, distributed, transmitted, used, modified, built upon,
+      or otherwise exploited by anyone for any purpose, commercial or
+      non-commercial, and in any way, including by methods that have not yet
+      been invented or conceived.
+
+   3. All Works are distributed "as-is". All conditions, warranties and terms
+      and undertakings express or implied statutory or otherwise are expressly
+      excluded to the fullest extent permitted by law.
+
+3. Espians grant Melanin with a non-exclusive, worldwide, royalty-free license
+   under any licensed patents they may have to make, have made, use, sell, offer
+   for sale, import, and/or otherwise dispose of contributions to any and all
+   Works.
+
+4. Melanin complies with the Data Protection Act 1998, including all amending UK
+   legislation and EU directives. Pursuant to the Act, beneficiaries of
+   Melanin's services have the right to be informed of and to have access to all
+   of the personally identifiable information held about them.
+
+-----------
+Small Print
+-----------
+
+1. General Provisions 
+ 
+   1. This Constitution constitutes the entire agreement and understanding of the
+      Espians and supersedes all prior oral or written agreements,
+      understandings or arrangements relating to the subject matter of this
+      Constitution. No Espian shall be entitled to rely on any agreement,
+      understanding or arrangement which is not expressly contained in this
+      Constitution.
+ 
+   2. No failure or delay on the part of Espians to exercise any right or remedy
+      under this Constitution shall be construed or operate as a waiver thereof.
+      Nor shall any single or partial exercise of any right or remedy preclude
+      the further exercise of such right or remedy as the case may be.
+
+   3. This Constitution (including any provision hereof) -- whilst intended as a
+      "living document" -- shall not be modified, amended, or waived except in
+      writing signed by a two-thirds supermajority of Core Espians.
+ 
+2. Interpretation
+ 
+   1. The headings in this Constitution are for convenience only and shall not
+      affect its construction.
+ 
+   2. Where appropriate, words denoting the singular shall include the plural
+      and vice versa.
+ 
+   3. Reference to any statute or statutory provision includes a reference to
+      the statute or statutory provision as from time to time amended, extended
+      or re-enacted.
+
+3. Severability 
+ 
+   1. If any provision or term of this Constitution shall become or be declared
+      illegal, invalid or unenforceable, the legality and validity of any other
+      provision shall not be affected thereby. Any illegal, inconsistent or
+      invalid provision of this Constitution shall be severable and all other
+      provisions shall remain in full force and effect.
+
+4. Third Party Rights 
+ 
+   1. No third party shall have the right to enforce the terms of this
+      Constitution whether pursuant to the Contracts (Rights of Third Parties)
+      Act 1999 or otherwise.
+
+5. Governing Law
+
+   1. This Constitution and any contracts made under it shall be governed by and
+      construed in accordance with the laws of England and Wales whose courts
+      shall be the exclusive courts of competent jurisdiction.
+
+---------------
+Acknowledgments
+---------------
+
+* The ancient Greeks for having introduced democracy.
+
+* The framers of the United States Constitution and the anonymous authors of the
+  Federalist Papers for having had the courage and insight to pave the way with
+  their efforts.
+
+* Mahatma Gandhi and Buckminster Fuller for having been the change that they
+  wanted to be and being inspirations for a better world.
+
+* Kim Stanley-Robinson for having authored the visionary Mars Trilogy and the
+  Martian Constitution in the fourth book, Martians. The terms "metanational",
+  "eco-economy" and "gift economy" were adopted from his works.
+
+* The anonymous author P.M. for having envisioned how decentralised societies
+  could truly function in "Bolo'Bolo".
+
+* Neal Stephenson for having explored the impacts of technology on society and
+  for introducing the term "Common Economic Protocol" in his "Diamond Age".
+
+* Dee Hock for having structured Visa Inc. in a more egalitarian form than
+  traditional capitalist structures -- later promoted as "Chaordic" in his
+  "Birth of the Chaordic Age".
+
+* All the individuals throughout history who have helped form a better reality.
+
+* The Universe for being so bountiful and having honoured us with life.
