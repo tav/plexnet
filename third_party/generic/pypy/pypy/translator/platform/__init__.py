@@ -74,7 +74,7 @@ class Platform(object):
 
     def execute(self, executable, args=None, env=None, compilation_info=None):
         if env is None:
-            env = {}
+            env = os.environ.copy()
         if compilation_info is not None:
             env['LD_LIBRARY_PATH'] = ':'.join(
                 [str(i) for i in compilation_info.library_dirs])
@@ -128,12 +128,8 @@ class Platform(object):
         return (cflags + list(eci.compile_extra) + args)
 
     def _link_args_from_eci(self, eci, standalone):
-        if standalone:
-            library_dirs = self._libdirs(eci.library_dirs)
-            libraries = self._libs(eci.libraries)
-        else:
-            library_dirs = []
-            libraries = []
+        library_dirs = self._libdirs(eci.library_dirs)
+        libraries = self._libs(eci.libraries)
         link_files = self._linkfiles(eci.link_files)
         return (library_dirs + libraries + self.link_flags +
                 link_files + list(eci.link_extra))

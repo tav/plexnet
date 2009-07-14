@@ -32,5 +32,5 @@ class TestMaemo(BasicTest):
         res = self.platform.execute(executable)
         self.check_res(res)
 
-    def test_shared_no_links(self):
-        py.test.skip("Unsupported")
+    def test_environment_inheritance(self):
+        py.test.skip("FIXME")
