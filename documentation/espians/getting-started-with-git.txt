@@ -40,7 +40,9 @@ for decentralised development without much hassle. Not only does this reflect
 the Plexnet ethos, but it paves the way for an eventual PlexSource system.
 
 Git also outshines centralised version control system like `Subversion
-<http://subversion.tigris.org/>`_ in terms of performance:
+<http://subversion.tigris.org/>`_ in terms of performance. This is mainly due to
+the fact that Git doesn't have to make needless network requests since it has an
+entire copy of the repository available locally, e.g.
 
 ::
 
@@ -65,14 +67,14 @@ checkout is only of a *single* revision!
    53M  ./django-hg
    53M  ./django-svn
 
-As for other competing DVCS systems, the one that is comparable to Git is the
-`Mercurial <http://www.selenic.com/mercurial/>`_ distributed version control
-system. Mercurial has the nice feature of being coded entirely in Python and
-being very extendable.
+As for other competing DVCS systems, `Mercurial
+<http://www.selenic.com/mercurial/>`_ has the nice feature of being coded
+entirely in Python and being very extendable.
 
-And feature-wise, Git and Mercurial are very similar. In fact their object
-models are pretty identical. However, besides lacking a decent GitHub
-equivalent, Mercurial also currently lacks two really nice features of Git:
+Git and Mercurial are very similar -- in fact their object models are so
+identical that there's a `hg-git mercurial plugin <http://hg-git.github.com/>`_.
+However, besides lacking a decent GitHub equivalent, Mercurial also currently
+lacks two really nice features of Git:
 
 * `Super cheap/quick branching
   <http://whygitisbetterthanx.com/#cheap-local-branching>`_
@@ -93,12 +95,12 @@ First Steps
 If you don't have an account already, go sign up on `GitHub
 <http://github.com>`_. It only takes a minute and they provide a very generous
 `free account <https://github.com/signup/free>`_. Whilst a pain, please also add
-a profile image for the email address you signed up with on `Gravatar
-<http://www.gravatar.com/>`_. And, finally, upload your SSH key there and you're
-all set to go!
+a profile image for the email address you signed up with using GitHub's sister
+service `Gravatar <http://www.gravatar.com/>`_. And, finally, upload your SSH
+key to GitHub and you're all set to go!
 
 The next step is to install Git if you don't already have it. It is RECOMMENDED
-that you install the 1.6.x version of Git as its user interface is much much
+that you install version 1.6.3+ of Git as its user interface is much much
 better:
 
 * http://git-scm.com/download
@@ -133,10 +135,11 @@ want to extend this file with something like the following:
         lp = log -p
         diffall = diff HEAD
         diffstaged = diff --staged
-        graph = log --pretty=oneline --graph
-        filelog = log --pretty=oneline --no-merges --
-        origin = push origin master
+        graph = log --oneline --graph
+        filelog = log --oneline --no-merges --
         unstage = reset HEAD
+    [push]
+        default = matching
     [core]
         autocrlf = true
         webKitBranchBuild = true
@@ -147,14 +150,14 @@ which can be quite useful.
 
 The ``[alias]`` section allows you to alias shortcuts, e.g. with the above alias
 definition, you can now just run ``git graph`` instead of the full ``git log
---pretty=oneline --graph``. In combination with the git `bash completion
+--oneline --graph``. In combination with the Git `bash completion
 <http://www.simplicidade.org/notes/archives/2008/02/git_bash_comple.html>`_
 script, aliases will make life much easier for your fingers.
 
 The ``[github]`` section is used by special GitHub powered tools -- you can find
 your token on your `GitHub account <https://github.com/account>`_ page. One
 GitHub powered tool that's super cool is `Gist <http://gist.github.com/>`_ --
-the best pastebin out there, with all of your pastes automatically becoming git
+the best pastebin out there, with all of your pastes automatically becoming Git
 repositories! Gist also has a number of command line and editor interfaces:
 
 * `Gist command-line (Ruby version)
@@ -176,6 +179,21 @@ And, finally, the ``core.webKitBranchBuild = true`` and
 Plexnet build scripts to append the name of the git branch you are in to the
 build directory. This is especially useful so you don't clobber your previous
 branch's build when you switch branches.
+
+You can further configure a local Git repository using ``git config <param>
+<value>``, e.g.
+
+::
+
+  git config branch.autosetuprebase always
+
+This will update a ``.git/config`` file inside a local repository. If you want
+to set the configuration globally, i.e. in your ``~/.gitconfig`` file, you can
+pass the optional ``--global`` flag, e.g.
+
+::
+
+  git config --global branch.autosetuprebase always
 
 -------------------
 Espian Repositories
@@ -368,7 +386,7 @@ Whist remotes are important for sharing changes with other developers, it's
 
 Unlike in Subversion, where you do ``svn add`` only once to add files to the
 repository, Git distinguishes your working directory from what it calls the
-"staging area".
+"staging area" or "index file".
 
 .. raw:: html
 
@@ -718,6 +736,10 @@ Or something like::
   Previous HEAD position was 5cbb8e9... readding build script for osx/windows
   HEAD is now at ba9014e... WebCore:
 
+You can go back to the last branch you were on using::
+
+  $ git checkout -
+
 Since you'd "checked out" remote branches, Git would have updated your working
 tree with the state of the latest commit in the remote branch, set your HEAD to
 the commit identifier and set your local branch reference to "no branch"::
@@ -756,6 +778,13 @@ Similarly, you can delete remote branches using ``git push <remote>
 ::
 
   $ git push origin :titanium_1.0_win32_osx
+
+You can always see which remote branches your local branches are set to track
+using::
+
+  $ git branch -v -v
+    master  ba9014e [origin/master] WebCore:
+  * testing ba9014e WebCore:
 
 Anytime you are working in a local named branch and do a commit, Git will
 automatically update the pointer for the branch to the new commit identifier.
@@ -857,7 +886,7 @@ The term "fast forward" simply means that changes in a branch can be advanced
 along a linear sequence. That is, there was never any divergence or simultaneous
 commits created in parallel in multiple repositories.
 
-You can therefore normally fix non-fast foward errors on pushs by simply
+You can therefore normally fix non-fast foward errors on pushes by simply
 fetching and merging changes from the remote repository before pushing your
 changes, i.e. ``git pull`` before you ``git push`` again.
 
@@ -923,6 +952,10 @@ command ``git branch --track <new-branch-name> <remote-branch-name>``, e.g.
 
   $ git branch --track testing origin/master
 
+You can also create and checkout a tracking branch using ``git checkout --track
+<remote-branch-name>`` which is an optimised form of ``git checkout --track -b
+<new-branch-name> <remote-branch-name>``.
+
 Now whilst it's nice that ``git pull`` automatically does all this for you, it's
 often better to simply do manually what git pull is doing for you automatically.
 That is, to do ``git fetch`` followed by a ``git merge``.
@@ -947,9 +980,16 @@ to ``git fetch origin && git fetch upstream`` for our previous example::
   Updating origin
   Updating upstream
 
+You can also prune any stale tracking branches you might have whilst doing a
+remote update using, ``git remote update --prune <remote>``, e.g.
+
+::
+
+  $ git remote update --prune origin
+
 Doing a manual git merge is also quite easy. A command of the form ``git merge
-<remote-branch-name>`` will merge any changes from the remote branch into your
-current branch, e.g.
+<rev>`` will merge any changes from the revision identifier, usually a remote
+branch, into your current branch, e.g.
 
 ::
 
@@ -965,7 +1005,34 @@ you of the various conflicts and leave it up to you to resolve the conflicts --
 the conflicted files will have special conflict markers which you'd need to
 decide between -- before doing a manual merge commit yourself.
 
-Yu can pass an optional ``--no-commit`` parameter to tell Git to not autocommit
+Instead of manually resolving conflicts in a file, if you know that you just
+want to use your version of a file during a merge, you can "resolve" it using::
+
+  $ git checkout --ours path/to/some/file
+
+Or you can use the file from the merged in revision using::
+
+  $ git checkout --theirs path/to/some/other/file
+
+Behind the scnes this makes use of the ``ORIG_HEAD`` and ``MERGE_HEAD`` revision
+identifiers which are created by commands like merge and respectively refer to
+the original position of the ``HEAD`` before the command was executed and the
+revisions you are merging.
+
+You can always go back to the initial conflicted state using::
+
+  $ git checkout -m
+
+You can list branches that have already been merged/not-merged into the current
+branch using::
+
+  $ git branch --merged
+
+::
+
+  $ git branch --no-merged
+
+You can pass an optional ``--no-commit`` parameter to tell Git to not autocommit
 the resulting merge commit -- allowing you to do sanity checks on the changes
 being applied::
 
@@ -982,13 +1049,134 @@ message::
 
 What this means is that the merge operation is trying to apply changes to a file
 in your local working tree, however that file has changes which your local git
-repository doesn't know about -- becuase you haven't committed the changes
+repository doesn't know about -- because you haven't committed the changes
 locally!!
 
 The simple solution is just to commit the changes in your working tree to your
 local repository before re-running the merge command. But if you don't want to
 commit the changes, but still want to keep your changes around for some purpose,
 you can use the ``git stash`` command to "stash" anything not in your HEAD.
+
+-----
+Stash
+-----
+
+You stash your working tree changes using ``git stash save [<stash-name>]``, e.g.
+
+::
+
+  $ git stash save
+
+You can apply the changes from a stash (by default the most recent) to your
+current working tree using ``git stash apply [<stash-name>]`` or you can apply
+*and* remove the stash with the command ``git stash pop [<stash-name>]``.
+
+You can list all your stashes with ``git stash list`` and show the contents of
+specific stashes with ``git stash show <stash-name>``. The show subcommand
+accepts git diff format arguments, so to show the stash in patch form you can
+run ``git stash show -p <stash-name>``.
+
+And, finally, you can delete all of your stashes with::
+
+  $ git stash clear
+
+------
+Rebase
+------
+
+Instead of merging in changes on *top* of your local commits, you might
+occassionally want to apply your changes on *top* of updates you've received
+instead. This is called rebasing -- it effectively "forward-ports" your local
+commits to the updated upstream head.
+
+The nice thing about rebasing as opposed to merging is that it is often cleaner,
+keeps the history linear and avoids all the superfluous merge commits. The
+downside is that it can be dangerous (i.e. break everything) if you've already
+shared (i.e. pushed) the local commits.
+
+But as long as you follow the First Rule of Rebasing, everythng will be fine::
+
+  DO NOT rebase commits that you have already PUSHED
+
+It is also important to note that a rebase will perform an automatic ``git
+checkout <destination-branch>`` if a destination is specified, otherwise the
+current branch would be used.
+
+So, if we were on the "testing" branch whose revision history looked like::
+
+                A---B---C  testing
+               /
+          D---E---F---G  master
+
+Then running either::
+
+  $ git rebase master
+
+Or::
+
+  $ git rebase master testing
+
+Would change the revision history to become::
+
+                         A'--B'--C'  testing
+                       /
+          D---E---F---G  master
+
+If the source branch, "master" in the above example, already contained changes
+you'd made (perhaps you'd sent a patch which had gotten applied upstream) then
+that commit will be skipped.
+
+You can use the ``--onto`` version of git rebase to "transplant" a sub-branch of
+one branch to another. For example, if the revision history looked like::
+
+               o---o---o---o---o  master
+                    \
+                     o---o---o---o---o  testing
+                                      \
+                                       o---o---o  maintests
+
+
+Then you can run::
+
+  $ git rebase --onto master testing maintests
+
+To get::
+
+               o---o---o---o---o  master
+                   |            \
+                   |             o'--o'--o'  maintests
+                    \
+                     o---o---o---o---o  testing
+
+
+Similarly, you can also use rebase to remove certain commits, e.g.
+
+::
+
+  $ git rebase --onto testing~5 testing~3 testing
+
+Will remove commits B and C from::
+
+  A---B---C---D---E---F  testing
+
+To form::
+
+  A---D'---E'---F'  testing
+
+You can tell Git to perform a rebase instead of a merge when you do a git pull
+with::
+
+  $ git pull --rebase
+
+You can configure ``branch.autosetuprebase = always`` to automatically configure
+``branch.<name>.rebase`` whenever you create a new branch with ``git branch`` or
+``git checkout -b`` so that git pull will rebase instead of merging::
+
+  $ git config --global branch.autosetuprebase always
+
+You can override this behaviour with::
+
+  $ git pull --no-rebase
 
 -------------
 Revision Info
@@ -1020,22 +1208,22 @@ are ``git log -p`` -- which shows you the relevant diffs for the commits as well
 -- and the following, which shows you the commit log in a compressed form along
 with a small graph of the revision relations::
 
-  $ git log --pretty=oneline --graph
-  * aeb0fbcb02ea0a6e0cba683cfb8364661e69b83e Fixed line-endings and removed ...
-  *   20db6feaa24ed7eb16675140340974ca0b615599 Merging in changes ...
+  $ git log --oneline --graph
+  * aeb0fbc Fixed line-endings and removed extraneous }s and it now compiles!!
+  *   20db6fe Merging in changes since I'd reset to a non-HEAD ..
   |\  
-  | * 72e060fc59a467527dc1d80894e31108114c716f Added support to get PyPy ...
-  | * 43285ab9faa57e66a5f6df2778b1fb2846a64160 Adding references to PyPy.cpp ...
-  | * 21a2a65ba694fc58eae1efaea380deaf8b88f400 Adding our default ...
-  * | 8ac5155984b0203a859002e251c82a1e33066b67 Some basic mods to get...
+  | * 72e060f Added support to get PyPy bindings building in the xcode project.
+  | * 43285ab Adding references to PyPy.cpp/h to the WebCore Xcode project.
+  | * 21a2a65 Adding our default .gitignore to the Webkit repository.
+  * | 8ac5155 Some basic mods to get the damn thing building.
   |/  
-  * 0a1dfdc9eb2f9162eb820699ccca1d9edd094fcf Add pypy bindings
+  * 0a1dfdc Added PyPy bindings.
 
 You can see the commit logs between two branches, e.g.
 
 ::
 
-  $ git log master..testing --pretty=oneline
+  $ git log master..testing --oneline
 
 You can even review the changes in specific files since a certain point, e.g.
 
@@ -1048,6 +1236,186 @@ example do::
 
   $ git diff master..testing
 
+And you can always just get a listing of just the changes by passing the
+optional parameters ``--stat``, ``--name-only`` or ``--name-status`` to the diff
+command. Similarly, you can pass in a number to the optional
+``--unified=<number-of-lines>`` to specify how many lines of context you want
+around the diff changes.
+
+-------
+Undoing
+-------
+
+If you want to revert any changes you've made to a file in your working tree and
+want to go back to the version in the repository, the ``git checkout`` command
+which you've seen be used to switch to (and sometimes even create) branches, can
+also be used to re-checkout file(s) from a revision into your current working
+tree.
+
+The Git equivalent of ``svn revert`` is of the form ``git checkout <rev> --
+<files>``. If the filename(s) don't conflict with any ``<rev>`` revision
+identifier, then you can leave out the additional ``--``. You can also generally
+leave out the revision identifier as it defaults to ``HEAD``. So to re-checkout
+*all* files, you can run the expected::
+
+  $ git checkout .
+
+The ``git revert <rev>`` command in contrast behaves quite differently from
+other version control systems. It "reverts" a *commit* by applying an inverse
+patch as an *additional* commit.
+
+The third way you will undo changes in Git is using ``git reset
+[--soft|--hard|--merge|--mixed] <rev>``:
+
+* ``--mixed`` (default) -- resets the index (staging area) but leaves the
+  working tree as it is.
+
+* ``--soft`` -- changes HEAD to point to the given revision, but does not touch
+  the index file or the working tree.
+
+* ``--hard`` -- resets the current HEAD to the specified revision and updates
+  everything (including your index and working tree) to match. All changes to
+  tracked files in your working tree would be LOST.
+
+* ``--merge`` -- resets the HEAD and index, but w.r.t your working tree it works
+  similar to the way "git checkout" switches branches, i.e. it takes your local
+  changes while switching to another revision.
+
+Note: running the following can be dangerous::
+
+  $ git reset --hard
+
+It will abandon all changes since your last commit. However it can be useful in
+instances when you just want to wipe away all changes you've just been making or
+if you'd like to forget about the merge you just did which has resulted in
+conflicts.
+
+On the other hand, if your merge was successful, and you'd still like to undo it
+and any other changes you've done since, you can do::
+
+  $ git reset --hard ORIG_HEAD
+
+Resetting to alter history is definitely NOT ADVISED unless you know what you're
+doing, e.g.
+
+::
+
+  $ git reset HEAD~3
+
+The above command would make the last 3 commits disappear. DO NOT do this if it
+involves resetting commits that you've already shared with anyone, i.e. pushed
+somewhere!!
+
+You can easily fix something in your last commit using the following command. It
+will undo your last commit but keep the changes in the staging area::
+
+  $ git reset --soft HEAD^
+
+----------
+Submodules
+----------
+
+Git maintains references to other repositories within a repository using what it
+calls "submodules". This is similar to ``svn:externals`` except Git submodules
+can only point to a *specific* commit identifier.
+
+References to submodules are stored in a special ``.gitmodules`` file at the
+root of the repository. For example, our plexnet repository has a reference to
+our webkit_titanium repository::
+
+  $ cat plexnet/.gitmodules
+  [submodule "third_party/generic/webkit_titanium"]
+      path = third_party/generic/webkit_titanium
+      url = git://github.com/tav/webkit_titanium.git
+
+The specified path ``third_party/generic/webkit_titanium`` will be an empty
+directory until you initialise it using::
+
+  $ git submodule init
+
+All this does is update your ``.git/config`` file with the info it finds in the
+.gitmodules file::
+
+  $ tail -2 plexnet/.git/config
+  [submodule "third_party/generic/webkit_titanium"]
+      url = git://github.com/tav/webkit_titanium.git
+
+You can then modify this file to use a different repository url. For example if
+you had read/write access to the webkit_titanium repository you can change it
+to:
+
+  .. syntax:: ini
+
+    [submodule "third_party/generic/webkit_titanium"]
+        url = git@github.com:tav/webkit_titanium.git
+
+And then to clone the missing submodules and checkout the commit specified in
+the index of the containing repository, do::
+
+  $ git submodule update
+
+You can combine both of the above commands into one using::
+
+  $ git submodule update --init
+
+You'll now see a full repository checked out under
+``third_party/generic/webkit_titanium`` with its own .git subdirectory and
+everything. You can now make changes to this repository just like you would in
+any normal Git repository.
+
+You can execute commands on all of the submodules of a repository using::
+
+  $ git submodule foreach <command>
+
+And you can add new submodules (i.e. checkout a repository and add a reference
+to the containing repository's .gitmodules file) using ``git submodule add
+<remote-repository-url> <path/to/submodule>``. This will add the submodule with
+a reference to the current commit at the path to your staging area, ready for
+your next commit.
+
+You can add a specific branch by using the optional ``-b <branch-name>``
+parameter.
+
+If you want to update the commit reference to an existing submodule, then simply
+update the submodule repository to the state you want to refer to and then do a
+``git add``::
+
+  $ git add third_party/generic/webkit_titanium
+
+::
+
+  $ git-diff --staged
+  diff --git a/third_party/generic/webkit_titanium b/third_party/generic/webkit_titanium
+  index cb03eaa..d262952 160000
+  --- a/third_party/generic/webkit_titanium
+  +++ b/third_party/generic/webkit_titanium
+  @@ -1 +1 @@
+  -Subproject commit cb03eaa72b885500cde35952de93bbf1b831af3f
+  +Subproject commit d2629522d30b737c0efa5ddcc445339513f6ce33
+
+Note: DO NOT put a trailing slash after the submodule name, e.g.
+
+::
+
+  $ git add third_party/generic/webkit_titanium/
+
+Git will then think that you want to delete the submodule and add all the files
+in the directory instead! Leave out any trailing slashes and everything will be
+fine::
+
+  $ git add third_party/generic/webkit_titanium
+
+Also, make sure to have PUSHED ANY COMMITS you made in the submodule repository
+before updating the containing repository's references. Otherwise you'd be
+referring to commit(s) that no-one else knows about and the repository will
+therefore be broken for everyone else.
+
+And, finally, if for some reason, the .gitmodules file updates it's submodule
+reference URIs, you can update the references in your checked out submodule
+directories using::
+
+  $ git submodule sync
+
 ---------------------------
 Less Commonly Used Commands
 ---------------------------
@@ -1056,17 +1424,20 @@ Git has dozens of commands with lots of options, so it'll take anyone a little
 while to get familiar with it all. This section describes some of the less
 commonly used commands that are useful nevertheless.
 
-If you want to revert any changes you've made to a file in your working tree and
-want to go back to the version in the repository, the ``git checkout`` command
-which you've seen be used to switch to (and sometimes even create) branches, can
-also be used to re-checkout file(s) from HEAD into your current working tree.
+You can use ``git grep`` to do searches on files in your repository. The normal
+usecase is to use it as ``git grep <pattern> <rev>``, but you can also use it to
+search your index and/or specific paths using ``git grep --cached <pattern> --
+<paths>``.
 
-This is the Git equivalent of ``svn revert`` and is of the form ``git checkout
--- <files>``. If the filename(s) don't conflict with any ``<rev>`` revision
-identifier, then you can leave out the additional ``--``. To re-checkout *all*
-files, you can run the expected::
+You can apply the unified diffs created by ``git diff`` using ``git apply
+<patchfiles>``, e.g.
 
-  $ git checkout .
+::
+
+  $ git apply makefile.patch
+
+You can auto-generate patchfiles for e-mail submission using ``git format-patch
+<rev>`` which will create appropriate files in your working directory.
 
 Sometimes one messes up with a commit message. Git lets you fix this by simply
 running ``git commit --amend`` which will allow you to edit the commit message
@@ -1091,6 +1462,16 @@ branch into the current branch, you could use ``git cherry-pick <rev>``, e.g.
 
   $ git cherry-pick 036da1f
 
+You should occassionally "garbage collect" and "pack" the objects/refs in your
+Git repository using ``git gc``. Newer versions of Git automatically do this for
+you every once in a while, so you shouldn't have to explicitly call it anymore.
+In some extreme cases Git can fix corruptions of object references if you run::
+
+  $ git repack -a -f
+
+And, finally, the shortcut ``git clone --mirror`` sets up a bare repository
+mirror.
+
 --------------------
 Additional Resources
 --------------------
@@ -1104,7 +1485,11 @@ pages which come with Git. You can access these by running ``git help
 
   $ git help diff
 
-If that doesn't help, then you might find the following web guides useful:
+The Git `Release
+<http://www.kernel.org/pub/software/scm/git/docs/RelNotes-1.6.0.txt>`_ `Notes
+<http://www.kernel.org/pub/software/scm/git/docs/RelNotes-1.6.1.txt>`_ are also
+a very good source of info. If neither of those help, then you might find the
+following web guides useful:
 
 * http://learn.github.com/
 * http://github.com/guides/home
@@ -1112,6 +1497,7 @@ If that doesn't help, then you might find the following web guides useful:
 * http://www.kernel.org/pub/software/scm/git/docs/user-manual.html
 * http://book.git-scm.com/
 * http://cworth.org/hgbook-git/tour/
+* http://git.or.cz/gitwiki/GitFaq
 * http://git.or.cz/course/svn.html
 * http://www.spheredev.org/wiki/Git_for_the_lazy
 * http://www-cs-students.stanford.edu/~blynn/gitmagic/
@@ -1121,7 +1507,7 @@ These cheatsheets in particular are rather invaluable:
 * http://cheat.errtheblog.com/s/git
 * http://git.or.cz/gitwiki/GitCheatSheet
 
-You can find a bunch of useful user generated tips and screencasts on these
+You can also find a bunch of useful user generated tips and screencasts on these
 sites:
 
 * http://gitready.com/
@@ -1134,3 +1520,6 @@ it as just sugar coating on top of a `directed acyclic graph
 And, finally, of course, there's good old Google to fall back upon. Good luck
 and happy cloning!
 
+**Credits:** The Git workflow image, the commits graph and Django repository
+size comparison info were all taken from the excellent open source
+http://learn.github.com site.

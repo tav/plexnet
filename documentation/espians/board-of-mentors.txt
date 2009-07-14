@@ -1,33 +1,95 @@
 ================
-Board Of Mentors
+Board of Mentors
 ================
+
+There will be a special "Board of Mentors" to mentor the Espian [[Executive
+Council]]. The wisdom of Elders is something to be sought and valued --
+especially since the valuable experiences of those who've gone before us is all
+too often neglected in modern society.
+
+---------------------------
+What is Expected of Mentors
+---------------------------
+
+The specific nature and level of engagement will be up to each individual
+Mentor. But they will all be expected to:
+
+* Advise and guide us from the depths of their experiences.
+
+* Be frank and open with any feedback they might have.
+
+* Believe in us as individuals.
+
+* Push us to be the best that we can be.
 
 -----------------
 Potential Mentors
 -----------------
 
-* Brian Eno
-* Chris Anderson
-* David Fincher
+* `Brian Eno <http://en.wikipedia.org/wiki/Brian_Eno>`_
+
+* `Chris Anderson <http://en.wikipedia.org/wiki/Chris_Anderson_(TED)>`_ --
+  `@TEDchris <http://twitter.com/tedchris>`_
+
+* `David Fincher <http://en.wikipedia.org/wiki/David_Fincher>`_
+
 * Fabian Tompsett
-* Guido van Rossum
-* Guy Kawasaki
-* Jo Freeman
-* John Brockman
-* Juanita Brown
-* Julie Meyer
-* Laurence Rassel
-* Lisa Fithian
-* Howard Rheingold
-* Kevin Kelly
-* Kim Stanley Robinson
-* Madonna
-* Mark S. Miller
-* Muhammad Yunus
-* Neal Stephenson
-* Saul Klein
-* Starhawk
-* Steve Jobs
-* Tim Berners-Lee
-* Tim O'Reilly
-* Vandana Shiva
+
+* `Guido van Rossum <http://en.wikipedia.org/wiki/Guido_van_Rossum>`_ -- `blog
+  <http://neopythonic.blogspot.com/>`__, `@gvanrossum
+  <http://twitter.com/gvanrossum>`_
+
+* `Guy Kawasaki <http://en.wikipedia.org/wiki/Guy_Kawasaki>`_ -- `blog
+  <http://blog.guykawasaki.com/>`__, `@guykawasaki
+  <http://twitter.com/guykawasaki>`_
+
+* `Jo Freeman <http://en.wikipedia.org/wiki/Jo_Freeman>`_
+
+* `John Brockman <http://en.wikipedia.org/wiki/John_Brockman_(literary_agent)>`_
+  -- `website <http://www.edge.org/>`__
+
+* `Juanita Brown
+  <http://www.enlightennext.org/magazine/bios/juanita-brown.asp>`_
+
+* `Julie Meyer <http://www.ariadnecapital.com/team_julie.htm>`_
+
+* `Laurence Rassel
+  <http://www.constantvzw.org/cn_core/guests/g2.php?var_in=304>`_
+
+* `Lisa Fithian <http://en.wikipedia.org/wiki/Lisa_Fithian>`_
+
+* `Howard Rheingold <http://en.wikipedia.org/wiki/Howard_Rheingold>`_ --
+  `website <http://www.rheingold.com/>`__, `blog <http://www.smartmobs.com/>`__,
+  `@hrheingold <http://twitter.com/hrheingold>`_
+
+* `Kevin Kelly <http://en.wikipedia.org/wiki/Kevin_Kelly_(editor)>`_ -- `blog
+  <http://www.kk.org/>`__, `@kevin2kelly <http://twitter.com/Kevin2kelly>`_
+
+* `Kim Stanley Robinson <http://en.wikipedia.org/wiki/Kim_Stanley_Robinson>`_
+
+* `Madonna <http://en.wikipedia.org/wiki/Madonna_(entertainer)>`_
+
+* `Mark S. Miller <http://en.wikipedia.org/wiki/Mark_S._Miller>`_
+
+* `Muhammad Yunus <http://en.wikipedia.org/wiki/Muhammad_Yunus>`_
+
+* `Neal Stephenson <http://en.wikipedia.org/wiki/Neal_Stephenson>`_
+
+* `Saul Klein <http://en.wikipedia.org/wiki/Saul_Klein_(venture_capitalist)>`_
+  -- `@cape <http://twitter.com/cape>`_
+
+* `Scilla Elworthy <http://en.wikipedia.org/wiki/Scilla_Elworthy>`_
+
+* `Starhawk <http://en.wikipedia.org/wiki/Starhawk>`_
+
+* `Steve Jobs <http://en.wikipedia.org/wiki/Steve_Jobs>`_
+
+* `Tim Berners-Lee <http://en.wikipedia.org/wiki/Tim_Berners-Lee>`_ -- `blog
+  <http://dig.csail.mit.edu/breadcrumbs/blog/4>`__
+
+* `Tim O'Reilly <http://en.wikipedia.org/wiki/Tim_O'Reilly>`_ -- `blog
+  <http://radar.oreilly.com/tim/>`__, `@timoreilly
+  <http://twitter.com/timoreilly>`_
+
+* `Vandana Shiva <http://en.wikipedia.org/wiki/Vandana_Shiva>`_
+

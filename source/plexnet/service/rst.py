@@ -494,6 +494,8 @@ def escape_and_prettify(content):
                            'pre class="last literal-block"',
                            'pre class="code"']:
                 _literal_block = ('pre', '/pre')
+            elif block in ['span class="pre"']:
+                _literal_block = ('span', '/span')
             elif block == 'pre class="doctest-block"':
                 _literal_block = ('doctest', '/pre')
             elif block == 'style type="text/css"':

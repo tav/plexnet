@@ -1,0 +1,792 @@
+===============
+Espra Bootstrap
+===============
+
+A Command Line for the Internet
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+:Abstract:
+
+    Espra Bootstrap is a meta `mashup
+    <http://en.wikipedia.org/wiki/Mashup_(web_application_hybrid)>`_ which glues
+    together existing web applications to enable effective collaboration.
+
+    This document provides a rough functional overview of Bootstrap.
+
+.. contents::   Table of Contents
+                :depth: 2
+                :backlinks: none
+
+---------------
+Getting Started
+---------------
+
+.. image:: http://release.plexnet.org/gfx/tav.blog/username-password.png
+           :class: float-right
+           :alt: Password frustration comic
+
+Seeing as how people have enough username/passwords already, they will not be
+required to "sign up" to Bootstrap. In fact, they will not even be able to.
+Instead, they will be given the option of logging in via:
+
+* `Facebook <http://developers.facebook.com/documentation.php?doc=login_web>`_
+* `Google <http://code.google.com/apis/accounts/docs/AuthForWebApps.html>`_ (Gmail or Hosted)
+* `OpenID <http://openid.net>`_ (including `Yahoo <http://openid.yahoo.com>`_,
+  LiveJournal, &c.)
+
+The login box will look something like:
+
+.. raw:: html
+
+  <blockquote><form>
+    <input type="text" id="openid_identifier" name="openid_identifier" />
+    <script type="text/javascript" id="__openidselector"
+    src="https://www.idselector.com/selector/75286238997cee5972a869db49e21980afa2c673"
+    charset="utf-8"></script>
+    <input type="submit" value="Login" style="vertical-align: middle;">
+  </form></blockquote>
+
+.. raw:: html
+
+  <strong></strong>
+
+Once logged in, the usual basic profile information will be asked of the user --
+full name, display name, profile picture, timezone, &c. Some hassle should be
+saved if they've used either Facebook or a decent OpenID provider.
+
+Users will be able to update the information later in the ``Settings`` pane.
+Here, they will also be able to add alternative logins. For example, if they
+first logged in via Facebook, they can also add their Gmail account as an
+alternative login.
+
+At no point will a user's password be stored on Bootstrap. This liability will
+be left in the hands of the various identity providers. The respective APIs will
+simply be used to authenticate the user.
+
+Users will be allowed to have multiple Bootstrap accounts and the interface will
+support easily switching between these different accounts -- so as to facilitate
+separate online identities for different types of activities.
+
+A unique id will be generated for each user and a related subdomain
+``<unique-id>.player.espra.com`` created for purposes of security. This may
+later be extended to allow users to map their own domains/subdomains onto
+Bootstrap.
+
+.. Google AuthSub
+.. Facebook API
+.. OpenID
+.. Simple Registration Extension
+.. Profile picture handling
+.. EntityID type
+.. Login type
+.. Crypto key generation
+.. Many-to-one Mapping of Login->EntityID
+.. Settings pane
+
+---------
+Interface
+---------
+
+Bootstrap will be primarily accessed through the various web browsers:
+
+* Firefox 2+
+* IE 7+
+* Opera 9+
+* Safari 3+
+
+The interface will degrade gracefully for most older browsers -- including
+text-only console clients like lynx. Special consideration will be given for an
+iPhone-specific web interface and accessibility for the visually challenged.
+
+The main interface will be a live-updated "Lookout" home screen. This will be
+slightly analogous to an IRC chat window or an updated-in-real-time
+RecentChanges page on a wiki.
+
+A rough layout of the Lookout screen:
+
+.. raw:: html
+
+  <div class="center">
+    <img src="http://wiki.espians.com/upload/thumb/0/02/Espra_alpha_peek.jpg/450px-Espra_alpha_peek.jpg"
+         alt="Bootstrap Interface" />
+  </div>
+
+The idea is that users will keep this page open all the time -- much like an
+Instant Messaging application. And intelligent use will be made of basic
+capabilities of browsers like back, forward and bookmark buttons.
+
+The focus will be on an input box at the bottom where users could write messages
+and entries. This will have a small drop down box on the side which will allow
+them to specify the context(s) of the message.
+
+At the very top will be the usual login and settings links. And right below that
+will be user-configurable toggle-able buttons which will turn on/off different
+elements in the data they are viewing.
+
+The core of the layout will be taken up by 2 columns. On the left will be a
+drop-down media player and below that the main "application" space. And on the
+right will be a search system with configurable filters and application-specific
+commands menu below that.
+
+By default, the "application" space will show the latest happenings across all
+contexts -- a bit like Facebook's Newsfeed. And when users choose specific items
+or actions, the application space will change to reflect it but the other
+elements would stay put.
+
+This means that users could be watching a movie whilst reading up on people's
+responses to an unrelated blog entry -- or perhaps even composing an article
+themselves. Multi-tasking within the web page.
+
+The Media Player will play various media files from the web. Supported file
+formats will include:
+
+* MP3 (including Internet Radio)
+* H.264 (Quicktime, Flash, iPod)
+* On2 VP6 (Flash)
+* Windows Media Format (Windows Media Player)
+* Flash Video (Flash)
+* DivX (DivX Web Player)
+* Other formats (Mplayer)
+* YouTube (YouTube Player using JS & Flash)
+
+The exact formats supported will depend on the plugins the user has installed on
+their browser. Users will be able to make and share playlists. And generally
+use it like a normal desktop media player.
+
+Given that users may want to share files with each other -- a special external
+Bootstrap client will be provided. This will create a pseudo peer-to-peer
+network amongst the various users using some of the features from the `Plexnet
+<http://tav.espians.com/plexnet.html>`_.
+
+Support for this client will be auto-detected when users connect to Bootstrap
+and taken advantage of if available. For example, it can be used to cache the
+media files the user is viewing so that the user can watch them again without
+having to repeatedly download the files.
+
+The external client will also gradually support additional functionality, e.g.
+encoding media files in HD quality, access to remote Airtunes speakers, or
+providing location awareness if the user wants to provide it to enable the use
+of location-based services.
+
+Offline access to Bootstrap's functionality and data -- that is, ability for a
+user to use Bootstrap whilst offline -- will also be supported via this external
+client. This same functionality will act as the mechanism for users to
+export/backup their personal data from Bootstrap.
+
+If time permits this client may also be developed for Firefox, Nokia S60,
+Android, Pre and Blackberry platforms in addition to the default Windows, OS X
+and Linux ones.
+
+----------
+Trust Maps
+----------
+
+.. image:: http://release.plexnet.org/gfx/tav.blog/trust-maps-mary.png
+           :alt: Trust Maps -- Trusting Mary in the context of Cars
+           :class: float-right
+           :width: 352
+           :height: 321
+
+Users will be able to add others to their "Trust Map". This is just specifying
+who and in what contexts and level limit -- a bit like following someone on
+Twitter. The context is pretty simple and should be familiar as "tags" to users
+of sites like `Delicious <http://del.icio.us>`_ and `Flickr
+<http://www.flickr.com>`_.
+
+Example contexts might include:
+
+* Architecture
+* Electronic Music
+* Microcredit
+* Javascript
+* French Cuisine
+
+Whilst people will be free to use contexts as they like, convergence will be
+encouraged through the use of relations which people can specify. Relationships
+between contexts are limited to the basic:
+
+* Equivalent
+* Broader
+* Narrower
+
+Contexts will be normalised since computers can't by default tell the difference
+between cases across different languages, e.g. "Straßenfest" will become
+"strassenfest". Users will also be encouraged to specify a qualifier for
+contexts, e.g. ``Animal/Jaguar`` or ``Car/Jaguar`` instead of just ``Jaguar``.
+
+The level limit will act as an additional filter for information flow through
+the various Trust Maps. It will set a maximum depth to which a user is willing
+to accept another's information flow.
+
+Adding people to a Trust Map is referred to as "Alignment" and not all alignment
+needs to be public. A special "Connection" alignment will be provided to allow
+people to add others to their Trust Maps privately. A special personal
+blacklisting feature will also be supported which will block any flow from
+blacklisted users to the specific user.
+
+Users will be able to take advantage of relationships they've already
+established on other services, e.g. Flickr, Gmail, Yahoo, MSN, Facebook, &c. And
+as they increasingly use Bootstrap, recommendations will be made relating to
+their Trust Maps.
+
+.. Trust Horizon -- 1, 2, -1
+.. Private Connections
+
+-----
+Items
+-----
+
+Much like wiki pages are the heart of `Wikipedia <http://www.wikipedia.org>`_,
+"Items" will be the heart of Bootstrap. There will be a handful of different
+Item types:
+
+* Message
+* Action
+* Question
+* Answer
+* Pecu Allocation
+* Transaction
+* Requirement
+* Shaila
+* Text
+
+All items will be automatically versioned. All unmarked previous versions will
+be deleted when regular "compacting" processes are run.
+
+The default Item type will be **Message** -- a single text input -- much like
+`Twitter <http://www.twitter.com>`_ -- with a context. This is the default type
+for replies/comments to other Items. **Action** will be the same with an
+additional time scope/limit field.
+
+Users will also be able to ask specific **Questions** which could have
+structured **Answers**. These answers could be free form, boolean (yes/no) or
+multiple choice, e.g Conservative, Labour, Liberal. This will allow for easily
+analysable data to be gathered.
+
+  *Some default sections will be automatically generated from free form
+  questions, e.g. "What do you have to offer?", "Where are you now?", &c.*
+
+The **Pecu Allocation** type will be like a Message with the additional fields:
+
+* Amount
+* Valid until
+
+This will be used by users to allocate pecus (personal economic currency units)
+-- a form of reputation currency -- to others. Pecu allocations cannot be
+traded, but will be used as part of many transactions and decision making
+processes.
+
+The **Transaction** type reflects the basic transaction record in `double-entry
+accounting <http://en.wikipedia.org/wiki/Double-entry_bookkeeping_system>`_.
+Amongst other things, it could be used to facilitate and record the trade of
+resources between users. Unlike most other types which, when created, stay
+within just the user's namespace, Transaction items will be signed and copied to
+all involved parties.
+
+The **Requirement** type will be a special type which can be placed as a
+"requisite" in front/after other types. The type will define a set of boolean
+parameters -- which, when fulfilled -- will either trigger the publishing of a
+predefined Item or make a service call.
+
+This can be used for many interesting purposes. For example, one could use it to
+ensure that certain criteria are fulfilled -- by the answering of Questions by
+others in specific ways -- before money is released via a Transaction. In this
+way specific types like Contracts no longer become necessary.
+
+Reuirement types will be able to leverage the various Trust Map calculations
+too. And a default setup will be provided which allow users to specify
+permissive Transactions when users match certain percentiles for a given
+Context.
+
+User could also attach Requirements to a specific context so that whenever Items
+matching certain patterns are received from others via the Trust Map, certain
+services can be called.
+
+**Shailas** will be used as contextual "summaries". They will allow a running
+summary of dialogue and action to be kept. The interface for creating shailas
+will allow the user to also specify which Items have been incorporated into the
+Shaila.
+
+The aim here will be to avoid the needless repetition that usually takes place
+across forums and mailing lists and encourage living summaries. Shailas could
+also be used as guides to introduce people to new spaces. The art of hosting
+taken virtual.
+
+The **Text** type will be very similar to a Message but instead of the default
+input format which accepts a combination of Rich Text and HTML, users will be
+able to specify any one of the supported formats on the opening line, e.g.
+
+::
+
+  #! markdown
+
+The initially supported formats will include:
+
+* css: Cascading Style Sheets
+* genshi: `Genshi <http://genshi.edgewall.org/>`_ Templates
+* html: Raw HTML
+* markdown: `Markdown <http://daringfireball.net/projects/markdown/>`_
+* naaga: Capability-secured Services
+* rst: `Restructured Text <http://docutils.sourceforge.net/docs/user/rst/quickref.html>`_
+* text: Rich Text + HTML subset
+
+The Naaga format would be in a secure subset of the `Python
+<http://www.python.org>`_ 3.0 Syntax. It will be compiled into Python 2.6 syntax
+for backend services and to Javascript syntax for browser/interface services.
+Besides unifying backend and frontend services to a simple syntax, Naaga's key
+features will be the builtin support for:
+
+* Capability security
+* Functional reactive liveness with automatic dependency chaining
+* Rich builtin namespace
+
+Variable substitution will be supported in some of the formats with banana
+brackets, e.g. ``(|first_name|)``. This will allow Items to be used as Templates
+which, as `Wikipedia has proven
+<http://en.wikipedia.org/wiki/Wikipedia:Template_messages>`_, could be quite
+useful.
+
+Web links in all Items will be automatically extracted and queryable. Special
+syntax will be supported for wiki-style \[[plex links]] which could be used to
+refer to contexts, items and some structured data, e.g. price, geo-location,
+date/time, &c.
+
+Curly brackets will be used to include the contents of an Item within another --
+a form of `transclusion <http://en.wikipedia.org/wiki/Transclusion>`_. Specific
+sections of an Item could be referred to if it has named sections, e.g.
+
+::
+
+  {{some-item#some-section-name}}
+
+The same syntax can be used to include outputs from Naaga services, which are
+addressed by a leading .dot, e.g. a currency conversion of 25 pounds sterling to
+dollars could use the ``.convert`` service::
+
+  {{.convert 25 GBP to USD}}
+
+Output could be piped from one service to another in a manner similar to UNIX
+using the universal pipe symbol: ``|``. Service output could also be seen
+directly -- a bit like using IRC bots like `phenny
+<http://inamidst.com/phenny/>`_ -- if users start their Messages with a dot
+(call to a backend service) or an exclamation mark (call to a frontend service),
+e.g.
+
+::
+
+  !pause
+
+Bootstrap will be built on a true `capability-based security system
+<http://en.wikipedia.org/wiki/Capability-based_security>`_ and will be secured
+from traditional Web attack vectors in HTML/CSS/Javascript:
+
+* `XSS <http://en.wikipedia.org/wiki/Cross-site_scripting>`_
+* `CSRF <http://en.wikipedia.org/wiki/CSRF>`_
+* `Dom Injection <http://en.wikipedia.org/wiki/Cross-site_scripting#DOM-based>`_
+
+Users will be able to refer to all items published by themselves under the
+special `tilde
+<http://diveintomark.org/archives/2002/10/04/history_of_the_tilde>`_ (``~``)
+namespace. For example, to refer to this item, I could use
+``~/articles/eapra-bootstrap.html``.
+
+Items will be automatically given a unique ID and be accessible under the
+special item namespace, e.g. ``~/item/<unique-id>``. Users will also be able to
+give an item a specific name if they so choose.
+
+Whilst ``/`` can be included in these names, in reality it will be a flat
+namespace and there will be no directories involved. Prefix matching will be
+supported though -- and this could be used to give the semblance of directory
+support if wanted.
+
+.. Quick Notes to Self
+.. Commenting -- as Messages in "link" contexts
+
+-----------------
+External Services
+-----------------
+
+Bootstrap will enable users to aggregate their activites on various web
+services. The following services will be integrated given their utility and
+widespread usage.
+
+Aggregators:
+
+* `FriendFeed <http://friendfeed.com>`_
+* `Google Reader <http://www.google.com/reader>`_
+
+Books:
+
+* `Amazon Wishlists <http://www.amazon.com/exec/obidos/wishlist/>`_
+
+Classifieds:
+
+* `Craigslist <http://www.craigslist.org>`_
+
+Commerce:
+
+* `Amazon <http://www.amazon.com>`_
+* `eBay <http://www.ebay.com>`_
+* `Google Base <http://www.google.com/base>`_
+* `Paypal <http://www.paypal.com>`_
+
+Events:
+
+* `Dopplr <http://www.dopplr.com>`_
+* `Facebook Events <http://www.facebook.com/events.php>`_
+* `Google Calendar <http://www.google.com/calendar>`_
+* `Meetup <http://www.meetup.com>`_
+* `Upcoming <http://upcoming.yahoo.com>`_
+
+Feeds:
+
+* `Atom <http://en.wikipedia.org/wiki/Atom_(standard)>`_ Feeds
+* `ICAL <http://en.wikipedia.org/wiki/ICalendar>`_ Feeds
+* `RSS <http://en.wikipedia.org/wiki/RSS>`_ Feeds -- including `Podcasts
+  <http://en.wikipedia.org/wiki/Podcast>`_, `GeoRSS
+  <http://en.wikipedia.org/wiki/GeoRSS>`_, &c.
+
+File Sharing:
+
+* `Box.net <http://www.box.net>`_
+
+Links:
+
+* `Delicious <http://del.icio.us>`_
+* `Digg <http://www.digg.com>`_
+* `Google Shared Stuff <http://www.google.com/s2/sharing/stuff>`_
+* `Reddit <http://www.reddit.com>`_
+
+Location
+
+* `Fireeagle <http://fireeagle.yahoo.net>`_
+* `Plazes <http://www.plazes.com>`_
+
+Mail:
+
+* `Gmail <http://mail.google.com>`_
+* `Yahoo Mail <http://mail.yahoo.com>`_
+
+Mailing lists (Public Only):
+
+* `Google groups <http://groups.google.com>`_
+* `Yahoo groups <http://groups.yahoo.com>`_
+
+Maps:
+
+* `Google Maps <http://maps.google.com>`_
+* `Yahoo Maps <http://maps.yahoo.com>`_
+
+Movies:
+
+* `Netflix <http://www.netflix.com>`_
+
+Music:
+
+* `iLike <http://www.ilike.com>`_
+* `Last.fm <http://last.fm>`_
+
+Open Source Development:
+
+* `GitHub <http://www.github.com>`_
+
+Photos:
+
+* `Facebook Photos <http://www.facebook.com/photos.php>`_
+* `Flickr <http://www.flickr.com>`_
+
+Presentations:
+
+* `SlideShare <http://www.slideshare.net>`_
+
+Publishing:
+
+* `Blogger <http://www.blogger.com>`_
+* `Disqus <http://www.disqus.com>`_
+* `Livejournal <http://www.livejournal.com>`_
+* `Tumblr <http://www.tumblrcom>`_
+* `Twitter <http://www.twitter.com>`_
+* `Wordpress <http://www.wordpress.com>`_
+
+Reference
+
+* `Wikipedia <http://www.wikipedia.org>`_
+
+Search:
+
+* `Google Search <http://www.google.com>`_
+* `Yahoo BOSS <http://developer.yahoo.com/boss>`_
+* `Yahoo Search <http://search.yahoo.com>`_
+
+Social Networks:
+
+* `Bebo <http://www.bebo.com>`_
+* `Facebook Connect <http://www.facebook.com>`_
+* `Hi5 <http://www.hi5.com>`_
+* `imeem <http://www.imeem.com>`_
+* `LinkedIn <http://www.linkedin.com>`_
+* `MySpace <http://www.myspace.com>`_
+* `Ning <http://www.ning.com>`_
+* `Orkut <http://www.orkut.com>`_
+
+Video:
+
+* `Seesmic <http://www.seesmic.com>`_
+* `Vimeo <http://www.vimeo.com>`_
+* `Youtube <http://www.youtube.com>`_
+
+Virtual World:
+
+* `Second Life <http://www.secondlife.com>`_
+
+VoIP:
+
+* `Skype <http://www.skype.com>`_
+
+.. Of special inclusion will be the lovely popurls and hype machine services.
+
+Some of `these other services
+<http://movers20.esnips.com/TableStatAction.ns?reportId=100>`_ may be included
+depending on time.
+
+-------------
+Functionality
+-------------
+
+**Certification**
+
+All items -- whether created by a user or from one of the external services --
+could be certified by a user within particular contexts. The default mode of
+certification will be to give a "thumbs up" -- sort of like giving a +1 on Digg
+or re-tweeting on Twitter.
+
+Similarly, users will able to certify other users as one of the following for a
+given context:
+
+* Novice
+* Apprentice
+* Journeyman
+* Master
+
+Together, this will hopefully help identify the most reliable, useful and
+relevant person or item for any given context.
+
+Information will flow through Trust Maps as the main communications medium
+within Bootstrap. This means that only those who are aligned to a user in a
+particular context -- i.e. have the user in their Trust Map -- will receive
+messages/items from them.
+
+Fundamentally, when things are certified, it will act as a promotion of them
+above others. The exact additional weighting a certification gets will decrease
+the further away from a user's direct Trust Map someone is.
+
+For example, if Matt has Katy and Indy in his Trust Map for Architecture. Katy
+has just Alice and Indy has both Alice and David in theirs, then one can imagine
+that the relative weight of certifications for Matt will be biased in the
+following order: Katy/Indy then Alice then David. Alice will have a greater
+influence than David as she is in both Katy and Indy's Trust Maps whilst David
+is only in Indy's.
+
+**Auto Certification**
+
+When adding others to a Trust Map, users will be able to specify whether they
+want to auto-accept certifications from them. If so, a user will automatically
+certify in the same way as that person.
+
+This will be combined with the Requirement item to create rather useful systems,
+e.g. `Liquid Democracy-based <http://wiki.uniteddiversity.com/liquiddemocracy>`_
+decision making for the Commons.
+
+**Direct Communication**
+
+There will initially be no explicit support for one-to-one communications within
+Bootstrap. We already have excellent communications channels for that:
+
+* Face to Face!
+* Phone
+* E-mail
+* VoIP (Skype/SIP)
+
+These will be promoted for occasions when direct personal communication is
+needed. The lack of direct communications channels is not seen as a major
+problem since Trust Maps are transitive.
+
+If time allows, direct communication will be supported with the addition
+of a default payment Requirement. That is, unless a person is in an individual's
+Trust Map, they will have to make a payment to the user in order to send a
+direct message.
+
+The exact amount will be configurable by the user. With this simple addition,
+Bootstrap users will hopefully be saved from the hassles of spam as spammers
+will now have to either be legitimate or spend money.
+
+**Views**
+
+On the Lookout page, by default, items will be sorted by most recent and will
+come from contexts in which the user has most recently been active. That is, in
+contexts the user has most recently done a lot of Actions in.
+
+Users will be able to use the configurable filter system on the page to look at
+specific contexts. Or even to drill down to only certain Items from specific
+users in specific contexts containing specific words...
+
+A given set of filters will be called "Views" and these could be saved for quick
+browsing later on. Views will be shown as a list by default but different
+templates could be applied -- with some builtin ones being:
+
+* Google Map Template
+* Calendar Template
+
+Users will be able to create new templates as Text items and share those along
+with the views if they wish. Views could be ordered in 2 separate ways: by most
+recent or most relevant.
+
+When sorted by most recent/buoyant items, the search results would behave like a
+news site like Digg. And when sorted by most relevant, the results would become
+a bit like Google search results.
+
+And in both cases the results would reflect the user's personal perspective (via
+their Trust Map) -- as opposed to the current sites where a global perspective
+would be generally provided.
+
+When viewing the most recent items, the view will switch to a "live update" mode
+and the items in the view will get updated without the user having to constantly
+refresh the page. This will allow the view to be used much like a chat channel.
+
+**Global View**
+
+Once logged in, a user's perspective will be entirely influenced by their Trust
+Map. However, for the purposes of general browsing, discovery and indexing by
+search engines, a "Global View" will be presented.
+
+Bootstrap deployments will be able to specify certain users as "seed" users. The
+collective Trust Maps of these users will be used to present a generic global
+perspective to any anonymous user.
+
+Only those adequately "near" the seed users -- in the varying contexts -- will
+be represented in this global view. This is to ensure that spammers won't get
+coverage. Legitimate users will be expected to be represented in the global view
+with time as Trust Maps expand.
+
+All published user material will however be accessible from their unique
+subdomain at all times. But this will have a ``robots.txt`` file denying access
+to search engines to ensure that spammers won't get to abuse Bootstrap.
+
+**Quota**
+
+Seeing as Bootstrap will be centralised, resources will be limited. Thus
+specific user quotas will have to be set. There will be support for monitoring
+the resource usage by users and keeping them within the quota limits.
+
+This will also be tied to an "invite" service where existing users could invite
+others to join the service. This will allow for the gradual ramp-up of Bootstrap
+deployments as new servers are resourced.
+
+**Crypto Services**
+
+Some useful generic crypto services will be provided for use in applications:
+
+* Time-stamping
+* Random Number Generation
+* Blinded Signatures
+* Election by Lottery
+
+**Aditional External Services Support**
+
+Bootstrap will obviously support RSS feeds. But given the number of users still
+using email, mail in and mail out will also be fully integrated. People will be
+able to post items, receive items and reply to items using email. This will be a
+bit like ad-hoc mailing lists.
+
+The same will apply to SMS which will be limited by user quotas. The extent of
+the integration will be limited to the activites which can be handled within the
+message size limits of SMS txts.
+
+Some of the functionality from the external services listed above will be
+integrated in the items stream of Bootstrap. Notable amongst this will be:
+Google Maps, Paypal and Skype.
+
+A special "clusters" mode will be implemented for Google Maps which will allow
+for the grouping of pointers on Maps -- so as to improve usability and minimise
+load times.
+
+Paypal will be closely integrated with the Transaction type so that users can
+pay and receive money from each other using Paypal if they wish. Likewise, Skype
+will be closely integrated so that collaborators can easily make conference
+calls.
+
+**Annotation**
+
+Annotation will be natively supported in the user interface to enable users to
+"deep tag" resources -- whether it be text, video or structured data. If time
+allows, this will be extended to allow for rich media features like subtitling
+and translations.
+
+**External Applications**
+
+Users can currently install applications on their desktop which will associate
+themselves with certain file types. For example, if you access a spreadsheet
+file on the web, it may open it within Microsoft Excel. This is done using
+something called "Content Type".
+
+Bootstrap will enable users to register any supported **web** application as a
+handler for specific content types. This will mean that users will be able to
+choose their preferred **web** application for the purposes of handing different
+content.
+
+Want to use the ACME Image Editor web app? Sure. Prefer the Photoshop.com Image
+Editor web app? Sure. The choice will be in the hands of the users. Data
+security will be maintained at all times -- enabled by `OAuth
+<http://www.oauth.net>`_ and friends.
+
+**Collaborative Editing**
+
+Paragraph-based `collaborative editing
+<http://en.wikipedia.org/wiki/Collaborative_editing>`_ -- that is, simultaneous
+live editing of Text items -- will be supported for a maximum of 4 users per
+item and a single session per user. Whilst limited, this will hopefully be
+better for collaboration within small teams than emailing documents back and
+forth.
+
+All items will be auto-saved as "drafts" if not published within 30 seconds.
+This will be to help in the case of unavoidable circumstances like power
+failures or browser crashes.
+
+**Internationalisation**
+
+In the spirit of catering to the global internet audience, all textual content
+will be stored as `Unicode <http://en.wikipedia.org/wiki/Unicode>`_ and the
+backend will be fully internationalised from the start. This will include
+support for bi-directional scripts, date/time rendering and upper/lower case
+handling.
+
+**API**
+
+A `RESTful <http://en.wikipedia.org/wiki/Representational_State_Transfer>`_ API
+using `JSON <http://www.json.org/>`_ will be supported for most of the
+functionality provided by Bootstrap. And third-party developers will be
+encouraged to use the given functionality within their given applications.
+
+A generic bookmarklet will available for users to easily publish items from
+their web browser. And an embeddable widget will allow users to configure and
+republish their activities on Bootstrap on their own websites/blogs.
+
+**Data Mining/Visualisation**
+
+In addition to the usual logging that will take place for purposes of site usage
+analytics, some extensive logging of service usage will also occur. This will
+cover things like commons usage, items usage and contextual activity. This could
+be used for the purposes of commons contribution for gift economies or
+micro-patronage.
+
+Detailed coverage of engagement metrics will be available for users to make
+evaluations on the effectiveness of their content and actions. The aim is for
+this to be a key part of the feedback loop that influences people's activities
+in a beneficial manner.
+
+A generic visualisation framework will be available that will allow users to
+easily create and configure visualisations of activity within their "network".
+For example, a visualisation could easily be created that shows the most active
+people in your Trust Map over the last 6 months for a given context.
+
+Of course, user privacy will be respected as appropriate.

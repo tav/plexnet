@@ -1,5 +1,5 @@
 
-import py, sys, ctypes
+import py, sys, ctypes, os
 from pypy.tool.udir import udir
 from pypy.translator.platform import CompilationError, Platform
 from pypy.translator.platform import host
@@ -102,18 +102,18 @@ class TestPlatform(object):
         res = self.platform.execute(executable)
         assert res.out.startswith('4.0')
 
-    def test_shared_no_links(self):
-        eci = ExternalCompilationInfo(libraries = ['xxxxxxxxxxxxxxxxxxx'])
-        tmpdir = udir.join('shared_no_links').ensure(dir=1)
-        c_file = tmpdir.join('shared1.c')
-        c_file.write('''
-        int f(int a, int b)
-        {
-            return (a + b);
-        }
-        ''')
-        library = self.platform.compile([c_file], eci, standalone=False)
-        assert ctypes.CDLL(str(library)).f(3, 4) == 7
+    def test_environment_inheritance(self):
+        # make sure that environment is inherited
+        cmd = 'import os; print os.environ["_SOME_VARIABLE_%d"]'
+        res = self.platform.execute('python', ['-c', cmd % 1],
+                                    env={'_SOME_VARIABLE_1':'xyz'})
+        assert 'xyz' in res.out
+        os.environ['_SOME_VARIABLE_2'] = 'zyz'
+        try:
+            res = self.platform.execute('python', ['-c', cmd % 2])
+            assert 'zyz' in res.out
+        finally:
+            del os.environ['_SOME_VARIABLE_2']
 
 def test_equality():
     class X(Platform):
