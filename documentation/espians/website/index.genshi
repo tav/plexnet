@@ -252,7 +252,7 @@
 
 <ul id="site-articles">
   <li class="${post2tagclasses.get(post['__path__'])}"
-	  py:for="post in sorted(items, key=lambda x: x.get('__updated__'), reverse=True)">
+	  py:for="post in sorted(items, key=lambda x: x.get('__name__'))">
 	<a class="site-article-links" href="${set_name(post)}.html">${Markup(post['title'])}</a>
 	<span class="site-article-comments">[<a href="${post['__name__']}.html#disqus_thread" rel="disqus:${site_url + '/' + post['__name__']}.html">Comment!</a>]</span>
   </li>

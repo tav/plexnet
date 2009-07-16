@@ -1,0 +1,303 @@
+===========
+Iteration X
+===========
+
+It's Going To Be Awesome!
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+:Abstract:
+
+    This document provides a brief overview of Iteration X. Starting on June
+    |2nd| 2009, this Iteration will focus on the creation of Espra which will be
+    built upon the foundations of the:
+
+    1. Plexnet -- A Set of Open Web Standards for a Decentralised App Platform.
+
+    2. Plex Economy -- Capitalism 4.0 built around Common Economic Protocols.
+
+    The first deliverable will be the `Bootstrap version of Espra
+    <http://tav.espians.com/espra-bootstrap.html>`_ during the Northern
+    Autumn 2009.
+
+    Feel free to join in and enjoy the ride!
+
+.. |2nd| raw:: html
+
+  2<sup>nd</sup>
+
+.. raw:: html
+
+  <style type="text/css">
+    sup { display: inline }
+  </style>
+
+.. more
+
+.. contents::   Table of Contents
+                :depth: 2
+                :backlinks: none
+
+
+Vision
+======
+
+Iteration X is about enabling the Espian Vision and making it possible. The
+vision is simply an answer to the three questions:
+
+1. How can we all live comfortably and be doing what we love?
+
+2. How can we efficiently organise people, ideas and resources?
+
+3. How can we be united in our diversity so that culture truly flourishes?
+
+.. raw:: html
+
+  <div class="float-right">
+    <img src="http://cloud.github.com/downloads/tav/plexnet/gfx.web-4.0.cover.png"
+         width="511px" height="382px" />
+  </div>
+
+Iteration X will enable this vision by the creation of a parallel public
+infrastructure -- a socio-economic-technological platform catering to the needs
+of humanity.
+
+In short, creating weapons of mass construction.
+
+The tagline for the Iteration captures the intent well -- Web 4.0. A Web 4 the
+people by the people.
+
+More specifically, Espra will solve the following very real pain points in the
+current market:
+
+* Information overload and the time cost of managing one's online activities.
+
+* Lack of being able to make a living contributing on the internet without
+  having to resort to advertising, e.g. bloggers, open source coders, musicians,
+  &c.
+
+* Lack of trusted and verifiable sources on the internet, e.g. who should one
+  trust on Twitter w.r.t the Iranian electoral proceedings?
+
+* Dramatically increasing levels of complexity and costs of developing scalable
+  applications in today's world, e.g. YouTube having to take on the cost of
+  exponentially increasing video content.
+
+* The lack of composability of applications due to architectural issues, e.g.
+  want to make a mash-up between a Maps app and a Banking app -- current
+  architectures don't provide a secure base of service composability!
+
+It will do this by leveraging:
+
+* The various open source components that have been independently developed over
+  the last decades.
+
+* The huge amount of data that people have already put into various services,
+  e.g. Facebook, YouTube, Flickr, &c.
+
+* The fact that a little "glue" applied in the right way -- and in a
+  decentralised way -- will enable a lot of gain for relatively little effort.
+
+
+Operational Overview
+====================
+
+The core development will last for a period of 10 months:
+
+.. raw:: html
+
+  <div class="center">
+    <img
+      src="http://cloud.github.com/downloads/tav/plexnet/gfx.iteration-x.schedule-3.png"
+      width="750px" height="434px" />
+  </div>
+
+An agile and iterative approach will be taken with regards the development.
+Boostrap -- the codename for the set of Espra apps running on the first usable
+version of the Plexnet -- will perform the dual roles of:
+
+* Demonstrating the ideas (especially Trust Maps, Pecus and Dolumns).
+
+* Facilitating the further co-ordination and development of the Project.
+
+.. raw:: html
+
+  <div class="center">
+    <img
+      src="http://cloud.github.com/downloads/tav/plexnet/gfx.tweetplex.screen.png" />
+  </div>
+
+Espra will leverage the excellent work already done by `James Arthur
+<http://www.thruflo.com>`_ on `Plexnet Trustmap <http://trustmap.plexnet.org/>`_
+and tie it together with an implementation of an extended version of the `Espra
+Bootstrap specification <http://tav.espians.com/espra-bootstrap.html>`_.
+
+The Plexnet, being open source (public domain), will be developed at:
+
+* http://github.com/tav/plexnet/
+
+Accounts on GitHub will be needed for all collaborators contributing code.
+Development will be co-ordinated over Bootstrap as soon as it's ready, but to
+start with it will be done over IRC:
+
+* irc://irc.freenode.net/esp
+
+* `IRC Chat Logs <http://www.openideaproject.org/irclogs/browse/esp/latest>`_
+
+* `Web-based login to IRC
+  <http://widget.mibbit.com/?settings=a9ce64f72c4eca104beb464a3b939953&server=irc.freenode.net&channel=%23esp>`_
+
+The launch of Espra -- along with `Plexnet.org <http://www.plexnet.org>`_ with
+reasonable specs/tests -- sometime during the course of the Northern Autumn --
+will be accompanied by a Fundraiser which will follow two complementary paths:
+
+* Peer Funding
+* VC Funding
+
+The Peer Funding will be kicked off by a video that will act as a call to arms
+for `cultural creatives <http://en.wikipedia.org/wiki/Cultural_Creatives>`_
+(developers, writers, musicians, designers, film-makers, architects, lawyers,
+&c.) and invite them to join in a 6-month journey.
+
+The invitation will be limited to 60,000 people (30,000 men and 30,000 women)
+who, in exchange for paying £10/month for 6 months, will get:
+
+.. image:: http://cloud.github.com/downloads/tav/plexnet/gfx.plexnet.radical.png
+           :class: float-right
+
+* Access to a hosted Plexnet Node running the Espra Bootstrap apps with a
+  reasonably sized quota.
+
+* Front-row seats to capitalise on the opportunities that will be provided by
+  the Plex Economy.
+
+* A chance to be one of the 6,000 members of the Ecclesia (half of whom will be
+  chosen by lottery and the other half by election).
+
+The VC Funding route will, in contrast, seek a lump sum investment of £5 million
+from a number of VC Firms -- some of whom we are already in contact with.
+
+In both cases, Tav-branded Pecus will be provided in place of traditional
+`shares-based equity <http://en.wikipedia.org/wiki/Stock>`_ -- with the Peer
+Funders getting a bit more Pecus per Pound Sterling.
+
+The funds will be used for:
+
+.. raw:: html
+
+  <div class="center">
+    <img
+      src="http://cloud.github.com/downloads/tav/plexnet/gfx.iteration-x.budget.png"
+      width="468px" height="451px" />
+  </div>
+
+Which will allow us to have an ideal team of the following size and form:
+
+.. raw:: html
+
+  <div class="center">
+    <img
+      src="http://cloud.github.com/downloads/tav/plexnet/gfx.iteration-x.people.month4.png"
+      width="503px" height="366px" />
+  </div>
+
+New members to the team will join the following initial dev team who will either
+be self-funded or part-funded by any money that Tav brings in through
+income/debt:
+
+.. raw:: html
+
+  <div class="center">
+    <img
+      src="http://cloud.github.com/downloads/tav/plexnet/gfx.iteration-x.devteam-1.png"
+      />
+  </div>
+
+
+Rules of Engagement
+===================
+
+The development of the Plexnet is totally open for everyone to join in -- just
+like in any open source project.
+
+All Contributors will have to agree to the following Public Domain dedication:
+
+* http://creativecommons.org/publicdomain/zero/1.0/ [Make sure to read it!]
+
+In addition, Contributors will also have to waive any claims relating to
+trademark and patent rights relating to their Contributions.
+
+And, finally, similar to how Guido van Rossum is the `BDFL
+<http://en.wikipedia.org/wiki/Benevolent_Dictator_For_Life>`_ (Benevolent
+Dictator for Life) of the Python project, thus `Tav <http://tav.espians.com>`_
+will be for this initiative. If you do not like this, then simply don't join in
+and/or feel free to fork the code.
+
+James Arthur (`@thruflo <http://www.thruflo.com>`_) will be the operational lead
+for the initiative with `@jeffarch <http://twitter.com/jeffarch>`_ as the glue
+that binds everyone together.
+
+Those considered "Core" by James will be rewarded post-fundraiser with:
+
+* A base rate of £2,780/month pro-rata.
+* Bonuses paid out roughly every 2 months according to Pecu allocations by Tav.
+
+The initial set of `Pecu allocations by Tav <pecu-allocations-by-tav.html>`_
+will be updated with a version on Bootstrap once it's ready.
+
+The whole process will be co-ordinated by Metanational Commons Ltd. -- a private
+limited company incorporated in Engalnd & Wales -- Company No. 6834341 with Tav
+and Sofia as the legal Director and Secretary respectively:
+
+.. raw:: html
+
+  <div class="center">
+    <img src="http://farm4.static.flickr.com/3306/3177879142_4eecdcf897.jpg" />
+  </div>
+
+
+Revenue Streams
+===============
+
+.. image:: http://cloud.github.com/downloads/tav/plexnet/gfx.beyond-the-crunch.cover.png
+           :class: float-right
+           :width: 511
+           :height: 383
+
+It's no secret that the global economy is totally screwed, so one will be
+forgiven for wondering how money will be made from the Plex.
+
+In fact, not only is the intent of this whole venture to be very profitable, but
+it is intended as a way to take the entire Global Economy beyond the crunch.
+
+With the Plexnet removing technological complexities and inefficiencies, the
+Plex Economy bringing together gift/eco/reputation economies, and Espra enabling
+decentralised collaboration on a level never before possible in the history of
+humanity, we shall all be able to `Run, Dance and Frolic
+<http://inamidst.com/stuff/esp/lexicon#r>`_!
+
+There will be several opportunities to capitalise on the Plex, but we will be
+focusing on just 3 streams to start with:
+
+1. **Hosted Plexnet Nodes**. Just like one can run open source Web Servers,
+   users will be able to run Plexnet Nodes wherever they wish. But for those
+   wanting a hosted Node, we shall provide a premium quality version which will
+   benefit from low latency connectivity to the other nodes hosted with us.
+
+2. **Pecu Payout Transaction Fee**. We will be charging a 1% surchage in
+   addition to paypal/banking/credit card fees for Pecu payout transactions.
+   Given the amount of cash flow we'll be dealing with here, it might make sense
+   to become a bank and save users the bank fees.
+
+3. **Plexmail Introductory Fees**. Users will be able to set a price for
+   receiving messages from those not in their Trust Map. We will be charging an
+   additional 30% on top of this.
+
+Not all of this revenue would be profit as we would also have to use some of it
+to subsidise:
+
+* Commons Data Hosting -- A bi-weekly generated set of Commons Data from Trust
+  Maps generated with the Ecclesia as the "seed".
+
+* Plexnet Event Routing -- A free service offering free event storage/routing
+  (matching minimal patterns and up to certain limits) for all Plexnet Nodes.
+

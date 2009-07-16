@@ -9,7 +9,7 @@ g++ -shared -o libJavaScriptCore.so *.o -lpthread -lglib-2.0 `icu-config --ldfla
 and make sure .so is on your LD_LIBRARY_PATH
 """
 
-import py
+import py, sys
 from pypy.rpython.lltypesystem import lltype, rffi
 from pypy.translator.tool.cbuild import ExternalCompilationInfo, log
 from pypy.rpython.tool import rffi_platform as platform
@@ -24,17 +24,30 @@ def error():
 webkitdir = py.magic.autopath().dirpath().join('webkit')
 if not webkitdir.check(dir=True):
     error()
-libdir = webkitdir/'WebKitBuild'/'Debug'/'.libs'
-if not libdir.join('libJavaScriptCore.so').check():
-    error()
+
+if sys.platform == 'linux2':
+    libdir = webkitdir/'WebKitBuild'/'Debug'/'.libs'
+    if not libdir.join('libJavaScriptCore.so').check():
+        error()
+    library = ['JavaScriptCore']
+    framework = []
+
+elif sys.platform == 'darwin':
+    libdir = webkitdir/'WebKitBuild'/'Debug'
+    if not libdir.join('JavaScriptCore.framework').check():
+        error()
+    framework = ['JavaScriptCore']
+    library = []
+
 include_dirs = [webkitdir,
                 webkitdir/'JavaScriptCore'/'ForwardingHeaders']
 
 eci = ExternalCompilationInfo(
-    libraries    = ['JavaScriptCore'],
-    library_dirs = [str(libdir)],
-    include_dirs = include_dirs,
-    includes     = ['JavaScriptCore/API/JSContextRef.h']
+    libraries      = library,
+    library_dirs   = [str(libdir)],
+    frameworks     = framework,
+    include_dirs   = include_dirs,
+    includes       = ['JavaScriptCore/API/JSContextRef.h']
     )
 
 def external(name, args, result, **kwds):

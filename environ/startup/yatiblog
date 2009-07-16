@@ -97,6 +97,15 @@ def error(message):
     print("  !! %s !!" % message)
     print('\n' + ('-' * 70) + '\n')
 
+def listdir2(path):
+    """Prune Emacs backup files."""
+
+    return [
+        filename
+        for filename in listdir(path)
+        if (not filename.startswith('.#'))
+        ]
+
 # ------------------------------------------------------------------------------
 # kore generator
 # ------------------------------------------------------------------------------
@@ -154,7 +163,7 @@ def main():
 
         if clean:
 
-             files = listdir(output_dir)
+             files = listdir2(output_dir)
 
              for file in fnfilter(files, '*.html'):
                  file = join_path(output_dir, file)
@@ -166,7 +175,7 @@ def main():
                  print("Removing:", file)
                  rm(file)
 
-             pdf_files = listdir(output_pdf_dir)
+             pdf_files = listdir2(output_pdf_dir)
 
              for file in fnfilter(pdf_files, '*.pdf'):
                  file = join_path(output_pdf_dir, file)
@@ -187,7 +196,7 @@ def main():
 
         sources = [
             source[:-4]
-            for source in fnfilter(listdir(source_dir), '*.txt')
+            for source in fnfilter(listdir2(source_dir), '*.txt')
             ]
 
         modified = False
@@ -248,7 +257,7 @@ def main():
             package_name = 'package.%s.html' % package
             package_mtime = get_mtime(join_path(output_dir, package_name))
 
-            for entry in listdir(package_root):
+            for entry in listdir2(package_root):
                 path = join_path(package_root, entry)
                 if isfile(path):
                     if entry.endswith('.py'):
@@ -256,7 +265,7 @@ def main():
                             regen = 1
                             break
                 elif isdir(path):
-                    for entry2 in listdir(join_path(package_root, entry)):
+                    for entry2 in listdir2(join_path(package_root, entry)):
                         path2 = join_path(package_root, entry, entry2)
                         if isfile(path2) and entry2.endswith('.py'):
                             if get_mtime(path2) > package_mtime:
