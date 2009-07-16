@@ -21,6 +21,7 @@ class AppTestBindings(object):
         space = cls.space
         cls.w_interpret = space.wrap(interp2app(interpret, unwrap_spec=[str]))
         cls.w_globals = ctx.globals()
+        cls.w_JSException = ctx.w_js_exception
 
     def test_getattr_none(self):
         assert self.js_obj.x == None
@@ -71,3 +72,12 @@ class AppTestBindings(object):
         xxx = 3
         ''')
         assert self.globals.xxx == 3
+
+    def test_raising_call(self):
+        f = self.interpret('''
+        function f(x) {
+            throw TypeError;
+        }
+        f
+        ''')
+        raises(self.JSException, f, 3)

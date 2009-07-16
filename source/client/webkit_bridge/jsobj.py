@@ -9,6 +9,11 @@ class JavaScriptContext(object):
     def __init__(self, space, _ctx):
         self._ctx = _ctx
         self.space = space
+        self.w_js_exception = space.appexec([], '''():
+        class JSException(Exception):
+            pass
+        return JSException
+        ''')
 
     def python_to_js(self, w_obj):
         space = self.space
@@ -62,7 +67,11 @@ class JavaScriptContext(object):
         return JSEvaluateScript(self._ctx, s, this)
 
     def call(self, js_val, args, this=NULL):
-        return JSObjectCallAsFunction(self._ctx, js_val, this, args)
+        try:
+            return JSObjectCallAsFunction(self._ctx, js_val, this, args)
+        except JSException, e:
+            raise OperationError(self.w_js_exception, e.repr())
+                                 
 
     def propertylist(self, js_val):
         return JSPropertyList(self._ctx, js_val)
