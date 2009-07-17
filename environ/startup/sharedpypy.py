@@ -28,7 +28,7 @@ def main(argv):
     config.objspace.nofaking = True
     config.objspace.compiler = "ast"
     config.translating = True
-    set_opt_level(config, '1')
+    set_opt_level(config, '2')
     set_pypy_opt_level(config, '1')
     enable_allworkingmodules(config)
 
