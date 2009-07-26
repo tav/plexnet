@@ -199,6 +199,15 @@ def main():
             for source in fnfilter(listdir2(source_dir), '*.txt')
             ]
 
+        always_regen = join_path(source_dir, '.alwaysregen')
+
+        if isfile(always_regen):
+            always_regen_file = open(always_regen, 'rb')
+            always_regen = [x.strip() for x in always_regen_file.readlines()]
+            always_regen_file.close()
+        else:
+            always_regen = []
+
         modified = False
         template = join_path(output_dir, 'main.genshi')
 
@@ -235,6 +244,15 @@ def main():
                     gensources.append(source_file)
                 elif dest_mtime > index_mtime:
                     modified = True
+
+        for source in always_regen:
+            if source in gensources:
+                continue
+            source_file = join_path(source_dir, source)
+            if not isfile(source_file):
+                continue
+            gensources.append(source_file)
+            modified = True
 
         if gensources:
             _argv = argv[:]
