@@ -324,6 +324,88 @@ break_directive.content = False
 directives.register_directive('break', break_directive)
 
 # ------------------------------------------------------------------------------
+# a tag direktive!!
+# ------------------------------------------------------------------------------
+
+def tag_directive(name, arguments, options, content, lineno,
+                  content_offset, block_text, state, state_machine,
+                  tag_cache={}, tag_counter=[0]):
+    """Convert tags into HTML annotation blocks."""
+
+    output = []; add = output.append
+    tag_id = None
+
+    for tag in arguments:
+
+        if tag in tag_cache:
+            add(tag_cache[tag])
+            continue
+
+        ori_tag = tag
+        tag = tag.strip().rstrip(u',').strip()
+
+        if not tag:
+            continue
+
+        if tag.startswith('id:'):
+            tag_id = tag[3:]
+            continue
+
+        if tag.startswith('@'):
+            tag_class = u'-'.join(tag[1:].lower().split())
+            tag_type = 'user'
+            tag_text = tag
+        elif ':' in tag:
+            tag_split = tag.split(':', 1)
+            if len(tag_split) == 2:
+                tag_type, tag_text = tag_split
+            else:
+                tag_type = tag_split[0]
+                tag_text = u""
+            tag_type = tag_type.strip().lower()
+            tag_text = tag_type.upper() + u':' + tag_text
+            tag_class = u'-'.join(tag.replace(':', ' ').lower().split())
+        else:
+            tag_class = u'-'.join(tag.lower().split())
+            tag_type = 'normal'
+            tag_text = tag.upper()
+
+        tag_span = (
+            u'<span class="rst-tag rst-tag-type-%s rst-tag-%s">%s</span> ' %
+            (tag_type, tag_class, tag_text)
+            )
+
+        tag_cache[ori_tag] = tag_span
+        add(tag_span)
+
+    if not tag_id:
+        tag_id = tag_counter[0] = tag_counter[0] + 1
+
+    if not output:
+        add(u'<span class="rst-tag-untagged"></span>')
+
+    output.insert(
+        0,
+        u'<div class="rst-tag-segment" id="rst-tag-ref-%s">' % tag_id
+        )
+
+    add(u'</div>')
+
+    return [nodes.raw(
+        '',
+        u''.join(output),
+        format='html'
+        )]
+
+tag_directive.arguments = (0, 100, False)
+tag_directive.options = {
+    'format': directives.unchanged
+    }
+tag_directive.content = False
+
+directives.register_directive('tag', tag_directive)
+
+# ------------------------------------------------------------------------------
 # konvert plain kode snippets to funky html
 # ------------------------------------------------------------------------------
 
