@@ -44,7 +44,7 @@ include_dirs = [webkitdir,
 
 eci = ExternalCompilationInfo(
     libraries      = library,
-    library_dirs   = [libdir],
+    library_dirs   = [str(libdir)],
     frameworks     = framework,
     include_dirs   = include_dirs,
     includes       = ['JavaScriptCore/API/JSContextRef.h']
@@ -98,9 +98,11 @@ class JSException(Exception):
         self.context = context
         self.jsexc   = jsexc
 
-    def __str__(self):
+    def repr(self):
         v = JSValueToString(self.context, self.jsexc)
         return JSStringGetUTF8CString(v)
+
+    __str__ = repr
 
 def _can_raise_wrapper(name, args, res, exc_class=JSException):
     llf = external(name, args + [JSValueRefP], res)
@@ -231,7 +233,7 @@ JSObjectSetProperty = _can_raise_wrapper('JSObjectSetProperty',
 _JSObjectCallAsFunction = external('JSObjectCallAsFunction',
                                    [JSContextRef, JSObjectRef,
                                     JSObjectRef, rffi.INT,
-                                    JSValueRefP], JSValueRef)
+                                    JSValueRefP, JSValueRefP], JSValueRef)
 
 def JSObjectCallAsFunction(ctx, object, this, args):
     ll_args = lltype.malloc(JSValueRefP.TO, len(args), flavor='raw')
