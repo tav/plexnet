@@ -154,11 +154,12 @@ import re
 import sys
 
 from string import punctuation as PUNCTUATION
+from time import time
 
 from docutils import nodes
 from docutils.frontend import OptionParser
 from docutils.io import FileInput
-from docutils.parsers.rst import directives, Directive, Parser
+from docutils.parsers.rst import directives, Directive, DirectiveError, Parser
 from docutils.parsers.rst.states import RSTStateMachine, state_classes
 from docutils.readers.standalone import Reader
 from docutils.transforms import writer_aux, universal, references, frontmatter
@@ -327,83 +328,142 @@ directives.register_directive('break', break_directive)
 # a tag direktive!!
 # ------------------------------------------------------------------------------
 
-def tag_directive(name, arguments, options, content, lineno,
-                  content_offset, block_text, state, state_machine,
-                  tag_cache={}, tag_counter=[0]):
+SEEN_TAGS_CACHE = None
+TAG_COUNTER = None
+
+class TagDirective(Directive):
     """Convert tags into HTML annotation blocks."""
 
-    output = []; add = output.append
-    tag_id = None
+    required_arguments = 0
+    optional_arguments = 1
+    final_argument_whitespace = True
 
-    for tag in arguments:
+    has_content = True
 
-        if tag in tag_cache:
-            add(tag_cache[tag])
-            continue
+    def run(self, tag_cache={}):
 
-        ori_tag = tag
-        tag = tag.strip().rstrip(u',').strip()
+        if not self.content:
+            return []
 
-        if not tag:
-            continue
-
-        if tag.startswith('id:'):
-            tag_id = tag[3:]
-            continue
-
-        if tag.startswith('@'):
-            tag_class = u'-'.join(tag[1:].lower().split())
-            tag_type = 'user'
-            tag_text = tag
-        elif ':' in tag:
-            tag_split = tag.split(':', 1)
-            if len(tag_split) == 2:
-                tag_type, tag_text = tag_split
-            else:
-                tag_type = tag_split[0]
-                tag_text = u""
-            tag_type = tag_type.strip().lower()
-            tag_text = tag_type.upper() + u':' + tag_text
-            tag_class = u'-'.join(tag.replace(':', ' ').lower().split())
+        if self.arguments:
+            arguments = self.arguments[0].strip().split(',')
         else:
-            tag_class = u'-'.join(tag.lower().split())
-            tag_type = 'normal'
-            tag_text = tag.upper()
+            arguments = []
 
-        tag_span = (
-            u'<span class="rst-tag rst-tag-type-%s rst-tag-%s">%s</span> ' %
-            (tag_type, tag_class, tag_text)
+        tag_list_id = CURRENT_PLAN_ID or 'list'
+
+        output = []; add = output.append
+        tag_id = None
+
+        for tag in arguments:
+
+            if tag in tag_cache:
+                add(tag_cache[tag])
+                continue
+
+            ori_tag = tag
+            tag = tag.strip().rstrip(u',').strip()
+
+            if not tag:
+                continue
+
+            if tag.startswith('id:'):
+                tag_id = tag[3:]
+                continue
+
+            if tag.startswith('@'):
+                tag_class = u'-'.join(tag[1:].lower().split())
+                tag_type = 'user'
+                tag_text = tag
+            elif ':' in tag:
+                tag_split = tag.split(':', 1)
+                if len(tag_split) == 2:
+                    tag_type, tag_text = tag_split
+                else:
+                    tag_type = tag_split[0]
+                    tag_text = u""
+                tag_type = tag_type.strip().lower()
+                tag_text = tag_type.upper() + u':' + tag_text
+                tag_class = u'-'.join(tag.replace(':', ' ').lower().split())
+            else:
+                tag_class = u'-'.join(tag.lower().split())
+                tag_type = 'normal'
+                tag_text = tag.upper()
+
+            tag_span = (
+                u'<span class="rst-tag rst-tag-type-%s rst-tag-val-%s">%s</span> ' %
+                (tag_type, tag_class, tag_text)
+                )
+
+            tag_cache[ori_tag] = tag_span
+            add(tag_span)
+
+        if not tag_id:
+            global TAG_COUNTER
+            TAG_COUNTER = tag_id = TAG_COUNTER + 1
+
+        tag_id = '%s-%s' % (tag_list_id, tag_id)
+
+        if tag_id in SEEN_TAGS_CACHE:
+            print SEEN_TAGS_CACHE
+            raise DirectiveError(2, "The tag id %r has already been used!" % tag_id)
+
+        SEEN_TAGS_CACHE.add(tag_id)
+
+        if not output:
+            add(u'<span class="rst-tag rst-tag-untagged"></span>')
+
+        output.insert(
+            0, (u'<div class="rst-tag-segment" id="rst-tag-ref-%s">' % tag_id)
             )
 
-        tag_cache[ori_tag] = tag_span
-        add(tag_span)
+        add(u'</div>')
 
-    if not tag_id:
-        tag_id = tag_counter[0] = tag_counter[0] + 1
+        tag_info = nodes.raw('', u''.join(output), format='html')
+        tag_content_container = nodes.bullet_list(
+            ids=['rst-tag-ref-%s-content' % tag_id]
+            )
 
-    if not output:
-        add(u'<span class="rst-tag-untagged"></span>')
+        tag_content = nodes.list_item()
+        self.state.nested_parse(self.content, self.content_offset, tag_content)
 
-    output.insert(
-        0,
-        u'<div class="rst-tag-segment" id="rst-tag-ref-%s">' % tag_id
-        )
+        tag_content_container += tag_content
 
-    add(u'</div>')
+        return [tag_content_container, tag_info]
 
-    return [nodes.raw(
-        '',
-        u''.join(output),
-        format='html'
-        )]
+directives.register_directive('tag', TagDirective)
 
-tag_directive.arguments = (0, 100, False)
-tag_directive.options = {
-    'format': directives.unchanged
-    }
-tag_directive.content = False
+# ------------------------------------------------------------------------------
+# plan direktive!
+# ------------------------------------------------------------------------------
 
-directives.register_directive('tag', tag_directive)
+CURRENT_PLAN_ID = None
+
+def plan_directive(name, arguments, options, content, lineno,
+                   content_offset, block_text, state, state_machine):
+    """Setup for tags relating to a plan file."""
+
+    global CURRENT_PLAN_ID
+
+    if not CURRENT_PLAN_ID:
+        raw_node = nodes.raw(
+            '',
+            '<div id="rst-plan-container"></div>'
+            '<script type="text/javascript" src="static/plan.js"></script>',
+            format='html'
+            )
+    else:
+        raw_node = nodes.raw('', '', format='html')
+
+    CURRENT_PLAN_ID = arguments[0]
+
+    return [raw_node]
+
+plan_directive.arguments = (1, 0, True)
+plan_directive.options = {}
+plan_directive.content = False
+
+directives.register_directive('plan', plan_directive)
 
 # ------------------------------------------------------------------------------
 # konvert plain kode snippets to funky html
@@ -709,6 +769,10 @@ def render_rst(
     with_docinfo=False, as_whole=False
     ):
     """Return the rendered ``source`` with optional extracted properties."""
+
+    global SEEN_TAGS_CACHE, TAG_COUNTER
+    SEEN_TAGS_CACHE = set()
+    TAG_COUNTER = 0
 
     if format in ('xhtml', 'html'):
         format, translator, transforms, option_parser = HTML_SETUP
