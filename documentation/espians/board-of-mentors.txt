@@ -84,6 +84,8 @@ Potential Mentors
 
 * `Steve Jobs <http://en.wikipedia.org/wiki/Steve_Jobs>`_
 
+* `Steven Chu <http://en.wikipedia.org/wiki/Steven_Chu>`_
+
 * `Tim Berners-Lee <http://en.wikipedia.org/wiki/Tim_Berners-Lee>`_ -- `blog
   <http://dig.csail.mit.edu/breadcrumbs/blog/4>`__
 
