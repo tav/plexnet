@@ -56,7 +56,11 @@ $(function () {
 	  TAG2NAME[tag] = this.getAttribute('tagname');
       NAME2TAG[this.getAttribute('tagname')] = tag;
     if (!(tag in TAG2DISPLAYNAMES))
-	  TAG2DISPLAYNAMES[tag] = this.innerText;
+	  if (!this.innerText) {
+	    TAG2DISPLAYNAMES[tag] = this.innerHTML; // this.textContent;
+	  } else {
+	    TAG2DISPLAYNAMES[tag] = this.innerText;
+	  }
 	return true;
 	});
 
@@ -164,21 +168,29 @@ $(function () {
 
   var tagnames = [];
 
-  for (var key in TAG2NAME)
-	tagnames.push([key, TAG2NAME[key]]);
+//   for (var key in TAG2NAME)
+// 	tagnames.push([key, TAG2NAME[key]]);
 
-//  for (var key in TAG2DISPLAYNAMES)
-//	tagnames.push([key, TAG2DISPLAYNAMES[key]]);
+  for (var key in TAG2DISPLAYNAMES)
+	tagnames.push([key, TAG2DISPLAYNAMES[key]]);
 
   tagnames.sort();
 
   CURRENT_TAGS = [];
+  var last_prefix = '';
 
   for (i=0; i<tagnames.length; i++) {
 	var tagname =	tagnames[i];
+	var tagid = tagname[0];
 	var button = $(
-	  '<a class="button" href="" id="'+tagname[0]+'"><span>'+tagname[1]+'</span></a>'
+	  '<a class="button" href="" id="'+tagid+'"><span>'+tagname[1]+'</span></a>'
 	  ).click(tag_button_handler);
+    var new_prefix = tagid.slice(0, tagid.indexOf('-tag-val-'));
+	if (new_prefix != last_prefix) {
+	  if (last_prefix)
+        plan.append($('<hr class="clear" />'));
+	  last_prefix = new_prefix;
+	}
 	plan.append(button);
   }
 

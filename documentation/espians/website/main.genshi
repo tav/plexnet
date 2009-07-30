@@ -74,6 +74,9 @@
     #ignore-this { display: none; }
   </style>
 
+  <link rel="stylesheet" type="text/css" media="screen" title="default"
+		href="static/extra.css" />
+
   <!--[if lte IE 8]>
     <style type="text/css">
       ol { list-style-type: disc; }

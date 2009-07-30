@@ -1,0 +1,53 @@
+---------------------
+Plan File / Bootstrap
+---------------------
+
+:Abstract:
+
+    This document provides a structured list of the remaining work items for the
+    App Engine version of [[Espra Bootstrap]]. This version -- which will
+    be centralised and developed on top of Google App Engine -- is being
+    developed in parallel with the decentralised Plexnet-based version. The
+    document will be updated daily as progress is made.
+
+.. contents::   Table of Contents
+                :depth: 2
+                :backlinks: none
+
+.. plan:: bootstrap
+
+
+Embedded Interpreter
+====================
+
+We will be using PyPy to build our own interpreter called Naaga.
+
+.. tag:: id:1, done, @fijal, todo
+
+  We need to extend PyPy so that it can create a library version of interpreters.
+  To start with it should produce ``libnaaga`` on both Linux and OS X.
+
+.. tag:: id:2, wip, @oierw, Milestone:FirstRelease
+
+  The Naaga interpreter needs to compile cleanly on OS X 10.4 (Tiger) and 10.5
+  (Leopard).
+
+
+Optimisations
+=============
+
+.. tag:: id:3, todo, @tav, dep:2, #foo
+
+  The ``validation.validate`` decorator should create a decorated version of the
+  service function by generating the appropriate bytecode for the new function
+  instead of creating it by exec-ing generated source code.
+
+
+.. tag::  
+
+  We need to extend PyPy so that it can create a library version of interpreters.
+  To start with it should produce ``libnaaga`` on both Linux and OS X.
+
+
+.. !! PLEASE UPDATE THIS WHENEVER YOU CREATE A NEW ITEM !!
+.. latest used id: 3

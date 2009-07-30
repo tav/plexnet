@@ -1,0 +1,109 @@
+a.button {
+  background: transparent url('http://tav.github.com/static/gfx/bg_button_a.gif') no-repeat scroll top right;
+  color: #444;
+  display: block;
+  float: left;
+  font: normal 12px arial, sans-serif;
+  height: 24px;
+  margin-right: 6px;
+  padding-right: 18px; /* sliding doors padding */
+  text-decoration: none;
+}
+
+a.button span {
+  background: transparent url('http://tav.github.com/static/gfx/bg_button_span.gif') no-repeat;
+  display: block;
+  line-height: 14px;
+  padding: 5px 0 5px 18px;
+}
+
+a.button:active {
+  background-position: bottom right;
+  color: #000;
+  outline: none; /* hide dotted outline in Firefox */
+}
+
+a.button:active span {
+  background-position: bottom left;
+  padding: 6px 0 4px 18px; /* push text down 1px */
+}
+
+a.buttondown {
+  background: transparent url('http://tav.github.com/static/gfx/bg_button_a.gif') no-repeat scroll top right;
+  color: #444;
+  display: block;
+  float: left;
+  font: normal 12px arial, sans-serif;
+  height: 24px;
+  margin-right: 6px;
+  padding-right: 18px; /* sliding doors padding */
+  text-decoration: none;
+  background-position: bottom right;
+  color: #000;
+  outline: none; /* hide dotted outline in Firefox */
+}
+
+a.buttondown span {
+  background: transparent url('http://tav.github.com/static/gfx/bg_button_span.gif') no-repeat;
+  display: block;
+  line-height: 14px;
+  padding: 5px 0 5px 18px;
+  background-position: bottom left;
+  padding: 6px 0 4px 18px; /* push text down 1px */
+}
+
+.tag-segment {
+  text-align: right;
+}
+
+.tag-segment span {
+  color: #fff;
+  padding: 0.5em;
+  font-size: 0.7em;
+}
+
+.tag {
+  background-color: #ccc;
+}
+
+.tag-val-done {
+  background-color: #006400;
+}
+
+.tag-val-todo {
+  background-color: #8B0000;
+}
+
+.tag-val-open, .tag-type-user {
+  background-color: #696969;
+}
+
+.tag-type-priority {
+  background-color: #481254;
+}
+
+.tag-type-milestone {
+  background-color: #00008B;
+}
+
+.tag-type-dep {
+  display: none;
+}
+
+.tag-val-wip {
+  background-color: #ff550f;
+}
+
+#plan-tags a, #site-tags a {
+  margin-bottom: 0.7em;
+}
+
+#plan-container {
+  margin-top: 2.4em;
+  margin-bottom: 2.4em;
+}
+
+.pad-top {
+  margin-top: 2.4em;
+  clear: both;
+}
