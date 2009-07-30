@@ -373,7 +373,11 @@ class TagDirective(Directive):
 
             if tag.startswith('@'):
                 tag_class = u'-'.join(tag[1:].lower().split())
-                tag_type = 'user'
+                tag_type = 'zuser'
+                tag_text = tag
+            elif tag.startswith('#'):
+                tag_class = u'-'.join(tag[1:].lower().split())
+                tag_type = '2'
                 tag_text = tag
             elif ':' in tag:
                 tag_split = tag.split(':', 1)
@@ -383,16 +387,25 @@ class TagDirective(Directive):
                     tag_type = tag_split[0]
                     tag_text = u""
                 tag_type = tag_type.strip().lower()
-                tag_text = tag_type.upper() + u':' + tag_text
-                tag_class = u'-'.join(tag.replace(':', ' ').lower().split())
+                if tag_type == 'dep' and ':' not in tag_text:
+                    tag_class = u'dep-%s-%s' % (CURRENT_PLAN_ID, tag_text)
+                else:
+                    tag_text = tag_type.upper() + u':' + tag_text
+                    tag_class = u'-'.join(tag.replace(':', ' ').lower().split())
             else:
                 tag_class = u'-'.join(tag.lower().split())
-                tag_type = 'normal'
+                tag_type = '1'
                 tag_text = tag.upper()
 
+            if ':' in ori_tag:
+                lead, part = tag.split(':', 1)
+                norm_tag = '%s:%s' % (lead.lower(), part)
+            else:
+                norm_tag = tag
+
             tag_span = (
-                u'<span class="rst-tag rst-tag-type-%s rst-tag-val-%s">%s</span> ' %
-                (tag_type, tag_class, tag_text)
+                u'<span class="tag tag-type-%s tag-val-%s" tagname="%s">%s</span> ' %
+                (tag_type, tag_class, norm_tag, tag_text)
                 )
 
             tag_cache[ori_tag] = tag_span
@@ -400,28 +413,29 @@ class TagDirective(Directive):
 
         if not tag_id:
             global TAG_COUNTER
-            TAG_COUNTER = tag_id = TAG_COUNTER + 1
+            TAG_COUNTER = TAG_COUNTER + 1
+            tag_id = 'r%s' % TAG_COUNTER
 
         tag_id = '%s-%s' % (tag_list_id, tag_id)
 
         if tag_id in SEEN_TAGS_CACHE:
-            print SEEN_TAGS_CACHE
             raise DirectiveError(2, "The tag id %r has already been used!" % tag_id)
 
         SEEN_TAGS_CACHE.add(tag_id)
 
         if not output:
-            add(u'<span class="rst-tag rst-tag-untagged"></span>')
+            pass
+            # add(u'<span class="tag tag-untagged"></span>')
 
         output.insert(
-            0, (u'<div class="rst-tag-segment" id="rst-tag-ref-%s">' % tag_id)
+            0, (u'<div class="tag-segment" id="tag-ref-%s">' % tag_id)
             )
 
         add(u'</div>')
 
         tag_info = nodes.raw('', u''.join(output), format='html')
         tag_content_container = nodes.bullet_list(
-            ids=['rst-tag-ref-%s-content' % tag_id]
+            ids=['tag-ref-%s-content' % tag_id]
             )
 
         tag_content = nodes.list_item()
@@ -429,7 +443,10 @@ class TagDirective(Directive):
 
         tag_content_container += tag_content
 
-        return [tag_content_container, tag_info]
+        prefix = nodes.raw('', u'<div id="tag-ref-%s-main" class="tag-content">' % tag_id, format='html')
+        suffix = nodes.raw('', u'</div>', format='html')
+
+        return [prefix, tag_content_container, tag_info, suffix]
 
 directives.register_directive('tag', TagDirective)
 
@@ -448,8 +465,9 @@ def plan_directive(name, arguments, options, content, lineno,
     if not CURRENT_PLAN_ID:
         raw_node = nodes.raw(
             '',
-            '<div id="rst-plan-container"></div>'
-            '<script type="text/javascript" src="static/plan.js"></script>',
+            '<div id="plan-container"></div>'
+            '<script type="text/javascript" src="static/plan.js"></script>'
+            '<hr class="clear" />',
             format='html'
             )
     else:
@@ -770,9 +788,10 @@ def render_rst(
     ):
     """Return the rendered ``source`` with optional extracted properties."""
 
-    global SEEN_TAGS_CACHE, TAG_COUNTER
+    global SEEN_TAGS_CACHE, TAG_COUNTER, CURRENT_PLAN_ID
     SEEN_TAGS_CACHE = set()
     TAG_COUNTER = 0
+    CURRENT_PLAN_ID = None
 
     if format in ('xhtml', 'html'):
         format, translator, transforms, option_parser = HTML_SETUP
