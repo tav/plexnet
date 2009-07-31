@@ -4,11 +4,8 @@ Plan File / Bootstrap
 
 :Abstract:
 
-    This document provides a structured list of the remaining work items for the
-    App Engine version of [[Espra Bootstrap]]. This version -- which will
-    be centralised and developed on top of Google App Engine -- is being
-    developed in parallel with the decentralised Plexnet-based version. The
-    document will be updated daily as progress is made.
+    This document provides a structured list of the work items for [[Espra
+    Bootstrap]] and will be updated regularly as progress is made.
 
 .. contents::   Table of Contents
                 :depth: 2
@@ -36,7 +33,7 @@ We will be using PyPy to build our own interpreter called Naaga.
 Optimisations
 =============
 
-.. tag:: id:3, todo, @tav, dep:2, #foo
+.. tag:: id:3, todo, @tav, dep:2, #foo, milestone:FirstRelease
 
   The ``validation.validate`` decorator should create a decorated version of the
   service function by generating the appropriate bytecode for the new function

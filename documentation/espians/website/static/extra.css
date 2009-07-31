@@ -67,14 +67,39 @@ a.buttondown span {
 }
 
 .tag-val-done {
+  background-color: #007f16;
+  background-color: #00782d;
   background-color: #006400;
 }
 
 .tag-val-todo {
+  background-color: #a60c00;
+  background-color: #d0006e;
   background-color: #8B0000;
 }
 
-.tag-val-open, .tag-type-user {
+.tag-val-wip {
+  background-color: #a66e00;
+  background-color: #ff550f;
+}
+
+.tag-type-2 { /* #hashtags */
+  background-color: #2a4580;
+  background-color: #696969;
+}
+
+.tag-type-zuser {
+  background-color: #4573d5;
+  background-color: #696969;
+}
+
+.tag-type-milestone {
+  background-color: #00008B;
+  background-color: #06276f;
+  background-color: #a4ff00; /* nice colour! */
+  /* color: #000 !important; */
+  background-color: #002ca6;
+  background-color: #3056bf;
   background-color: #696969;
 }
 
@@ -82,16 +107,8 @@ a.buttondown span {
   background-color: #481254;
 }
 
-.tag-type-milestone {
-  background-color: #00008B;
-}
-
 .tag-type-dep {
   display: none;
-}
-
-.tag-val-wip {
-  background-color: #ff550f;
 }
 
 #plan-tags a, #site-tags a {
@@ -99,11 +116,13 @@ a.buttondown span {
 }
 
 #plan-container {
-  margin-top: 2.4em;
+  margin-top: 1.2em;
   margin-bottom: 2.4em;
 }
 
-.pad-top {
-  margin-top: 2.4em;
-  clear: both;
+.plan-help {
+  font-size: 0.9em;
+  font-weight: bold;
+  text-align: right;
+  margin-bottom: 1.4em;
 }

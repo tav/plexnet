@@ -26,6 +26,8 @@ $(function () {
 
   var TAG2NAME = {};
   var NAME2TAG = {};
+  var TAG2NORM = {};
+  var NORM2TAG = {};
   var TAG2DISPLAYNAMES = {};
   var ITEM2DEPS = {};
   var IDS2TAGS = {};
@@ -55,6 +57,9 @@ $(function () {
     if (!(tag in TAG2NAME))
 	  TAG2NAME[tag] = this.getAttribute('tagname');
       NAME2TAG[this.getAttribute('tagname')] = tag;
+    if (!(tag in TAG2NORM))
+	  TAG2NORM[tag] = this.getAttribute('tagnorm');
+      NORM2TAG[this.getAttribute('tagnorm')] = tag;
     if (!(tag in TAG2DISPLAYNAMES))
 	  if (!this.innerText) {
 	    TAG2DISPLAYNAMES[tag] = this.innerHTML; // this.textContent;
@@ -146,7 +151,7 @@ $(function () {
 			for (var m=0; m < CURRENT_TAGS.length; m++) {
 			  if (m != 0)
 				hash += ',';
-			  hash += TAG2NAME[CURRENT_TAGS[m]];
+			  hash += TAG2NORM[CURRENT_TAGS[m]];
 			  }
 			}
 		}
@@ -162,17 +167,21 @@ $(function () {
   var plan_container = $('#plan-container');
   var plan = $('<div id="plan-tags"></div>');
   var all = $('<a class="button" href="" id="tag-all"><span>All</span></a>');
+  // var deps = $('<a class="button" href="" id="tag-deps"><span>Show Dependencies</span></a>');
+  var help = $('<div class="plan-help">↙ Use these buttons to filter for items with ALL the selected tags ↙</div><hr class="clear" />');
 
   all.click(tag_button_handler);
+  plan.append(help);
   plan.append(all);
+  // plan.append(deps);
 
   var tagnames = [];
 
-//   for (var key in TAG2NAME)
-// 	tagnames.push([key, TAG2NAME[key]]);
+  for (var key in TAG2NAME)
+    tagnames.push([key, TAG2NAME[key]]);
 
-  for (var key in TAG2DISPLAYNAMES)
-	tagnames.push([key, TAG2DISPLAYNAMES[key]]);
+//   for (var key in TAG2DISPLAYNAMES)
+// 	tagnames.push([key, TAG2DISPLAYNAMES[key]]);
 
   tagnames.sort();
 
@@ -207,7 +216,7 @@ $(function () {
     var requested_tags = window.location.hash.substr(1).split(',');
     for (var x=0; x < requested_tags.length; x++) {
       var tag = requested_tags[x];
-	  $('#' + NAME2TAG[tag]).click();
+	  $('#' + NORM2TAG[tag.toLowerCase()]).click();
     }
   } else {
     $('#tag-all').click();

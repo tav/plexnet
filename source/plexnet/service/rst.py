@@ -390,26 +390,27 @@ class TagDirective(Directive):
                 if tag_type == 'dep' and ':' not in tag_text:
                     tag_class = u'dep-%s-%s' % (CURRENT_PLAN_ID, tag_text)
                 else:
-                    tag_text = tag_type.upper() + u':' + tag_text
                     tag_class = u'-'.join(tag.replace(':', ' ').lower().split())
             else:
                 tag_class = u'-'.join(tag.lower().split())
                 tag_type = '1'
                 tag_text = tag.upper()
 
-            if ':' in ori_tag:
-                lead, part = tag.split(':', 1)
-                norm_tag = '%s:%s' % (lead.lower(), part)
+            if ':' in tag:
+                lead = tag.split(':', 1)[0]
+                tag_name = '%s:%s' % (lead.lower(), tag_text)
             else:
-                norm_tag = tag
+                tag_name = tag_text
 
             tag_span = (
-                u'<span class="tag tag-type-%s tag-val-%s" tagname="%s">%s</span> ' %
-                (tag_type, tag_class, norm_tag, tag_text)
+                u'<span class="tag tag-type-%s tag-val-%s" tagname="%s" tagnorm="%s">%s</span> ' %
+                (tag_type, tag_class, tag_name, tag.lower(), tag_text)
                 )
 
             tag_cache[ori_tag] = tag_span
             add(tag_span)
+
+        output.sort()
 
         if not tag_id:
             global TAG_COUNTER
