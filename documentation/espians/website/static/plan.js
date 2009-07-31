@@ -40,6 +40,8 @@ $(function () {
 
 	$(item).children().each(function () {
       var tag = this.className;
+	  if (tag == 'tag-link')
+		return true;
 	  if (tag.indexOf('tag-type-dep') != -1) {
 		var dep = tag.split(' ')[2].slice(12);
 		ITEM2DEPS[item] = dep; // @/@ implement dependency analysis

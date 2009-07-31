@@ -415,7 +415,7 @@ class TagDirective(Directive):
         if not tag_id:
             global TAG_COUNTER
             TAG_COUNTER = TAG_COUNTER + 1
-            tag_id = 'r%s' % TAG_COUNTER
+            tag_id = 'temp-%s' % TAG_COUNTER
 
         tag_id = '%s-%s' % (tag_list_id, tag_id)
 
@@ -428,6 +428,7 @@ class TagDirective(Directive):
             pass
             # add(u'<span class="tag tag-untagged"></span>')
 
+        output.append(u'<a class="tag-link" href="#tag-ref-%s-main">&middot;</a>' % tag_id)
         output.insert(
             0, (u'<div class="tag-segment" id="tag-ref-%s">' % tag_id)
             )

@@ -62,14 +62,28 @@ a.buttondown span {
   font-size: 0.7em;
 }
 
+.tag-link {
+  text-decoration: none;
+  color: #000;
+}
+
 .tag {
-  background-color: #ccc;
+  background-color: #696969;
 }
 
 .tag-val-done {
   background-color: #007f16;
   background-color: #00782d;
   background-color: #006400;
+}
+
+.tag-val-needsreview {
+  background-color: #a4ff00;
+  color: #000 !important;
+}
+
+.tag-val-inreview {
+  background-color: #3056bf;
 }
 
 .tag-val-todo {
@@ -83,14 +97,16 @@ a.buttondown span {
   background-color: #ff550f;
 }
 
+.tag-type-1 {
+}
+
 .tag-type-2 { /* #hashtags */
   background-color: #2a4580;
   background-color: #696969;
 }
 
-.tag-type-zuser {
-  background-color: #4573d5;
-  background-color: #696969;
+.tag-type-dep {
+  display: none;
 }
 
 .tag-type-milestone {
@@ -100,15 +116,16 @@ a.buttondown span {
   /* color: #000 !important; */
   background-color: #002ca6;
   background-color: #3056bf;
-  background-color: #696969;
+  background-color: #898989;
 }
 
 .tag-type-priority {
   background-color: #481254;
 }
 
-.tag-type-dep {
-  display: none;
+.tag-type-zuser {
+  background-color: #4573d5;
+  background-color: #696969;
 }
 
 #plan-tags a, #site-tags a {

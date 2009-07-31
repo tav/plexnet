@@ -4,8 +4,8 @@ Plan File / Bootstrap
 
 :Abstract:
 
-    This document provides a structured list of the work items for [[Espra
-    Bootstrap]] and will be updated regularly as progress is made.
+    This is the plan file for the Bootstrap phase of [[Iteration X]] -- it will
+    be updated regularly as progress is made.
 
 .. contents::   Table of Contents
                 :depth: 2
@@ -19,7 +19,17 @@ Embedded Interpreter
 
 We will be using PyPy to build our own interpreter called Naaga.
 
-.. tag:: id:1, done, @fijal, todo
+.. tag:: id:1, done, @fijal
+
+  We need to extend PyPy so that it can create a library version of interpreters.
+  To start with it should produce ``libnaaga`` on both Linux and OS X.
+
+.. tag:: wip, @fijal
+
+  We need to extend PyPy so that it can create a library version of interpreters.
+  To start with it should produce ``libnaaga`` on both Linux and OS X.
+
+.. tag:: needsreview, @fijal
 
   We need to extend PyPy so that it can create a library version of interpreters.
   To start with it should produce ``libnaaga`` on both Linux and OS X.
@@ -29,11 +39,23 @@ We will be using PyPy to build our own interpreter called Naaga.
   The Naaga interpreter needs to compile cleanly on OS X 10.4 (Tiger) and 10.5
   (Leopard).
 
+.. tag:: todo, @fijal, @JohnMW, @happyseaurchin, @jeffarch, @sbp, @thruflo,
+         @cre8radix, @evangineer, #design, #testing, #ui, #outreach, #backend
+
+  We need to extend PyPy so that it can create a library version of interpreters.
+  To start with it should produce ``libnaaga`` on both Linux and OS X.
+
 
 Optimisations
 =============
 
-.. tag:: id:3, todo, @tav, dep:2, #foo, milestone:FirstRelease
+.. tag:: id:3, inreview, @tav, dep:2, #foo, milestone:FirstRelease
+
+  The ``validation.validate`` decorator should create a decorated version of the
+  service function by generating the appropriate bytecode for the new function
+  instead of creating it by exec-ing generated source code.
+
+.. tag:: id:4, todo, @tav, dep:2, #foo, milestone:FirstRelease
 
   The ``validation.validate`` decorator should create a decorated version of the
   service function by generating the appropriate bytecode for the new function
