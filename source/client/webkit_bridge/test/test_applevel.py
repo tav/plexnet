@@ -81,3 +81,15 @@ class AppTestBindings(object):
         f
         ''')
         raises(self.JSException, f, 3)
+
+    # XXX more raising tests
+
+    def test_wrapped_callback(self):
+        f = self.interpret('''
+        function f(x) {
+            return x(3);
+        }
+        f
+        ''')
+        res = f(lambda x: x + 3)
+        assert res == 3 + 3

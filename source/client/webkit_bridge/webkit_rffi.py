@@ -273,5 +273,7 @@ def create_js_callback(ctx, callable):
             exc[0] = JSValueMakeString(ctx, JSStringCreateWithUTF8CString(
                 'python exception'))
             return lltype.nullptr(JSValueRef.TO)
-    return JSObjectMakeFunctionWithCallback(ctx, JSStringCreateWithUTF8CString(
-        callable.func_name), js_callback)
+    def factory(name):
+        js_name = JSStringCreateWithUTF8CString(name)
+        return JSObjectMakeFunctionWithCallback(ctx, js_name, js_callback)
+    return factory

@@ -4,6 +4,9 @@ from pypy.interpreter.gateway import interp2app
 from pypy.interpreter.typedef import TypeDef
 from pypy.interpreter.error import OperationError
 from webkit_bridge.webkit_rffi import *
+from pypy.rpython.lltypesystem import lltype, rffi
+from pypy.interpreter.argument import Arguments
+from pypy.rpython.memory.support import AddressDict
 
 class JavaScriptContext(object):
     def __init__(self, space, _ctx):
@@ -14,6 +17,19 @@ class JavaScriptContext(object):
             pass
         return JSException
         ''')
+        # note. It's safe to cast pointers in this dict to ints
+        # as they're non-movable (raw) ones
+        self.applevel_callbacks = {}
+        def callback(ctx, js_function, js_this, js_args):
+            arguments = Arguments(space,
+                [self.js_to_python(arg) for arg in js_args])
+            w_callable = self.applevel_callbacks.get(
+                rffi.cast(lltype.Signed, js_function), None)
+            if w_callable is None:
+                raise Exception("Got wrong callback, should not happen")
+            w_res = space.call_args(w_callable, arguments)
+            return self.python_to_js(w_res)
+        self.js_callback_factory = create_js_callback(_ctx, callback)
 
     def python_to_js(self, w_obj):
         space = self.space
@@ -29,6 +45,11 @@ class JavaScriptContext(object):
             return JSValueMakeString(self._ctx, self.newstr(space.str_w(w_obj)))
         elif isinstance(w_obj, JSObject):
             return w_obj.js_val
+        elif space.is_true(space.callable(w_obj)):
+            name = space.str_w(space.getattr(w_obj, space.wrap('__name__')))
+            js_func = self.js_callback_factory(name)
+            self.applevel_callbacks[rffi.cast(lltype.Signed, js_func)] = w_obj
+            return js_func
         else:
             raise NotImplementedError()
 
@@ -70,8 +91,7 @@ class JavaScriptContext(object):
         try:
             return JSObjectCallAsFunction(self._ctx, js_val, this, args)
         except JSException, e:
-            raise OperationError(self.w_js_exception, e.repr())
-                                 
+            raise OperationError(self.w_js_exception, self.space.wrap(e.repr()))
 
     def propertylist(self, js_val):
         return JSPropertyList(self._ctx, js_val)
