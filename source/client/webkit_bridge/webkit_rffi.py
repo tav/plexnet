@@ -254,3 +254,24 @@ def JSObjectCallAsFunction(ctx, object, this, args):
 JSValueToNumber = _can_raise_wrapper('JSValueToNumber',
                                      [JSContextRef, JSValueRef],
                                      rffi.DOUBLE)
+
+# ----------------------------- callbacks -----------------------------
+
+_JSCallback = rffi.CCallback([JSContextRef, JSObjectRef, JSObjectRef, rffi.INT,
+                              JSValueRefP, JSValueRefP], JSValueRef)
+# ctx, function, this, argcount, args, exc
+JSObjectMakeFunctionWithCallback = external(
+    'JSObjectMakeFunctionWithCallback', [JSContextRef, JSStringRef,
+                                         _JSCallback], JSObjectRef)
+
+def create_js_callback(ctx, callable):
+    def js_callback(ctx, function, this, argcount, ll_args, exc):
+        try:
+            args = [ll_args[i] for i in range(argcount)]
+            return callable(ctx, function, this, args)
+        except:
+            exc[0] = JSValueMakeString(ctx, JSStringCreateWithUTF8CString(
+                'python exception'))
+            return lltype.nullptr(JSValueRef.TO)
+    return JSObjectMakeFunctionWithCallback(ctx, JSStringCreateWithUTF8CString(
+        callable.func_name), js_callback)
