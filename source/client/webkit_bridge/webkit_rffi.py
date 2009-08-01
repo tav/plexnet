@@ -264,7 +264,7 @@ JSObjectMakeFunctionWithCallback = external(
     'JSObjectMakeFunctionWithCallback', [JSContextRef, JSStringRef,
                                          _JSCallback], JSObjectRef)
 
-def create_js_callback(ctx, callable):
+def create_js_callback(callable):
     def js_callback(ctx, function, this, argcount, ll_args, exc):
         try:
             args = [ll_args[i] for i in range(argcount)]
@@ -273,7 +273,7 @@ def create_js_callback(ctx, callable):
             exc[0] = JSValueMakeString(ctx, JSStringCreateWithUTF8CString(
                 'python exception'))
             return lltype.nullptr(JSValueRef.TO)
-    def factory(name):
+    def factory(ctx, name):
         js_name = JSStringCreateWithUTF8CString(name)
         return JSObjectMakeFunctionWithCallback(ctx, js_name, js_callback)
     return factory

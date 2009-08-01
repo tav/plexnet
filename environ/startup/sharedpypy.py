@@ -28,18 +28,19 @@ def main(argv):
     config.objspace.nofaking = True
     config.objspace.compiler = "ast"
     config.translating = True
-    set_opt_level(config, '2')
+    set_opt_level(config, '1')
     set_pypy_opt_level(config, '1')
     enable_allworkingmodules(config)
 
     space = make_objspace(config)
+    ctx = JavaScriptContext(space)
     policy = PyPyAnnotatorPolicy(single_space = space)
     policy.allow_someobjects = False
 
     def interpret(source, context):
         source = charp2str(source)
         w_dict = space.newdict()
-        ctx = JavaScriptContext(space, context)
+        ctx._ctx = context
         glob = ctx.globals()
         lst = ctx.propertylist(glob.js_val)
         for elem in lst:

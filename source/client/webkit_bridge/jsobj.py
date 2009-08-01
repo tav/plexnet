@@ -9,8 +9,8 @@ from pypy.interpreter.argument import Arguments
 from pypy.rpython.memory.support import AddressDict
 
 class JavaScriptContext(object):
-    def __init__(self, space, _ctx):
-        self._ctx = _ctx
+    def __init__(self, space):
+        self._ctx = lltype.nullptr(JSValueRef.TO)
         self.space = space
         self.w_js_exception = space.appexec([], '''():
         class JSException(Exception):
@@ -29,7 +29,7 @@ class JavaScriptContext(object):
                 raise Exception("Got wrong callback, should not happen")
             w_res = space.call_args(w_callable, arguments)
             return self.python_to_js(w_res)
-        self.js_callback_factory = create_js_callback(_ctx, callback)
+        self.js_callback_factory = create_js_callback(callback)
 
     def python_to_js(self, w_obj):
         space = self.space
@@ -47,7 +47,7 @@ class JavaScriptContext(object):
             return w_obj.js_val
         elif space.is_true(space.callable(w_obj)):
             name = space.str_w(space.getattr(w_obj, space.wrap('__name__')))
-            js_func = self.js_callback_factory(name)
+            js_func = self.js_callback_factory(self._ctx, name)
             self.applevel_callbacks[rffi.cast(lltype.Signed, js_func)] = w_obj
             return js_func
         else:

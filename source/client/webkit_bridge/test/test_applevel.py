@@ -8,7 +8,8 @@ from pypy.interpreter.gateway import interp2app
 
 class AppTestBindings(object):
     def setup_class(cls):
-        ctx = JavaScriptContext(cls.space, JSGlobalContextCreate())
+        ctx = JavaScriptContext(cls.space)
+        ctx._ctx = JSGlobalContextCreate()
         cls.w_js_obj = cls.space.wrap(JSObject(ctx, ctx.eval('[]')))
         this = ctx.eval('[]')
         ctx.eval('this.x = function(a, b) { return(a + b); }', this)
