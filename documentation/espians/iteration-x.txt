@@ -16,8 +16,7 @@ It's Going To Be Awesome!
     2. Plex Economy -- Capitalism 4.0 built around Common Economic Protocols.
 
     The first deliverable will be the `Bootstrap version of Espra
-    <http://tav.espians.com/espra-bootstrap.html>`_ during the Northern
-    Autumn 2009.
+    <http://tav.espians.com/espra-bootstrap.html>`_ during Q3 2009.
 
     Feel free to join in and enjoy the ride!
 
@@ -41,33 +40,7 @@ It's Going To Be Awesome!
 Vision
 ======
 
-Iteration X is about enabling the Espian Vision and making it possible. The
-vision is simply an answer to the three questions:
-
-1. How can we all live comfortably and be doing what we love?
-
-2. How can we efficiently organise people, ideas and resources?
-
-3. How can we be united in our diversity so that culture truly flourishes?
-
-.. raw:: html
-
-  <div class="float-right">
-    <img src="http://cloud.github.com/downloads/tav/plexnet/gfx.web-4.0.cover.png"
-         width="511px" height="382px" />
-  </div>
-
-Iteration X will enable this vision by the creation of a parallel public
-infrastructure -- a socio-economic-technological platform catering to the needs
-of humanity.
-
-In short, creating weapons of mass construction.
-
-The tagline for the Iteration captures the intent well -- Web 4.0. A Web 4 the
-people by the people.
-
-More specifically, Espra will solve the following very real pain points in the
-current market:
+Espra will solve the following very real pain points in the current market:
 
 * Information overload and the time cost of managing one's online activities.
 
@@ -84,9 +57,9 @@ current market:
 
 * The lack of composability of applications due to architectural issues, e.g.
   want to make a mash-up between a Maps app and a Banking app -- current
-  architectures don't provide a secure base of service composability!
+  architectures don't provide a secure base for service composability!
 
-It will do this by leveraging:
+Espra will do this by leveraging:
 
 * The various open source components that have been independently developed over
   the last decades.
@@ -96,6 +69,35 @@ It will do this by leveraging:
 
 * The fact that a little "glue" applied in the right way -- and in a
   decentralised way -- will enable a lot of gain for relatively little effort.
+
+By doing this Espra will enable the Espian Vision to be realised. The vision is
+simply an answer to the three questions:
+
+1. How can we all live comfortably and be doing what we love?
+
+2. How can we efficiently organise people, ideas and resources?
+
+3. How can we be united in our diversity so that culture truly flourishes?
+
+.. raw:: html
+
+  <div class="float-right">
+    <img src="http://cloud.github.com/downloads/tav/plexnet/gfx.web-4.0.cover.png"
+         width="511px" height="382px" />
+  </div>
+
+The creation of Espra is effectively the creation of a parallel public
+infrastructure -- a socio-economic-technological platform catering to the needs
+of humanity.
+
+In short, we'll be creating weapons of mass construction.
+
+The tagline for the Iteration captures the intent well -- Web 4.0. A Web 4 the
+people by the people.
+
+.. raw:: html
+
+  <hr class="clear" />
 
 
 Operational Overview
@@ -112,7 +114,7 @@ The core development will last for a period of 10 months:
   </div>
 
 An agile and iterative approach will be taken with regards the development.
-Boostrap -- the codename for the set of Espra apps running on the first usable
+Bootstrap -- the codename for the set of Espra apps running on the first usable
 version of the Plexnet -- will perform the dual roles of:
 
 * Demonstrating the ideas (especially Trust Maps, Pecus and Dolumns).
@@ -147,8 +149,8 @@ start with it will be done over IRC:
   <http://widget.mibbit.com/?settings=a9ce64f72c4eca104beb464a3b939953&server=irc.freenode.net&channel=%23esp>`_
 
 The launch of Espra -- along with `Plexnet.org <http://www.plexnet.org>`_ with
-reasonable specs/tests -- sometime during the course of the Northern Autumn --
-will be accompanied by a Fundraiser which will follow two complementary paths:
+reasonable specs/tests -- sometime during the course of Q3 2009 -- will be
+accompanied by a Fundraiser which will follow two complementary paths:
 
 * Peer Funding
 * VC Funding

@@ -154,11 +154,12 @@ import re
 import sys
 
 from string import punctuation as PUNCTUATION
+from time import time
 
 from docutils import nodes
 from docutils.frontend import OptionParser
 from docutils.io import FileInput
-from docutils.parsers.rst import directives, Directive, Parser
+from docutils.parsers.rst import directives, Directive, DirectiveError, Parser
 from docutils.parsers.rst.states import RSTStateMachine, state_classes
 from docutils.readers.standalone import Reader
 from docutils.transforms import writer_aux, universal, references, frontmatter
@@ -322,6 +323,167 @@ break_directive.options = {
 break_directive.content = False
 
 directives.register_directive('break', break_directive)
+
+# ------------------------------------------------------------------------------
+# a tag direktive!!
+# ------------------------------------------------------------------------------
+
+SEEN_TAGS_CACHE = None
+TAG_COUNTER = None
+
+class TagDirective(Directive):
+    """Convert tags into HTML annotation blocks."""
+
+    required_arguments = 0
+    optional_arguments = 1
+    final_argument_whitespace = True
+
+    has_content = True
+
+    def run(self, tag_cache={}):
+
+        if not self.content:
+            return []
+
+        if self.arguments:
+            arguments = self.arguments[0].strip().split(',')
+        else:
+            arguments = []
+
+        tag_list_id = CURRENT_PLAN_ID or 'list'
+
+        output = []; add = output.append
+        tag_id = None
+
+        for tag in arguments:
+
+            if tag in tag_cache:
+                add(tag_cache[tag])
+                continue
+
+            ori_tag = tag
+            tag = tag.strip().rstrip(u',').strip()
+
+            if not tag:
+                continue
+
+            if tag.startswith('id:'):
+                tag_id = tag[3:]
+                continue
+
+            if tag.startswith('@'):
+                tag_class = u'-'.join(tag[1:].lower().split())
+                tag_type = 'zuser'
+                tag_text = tag
+            elif tag.startswith('#'):
+                tag_class = u'-'.join(tag[1:].lower().split())
+                tag_type = '2'
+                tag_text = tag
+            elif ':' in tag:
+                tag_split = tag.split(':', 1)
+                if len(tag_split) == 2:
+                    tag_type, tag_text = tag_split
+                else:
+                    tag_type = tag_split[0]
+                    tag_text = u""
+                tag_type = tag_type.strip().lower()
+                if tag_type == 'dep' and ':' not in tag_text:
+                    tag_class = u'dep-%s-%s' % (CURRENT_PLAN_ID, tag_text)
+                else:
+                    tag_class = u'-'.join(tag.replace(':', ' ').lower().split())
+            else:
+                tag_class = u'-'.join(tag.lower().split())
+                tag_type = '1'
+                tag_text = tag.upper()
+
+            if ':' in tag:
+                lead = tag.split(':', 1)[0]
+                tag_name = '%s:%s' % (lead.lower(), tag_text)
+            else:
+                tag_name = tag_text
+
+            tag_span = (
+                u'<span class="tag tag-type-%s tag-val-%s" tagname="%s" tagnorm="%s">%s</span> ' %
+                (tag_type, tag_class, tag_name, tag.lower(), tag_text)
+                )
+
+            tag_cache[ori_tag] = tag_span
+            add(tag_span)
+
+        output.sort()
+
+        if not tag_id:
+            global TAG_COUNTER
+            TAG_COUNTER = TAG_COUNTER + 1
+            tag_id = 'temp-%s' % TAG_COUNTER
+
+        tag_id = '%s-%s' % (tag_list_id, tag_id)
+
+        if tag_id in SEEN_TAGS_CACHE:
+            raise DirectiveError(2, "The tag id %r has already been used!" % tag_id)
+
+        SEEN_TAGS_CACHE.add(tag_id)
+
+        if not output:
+            pass
+            # add(u'<span class="tag tag-untagged"></span>')
+
+        output.append(u'<a class="tag-link" href="#tag-ref-%s-main">&middot;</a>' % tag_id)
+        output.insert(
+            0, (u'<div class="tag-segment" id="tag-ref-%s">' % tag_id)
+            )
+
+        add(u'</div>')
+
+        tag_info = nodes.raw('', u''.join(output), format='html')
+        tag_content_container = nodes.bullet_list(
+            ids=['tag-ref-%s-content' % tag_id]
+            )
+
+        tag_content = nodes.list_item()
+        self.state.nested_parse(self.content, self.content_offset, tag_content)
+
+        tag_content_container += tag_content
+
+        prefix = nodes.raw('', u'<div id="tag-ref-%s-main" class="tag-content">' % tag_id, format='html')
+        suffix = nodes.raw('', u'</div>', format='html')
+
+        return [prefix, tag_content_container, tag_info, suffix]
+
+directives.register_directive('tag', TagDirective)
+
+# ------------------------------------------------------------------------------
+# plan direktive!
+# ------------------------------------------------------------------------------
+
+CURRENT_PLAN_ID = None
+
+def plan_directive(name, arguments, options, content, lineno,
+                   content_offset, block_text, state, state_machine):
+    """Setup for tags relating to a plan file."""
+
+    global CURRENT_PLAN_ID
+
+    if not CURRENT_PLAN_ID:
+        raw_node = nodes.raw(
+            '',
+            '<div id="plan-container"></div>'
+            '<script type="text/javascript" src="static/plan.js"></script>'
+            '<hr class="clear" />',
+            format='html'
+            )
+    else:
+        raw_node = nodes.raw('', '', format='html')
+
+    CURRENT_PLAN_ID = arguments[0]
+
+    return [raw_node]
+
+plan_directive.arguments = (1, 0, True)
+plan_directive.options = {}
+plan_directive.content = False
+
+directives.register_directive('plan', plan_directive)
 
 # ------------------------------------------------------------------------------
 # konvert plain kode snippets to funky html
@@ -627,6 +789,11 @@ def render_rst(
     with_docinfo=False, as_whole=False
     ):
     """Return the rendered ``source`` with optional extracted properties."""
+
+    global SEEN_TAGS_CACHE, TAG_COUNTER, CURRENT_PLAN_ID
+    SEEN_TAGS_CACHE = set()
+    TAG_COUNTER = 0
+    CURRENT_PLAN_ID = None
 
     if format in ('xhtml', 'html'):
         format, translator, transforms, option_parser = HTML_SETUP

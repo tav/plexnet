@@ -1,0 +1,126 @@
+=============================
+Iteration X: Progress Summary
+=============================
+
+:Abstract:
+
+  This document archives the [[Iteration X]] progress summaries sent to the
+  private Espian mailing list.
+
+.. contents::   Table of Contents
+                :depth: 2
+                :backlinks: none
+
+------
+Week 8
+------
+
+:From: tav <tav@espians.com>
+:Date: Tue, Jul 28, 2009 at 11:36 PM
+:Subject: Week 8 Progress Update on Iteration X
+:Body:
+
+ ·
+
+ Hey lovers,
+
+ Today marks the end of the first 8 weeks of Iteration X. And I figured
+ I'd provide a summary of all the cool shit that everyone's been up to.
+
+ First, the latest design for Espra Trust Maps interface just landed.
+ Check it out:
+
+ * http://cloud.github.com/downloads/tav/plexnet/gfx.espra-trust-map.home-3b.jpg
+
+ The beautiful work is by James Arthur (thruflo) and Matt Morse -- be
+ sure to reply with your thoughts on the design!
+
+ James has been continuing the hard work of implementing Trust Maps on
+ App Engine and it's been progressing nicely. ETA for launch is
+ mid-August on trustmap.org and the code base is at:
+
+ * https://github.com/tav/bootstrap/tree/master/espra (limited access)
+
+ After many years without a web site, we finally have a website!! It's
+ dynamically generated from text files in the Plexnet Git repository
+ and can be seen at:
+
+ * http://www.espians.com
+
+ For those of you new to Git, there's even an extensive intro:
+
+ * http://www.espians.com/getting-started-with-git.html
+
+ Jeff Archambeault (jeffarch) valiantly tried to keep a manual shaila
+ summary of the proceedings at:
+
+ * http://tiny.cc/shaila
+
+ Maciej Fijalkowski (fijal) got PyPy (the base for our naaga "plexnet
+ programming language") compiling as an embeddable library with a
+ minimal C API. And together with Mathew Ryden (oierw), he's been
+ working miracles on getting our interpreter integrated into WebKit --
+ so we don't have to work around Javascript's limitations:
+
+ * http://github.com/tav/plexnet/tree/master/source/client/webkit_bridge
+ * http://github.com/tav/webkit_titanium
+
+ Mathew also worked with Sean B. Palmer (sbp) to create a wicked
+ implementation of some of the Plexnet object model:
+
+ * http://github.com/tav/plexnet/blob/master/source/plexnet/core/data.py
+
+ This was based on information that Sean had successfully managed to
+ extract from me using IRC interviews and documented at:
+
+ * http://inamidst.com/stuff/esp/plexdata
+
+ Mamading Ceesay (evangineer) dived into the world of iPhone and
+ Objective-C and started laying down the foundations of the
+ sure-to-be-sexy Espra iPhone client:
+
+ * https://github.com/tav/bootstrap/tree/master/iphone
+
+ He and I also dabbled a bit with Google Caja and running a cajoler on
+ App Engine Java but ended up concluding that it wasn't worth investing
+ in for now.
+
+ Mamading, along with Sofia Bustamante (olasofia) and David Pinto
+ (happyseaurchin), have also been providing a lot of invaluable
+ help/guidance on a day to day basis.
+
+ And, in preparation for the eventual launch, John McCane-Whitney
+ (JohnMW) has started compiling a contact/info list of hundreds of
+ thought leaders and organisations that we should be contacting for the
+ marketing "Blitz".
+
+ Alex Tomkins (GReaper) continues to make sure our servers are running
+ fine and along with Danny Bruder (cre8radix) and Jeff -- with their
+ IRC bots/logging -- continues to provide a reliable infrastructure
+ that we can all operate on.
+
+ And, oh, I also created a super sexy framework called Weblite for App Engine:
+
+ * https://github.com/tav/bootstrap/tree/insanity/appengine/ (limited access)
+
+ And, finally, following Participation Camp in NYC by Matt Cooperrider
+ (mattcoop) and virtually hosted by the Radical Inclusion guys --
+ Suresh Fernando (sureshf) and Stephan Dohrn (stephandohrn) -- we
+ formed a new initiative "OpenKollab" with some other cool dudes like
+ Michael Maranda (tropology) and Gerry:
+
+ * http://openkollab.com
+
+ And together we've come with an exciting roadmap which starts with
+ using Wagn (a Ruby on Rails-based structured wiki with transclusions)
+ and incorporates the Plexnet/Espra vision:
+
+ * http://wiki.openkollab.com/Roadmap
+
+ All in all, it's been a wonderful 8 weeks and lots of thanks to the
+ brilliant work that everyone's been doing!!
+
+ Feel free to chime in with your thoughts!
+
+ --
+ love and kisses, tav

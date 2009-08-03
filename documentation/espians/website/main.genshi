@@ -74,6 +74,9 @@
     #ignore-this { display: none; }
   </style>
 
+  <link rel="stylesheet" type="text/css" media="screen" title="default"
+		href="static/extra.css" />
+
   <!--[if lte IE 8]>
     <style type="text/css">
       ol { list-style-type: disc; }
@@ -136,27 +139,36 @@
 		value="&amp;langpair=en|zh-CN" id="openzh-CN">中文 (简体)</option><option
 		value="&amp;langpair=en|zh-TW" id="openzh-TW">中文 (繁體)</option>
 		</select></form><a href="/" class="menu-item"
-		title="${site_title}">Home</a><a class="menu-item"
-		title="About The Espians"
-		href="about-the-espians.html">About The Espians</a><a class="menu-item-final"
-		href="http://twitter.com/Espians" title="Follow @Espians" style="margin-right: 5px;"><img
-		src="${STATIC}/gfx/twitter-icon.png" alt="Follow @Espians on Twitter"
-		class="absmiddle" /></a><a href="http://friendfeed.com/Espians" style="margin-right: 5px;"
-		title="Follow Espians on FriendFeed"><img src="${STATIC}/gfx/friendfeed-icon.png"
-		alt="FriendFeed" class="absmiddle" /></a><a
-		style="margin-right: 5px;"
+		title="${site_title}">Home</a><a class="menu-item" title="About The
+		Espians" href="about-the-espians.html">About The Espians</a><a
+		class="menu-item" title="Join IRC Chat"
+		href="http://webchat.freenode.net/?channels=esp" onclick="var
+		ircnickname = prompt('What nickname would you like to use on #esp IRC?',
+		'YourName'); if (ircnickname) window.location =
+		'http://webchat.freenode.net/?channels=esp&amp;nick=' +
+		encodeURIComponent(ircnickname); return false;">Join IRC Chat</a><a
+		class="menu-item"
+		href="http://www.openideaproject.org/irclogs/browse/esp/latest"
+		title="Read the #esp IRC Logs">Logs</a><a class="menu-item-final"
+		href="http://twitter.com/Espians" title="Follow @Espians"
+		style="margin-right: 5px;"><img src="${STATIC}/gfx/twitter-icon.png"
+		alt="Follow @Espians on Twitter" class="absmiddle" /></a><a
+		href="http://friendfeed.com/Espians" style="margin-right: 5px;"
+		title="Follow Espians on FriendFeed"><img
+		src="${STATIC}/gfx/friendfeed-icon.png" alt="FriendFeed"
+		class="absmiddle" /></a><a style="margin-right: 5px;"
 		href="http://github.com/Espians" title="Follow Espians on GitHub"><img
 		src="${STATIC}/gfx/github-icon.png" alt="GitHub" class="absmiddle"
 		/></a><a style="margin-right: 5px;"
-		href="http://www.facebook.com/pages/Espians/7261161315"
-		title="Follow Espians on Facebook"><img src="${STATIC}/gfx/facebook-icon.gif"
+		href="http://www.facebook.com/pages/Espians/7261161315" title="Follow
+		Espians on Facebook"><img src="${STATIC}/gfx/facebook-icon.gif"
 		alt="Facebook" class="absmiddle" /></a><a
 		href="http://feeds2.feedburner.com/${site_nick}" rel="alternate"
 		type="application/rss+xml" title="Subscribe to the RSS Feed"><img
 		alt="RSS Feed" class="absmiddle"
 		src="http://www.feedburner.com/fb/images/pub/feed-icon16x16.png"
-		/></a><div
-		style="margin-top: 7px; font-family: Monaco,Courier New;"></div>
+		/></a><div style="margin-top: 7px; font-family: Monaco,Courier
+		New;"></div>
 		<hr class="clear" />
 	</div>
   </div>

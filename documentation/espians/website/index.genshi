@@ -64,10 +64,6 @@
     width: 100%;
   }
 
-  #site-tags a {
-    margin-bottom: 0.7em;
-  }
-
   #site-articles {
     margin-top: 2em;
   }
@@ -82,60 +78,6 @@
     font-size: 0.8em;
     text-decoration: none;
     color: #778;
-  }
-
-  a.button {
-    background: transparent url('${STATIC}/gfx/bg_button_a.gif') no-repeat scroll top right;
-    color: #444;
-    display: block;
-    float: left;
-    font: normal 12px arial, sans-serif;
-    height: 24px;
-    margin-right: 6px;
-    padding-right: 18px; /* sliding doors padding */
-    text-decoration: none;
-  }
-
-  a.button span {
-    background: transparent url('${STATIC}/gfx/bg_button_span.gif') no-repeat;
-    display: block;
-    line-height: 14px;
-    padding: 5px 0 5px 18px;
-  }
-
-  a.button:active {
-    background-position: bottom right;
-    color: #000;
-    outline: none; /* hide dotted outline in Firefox */
-  }
-
-  a.button:active span {
-    background-position: bottom left;
-    padding: 6px 0 4px 18px; /* push text down 1px */
-  }
-
-  a.buttondown {
-    background: transparent url('${STATIC}/gfx/bg_button_a.gif') no-repeat scroll top right;
-    color: #444;
-    display: block;
-    float: left;
-    font: normal 12px arial, sans-serif;
-    height: 24px;
-    margin-right: 6px;
-    padding-right: 18px; /* sliding doors padding */
-    text-decoration: none;
-    background-position: bottom right;
-    color: #000;
-    outline: none; /* hide dotted outline in Firefox */
-  }
-
-  a.buttondown span {
-    background: transparent url('${STATIC}/gfx/bg_button_span.gif') no-repeat;
-    display: block;
-    line-height: 14px;
-    padding: 5px 0 5px 18px;
-    background-position: bottom left;
-    padding: 6px 0 4px 18px; /* push text down 1px */
   }
 
 </style>
@@ -169,7 +111,7 @@
         i++;
       }
     }
-  }
+  };
 
   $('#site-tags a.button').click(function () {
 
@@ -243,7 +185,7 @@
       $('#tag-all').click();
     }
 
-  })
+  });
 
 /* ]]> */
 </script>

@@ -2,10 +2,10 @@
 Board of Mentors
 ================
 
-There will be a special "Board of Mentors" to mentor the Espian [[Executive
-Council]]. The wisdom of Elders is something to be sought and valued --
-especially since the valuable experiences of those who've gone before us is all
-too often neglected in modern society.
+There will be a special "Board of Mentors" to mentor the Espian Executive
+Council. The wisdom of Elders is something to be sought and valued -- especially
+since the valuable experiences of those who've gone before us is all too often
+neglected in modern society.
 
 ---------------------------
 What is Expected of Mentors
@@ -83,6 +83,8 @@ Potential Mentors
 * `Starhawk <http://en.wikipedia.org/wiki/Starhawk>`_
 
 * `Steve Jobs <http://en.wikipedia.org/wiki/Steve_Jobs>`_
+
+* `Steven Chu <http://en.wikipedia.org/wiki/Steven_Chu>`_
 
 * `Tim Berners-Lee <http://en.wikipedia.org/wiki/Tim_Berners-Lee>`_ -- `blog
   <http://dig.csail.mit.edu/breadcrumbs/blog/4>`__

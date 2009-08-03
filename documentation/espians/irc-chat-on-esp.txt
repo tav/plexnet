@@ -1,0 +1,23 @@
+================
+IRC Chat on #esp
+================
+
+There is a `#esp <irc://irc.freenode.net/esp>`_ chat channel on `IRC
+<http://en.wikipedia.org/wiki/Internet_Relay_Chat>`_ for live collaboration.
+Just enter your nickname below and join in!
+
+.. raw:: html
+
+  <div class="center"><form action="http://webchat.freenode.net/" method="get"><input type="text" name="nick" value="" id="ircnickname" />&nbsp;<input type="submit" name="" value="Join the live chat!" onclick="window.location = 'https://webchat.freenode.net/?channels=esp&nick=' + document.getElementById('ircnickname').value; return false;" /></form></div>
+
+You can also read:
+
+* `Today's chatlog for #esp <http://www.openideaproject.org/irclogs/browse/esp/latest>`_
+* `The archived chatlogs <http://www.openideaproject.org/irclogs/browse/esp>`_
+
+The channel has been going since October 1999 and if you are familiar with IRC,
+you can also access it with these details:
+
+* Server: irc.freenode.net
+* Channel: #esp
+* irc://irc.freenode.net/esp
