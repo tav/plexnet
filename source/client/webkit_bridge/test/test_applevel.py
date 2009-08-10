@@ -74,6 +74,18 @@ class AppTestBindings(object):
         ''')
         assert self.globals.xxx == 3
 
+    def test_method(self):
+        x = self.interpret('''
+        function c () {
+            this.zzz = 3;
+            this.f = function (x) {
+                return (this.zzz + x);
+            };
+        }
+        new c()
+        ''')
+        assert x.f(3) == 6
+
     def test_raising_call(self):
         f = self.interpret('''
         function f(x) {

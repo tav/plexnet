@@ -53,7 +53,7 @@ class JavaScriptContext(object):
         else:
             raise NotImplementedError()
 
-    def js_to_python(self, js_obj):
+    def js_to_python(self, js_obj, this=NULL):
         space = self.space
         tp = JSValueGetType(self._ctx, js_obj)
         if tp == kJSTypeUndefined:
@@ -67,7 +67,7 @@ class JavaScriptContext(object):
         elif tp == kJSTypeString:
             return space.wrap(self.str_js(js_obj))
         elif tp == kJSTypeObject:
-            return space.wrap(JSObject(self, js_obj))
+            return space.wrap(JSObject(self, js_obj, this))
         else:
             raise NotImplementedError(tp)
 
@@ -100,9 +100,10 @@ class JavaScriptContext(object):
         return JSObject(self, JSContextGetGlobalObject(self._ctx))
 
 class JSObject(Wrappable):
-    def __init__(self, ctx, js_val):
+    def __init__(self, ctx, js_val, this=NULL):
         self.ctx = ctx
         self.js_val = js_val
+        self.this = this
 
     def descr_get(self, space, w_name):
         name = space.str_w(w_name)
@@ -114,7 +115,7 @@ class JSObject(Wrappable):
                 space.setitem(w_d, space.wrap(name), w_item)
             return w_d
         js_val = self.ctx.get(self.js_val, name)
-        return self.ctx.js_to_python(js_val)
+        return self.ctx.js_to_python(js_val, self.js_val)
 
     def descr_set(self, space, w_name, w_value):
         name = space.str_w(w_name)
@@ -127,7 +128,7 @@ class JSObject(Wrappable):
 
     def call(self, space, args_w):
         js_res = self.ctx.call(self.js_val, [self.ctx.python_to_js(arg)
-                                             for arg in args_w])
+                                             for arg in args_w], self.this)
         return self.ctx.js_to_python(js_res)
 
     def str(self, space):
