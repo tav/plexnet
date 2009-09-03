@@ -70,3 +70,20 @@ Optimisations
 
 .. !! PLEASE UPDATE THIS WHENEVER YOU CREATE A NEW ITEM !!
 .. latest used id: 3
+
+
+http://informationarchitects.jp/designing-firefox-32/
+
+@Sven: I’d say that it’s a URL-library, combining bookmarks (hence “Saved”), RSS
+(hence “New”) and history (hence “Unread”)
+
+@Winston: First question: Yes, tabs are still possible. 2nd question: They’re in
+your history, so maybe an additional history category (”open tabs” or “last
+hour”) might be useful… BTW: The idea is also that whatever library item was
+selected stays selected if you open a new tab.
+
+a way to queue up pages in a ‘to read’ category of the ‘library’. maybe this is ’surflists’?
+maybe a way to would categorize pages automatically — in my case, a quick scan
+of the page would put pages with “ruby” “rails”, “javascript” etc in one
+category, “markets” “capitalism”, “stimulus” etc in another, and so on.
+
