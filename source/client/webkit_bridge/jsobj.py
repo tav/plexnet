@@ -4,16 +4,32 @@ from pypy.interpreter.gateway import interp2app
 from pypy.interpreter.typedef import TypeDef
 from pypy.interpreter.error import OperationError
 from webkit_bridge.webkit_rffi import *
+from pypy.rpython.lltypesystem import lltype, rffi
+from pypy.interpreter.argument import Arguments
+from pypy.rpython.memory.support import AddressDict
 
 class JavaScriptContext(object):
-    def __init__(self, space, _ctx):
-        self._ctx = _ctx
+    def __init__(self, space):
+        self._ctx = lltype.nullptr(JSValueRef.TO)
         self.space = space
         self.w_js_exception = space.appexec([], '''():
         class JSException(Exception):
             pass
         return JSException
         ''')
+        # note. It's safe to cast pointers in this dict to ints
+        # as they're non-movable (raw) ones
+        self.applevel_callbacks = {}
+        def callback(ctx, js_function, js_this, js_args):
+            arguments = Arguments(space,
+                [self.js_to_python(arg) for arg in js_args])
+            w_callable = self.applevel_callbacks.get(
+                rffi.cast(lltype.Signed, js_function), None)
+            if w_callable is None:
+                raise Exception("Got wrong callback, should not happen")
+            w_res = space.call_args(w_callable, arguments)
+            return self.python_to_js(w_res)
+        self.js_callback_factory = create_js_callback(callback)
 
     def python_to_js(self, w_obj):
         space = self.space
@@ -29,10 +45,15 @@ class JavaScriptContext(object):
             return JSValueMakeString(self._ctx, self.newstr(space.str_w(w_obj)))
         elif isinstance(w_obj, JSObject):
             return w_obj.js_val
+        elif space.is_true(space.callable(w_obj)):
+            name = space.str_w(space.getattr(w_obj, space.wrap('__name__')))
+            js_func = self.js_callback_factory(self._ctx, name)
+            self.applevel_callbacks[rffi.cast(lltype.Signed, js_func)] = w_obj
+            return js_func
         else:
             raise NotImplementedError()
 
-    def js_to_python(self, js_obj):
+    def js_to_python(self, js_obj, this=NULL):
         space = self.space
         tp = JSValueGetType(self._ctx, js_obj)
         if tp == kJSTypeUndefined:
@@ -46,7 +67,7 @@ class JavaScriptContext(object):
         elif tp == kJSTypeString:
             return space.wrap(self.str_js(js_obj))
         elif tp == kJSTypeObject:
-            return space.wrap(JSObject(self, js_obj))
+            return space.wrap(JSObject(self, js_obj, this))
         else:
             raise NotImplementedError(tp)
 
@@ -70,8 +91,7 @@ class JavaScriptContext(object):
         try:
             return JSObjectCallAsFunction(self._ctx, js_val, this, args)
         except JSException, e:
-            raise OperationError(self.w_js_exception, e.repr())
-                                 
+            raise OperationError(self.w_js_exception, self.space.wrap(e.repr()))
 
     def propertylist(self, js_val):
         return JSPropertyList(self._ctx, js_val)
@@ -80,9 +100,10 @@ class JavaScriptContext(object):
         return JSObject(self, JSContextGetGlobalObject(self._ctx))
 
 class JSObject(Wrappable):
-    def __init__(self, ctx, js_val):
+    def __init__(self, ctx, js_val, this=NULL):
         self.ctx = ctx
         self.js_val = js_val
+        self.this = this
 
     def descr_get(self, space, w_name):
         name = space.str_w(w_name)
@@ -94,7 +115,7 @@ class JSObject(Wrappable):
                 space.setitem(w_d, space.wrap(name), w_item)
             return w_d
         js_val = self.ctx.get(self.js_val, name)
-        return self.ctx.js_to_python(js_val)
+        return self.ctx.js_to_python(js_val, self.js_val)
 
     def descr_set(self, space, w_name, w_value):
         name = space.str_w(w_name)
@@ -107,7 +128,7 @@ class JSObject(Wrappable):
 
     def call(self, space, args_w):
         js_res = self.ctx.call(self.js_val, [self.ctx.python_to_js(arg)
-                                             for arg in args_w])
+                                             for arg in args_w], self.this)
         return self.ctx.js_to_python(js_res)
 
     def str(self, space):

@@ -99,3 +99,19 @@ class TestBasic(object):
             'othercontainedValue',
             'anothercontainedValue'
             ]
+
+    def test_callback_wrap(self):
+        script = '''
+        function f(x) {
+            return (x(3));
+        }
+        f
+        '''
+        this = JSEvaluateScript(self.context, '[]', NULL)
+        f = JSEvaluateScript(self.context, script, NULL)
+        def _call(ctx, function, this, args):
+            return args[0]
+        y = create_js_callback(_call)(self.context, '_call')
+        res = JSObjectCallAsFunction(self.context, f, this, [y])
+        assert JSValueGetType(self.context, res) == kJSTypeNumber
+        assert JSValueToNumber(self.context, res) == 3.0

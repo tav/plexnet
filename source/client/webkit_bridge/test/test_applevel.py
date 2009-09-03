@@ -8,7 +8,8 @@ from pypy.interpreter.gateway import interp2app
 
 class AppTestBindings(object):
     def setup_class(cls):
-        ctx = JavaScriptContext(cls.space, JSGlobalContextCreate())
+        ctx = JavaScriptContext(cls.space)
+        ctx._ctx = JSGlobalContextCreate()
         cls.w_js_obj = cls.space.wrap(JSObject(ctx, ctx.eval('[]')))
         this = ctx.eval('[]')
         ctx.eval('this.x = function(a, b) { return(a + b); }', this)
@@ -73,6 +74,18 @@ class AppTestBindings(object):
         ''')
         assert self.globals.xxx == 3
 
+    def test_method(self):
+        x = self.interpret('''
+        function c () {
+            this.zzz = 3;
+            this.f = function (x) {
+                return (this.zzz + x);
+            };
+        }
+        new c()
+        ''')
+        assert x.f(3) == 6
+
     def test_raising_call(self):
         f = self.interpret('''
         function f(x) {
@@ -81,3 +94,15 @@ class AppTestBindings(object):
         f
         ''')
         raises(self.JSException, f, 3)
+
+    # XXX more raising tests
+
+    def test_wrapped_callback(self):
+        f = self.interpret('''
+        function f(x) {
+            return x(3);
+        }
+        f
+        ''')
+        res = f(lambda x: x + 3)
+        assert res == 3 + 3
