@@ -22,6 +22,17 @@ Mentor. But they will all be expected to:
 
 * Push us to be the best that we can be.
 
+---------
+The Board
+---------
+
+The following amazing individuals have graced us by joining the Board of
+Mentors:
+
+* `Howard Rheingold <http://en.wikipedia.org/wiki/Howard_Rheingold>`_ --
+  `website <http://www.rheingold.com/>`__, `blog <http://www.smartmobs.com/>`__,
+  `@hrheingold <http://twitter.com/hrheingold>`_
+
 -----------------
 Potential Mentors
 -----------------
@@ -39,10 +50,6 @@ Potential Mentors
   <http://neopythonic.blogspot.com/>`__, `@gvanrossum
   <http://twitter.com/gvanrossum>`_
 
-* `Guy Kawasaki <http://en.wikipedia.org/wiki/Guy_Kawasaki>`_ -- `blog
-  <http://blog.guykawasaki.com/>`__, `@guykawasaki
-  <http://twitter.com/guykawasaki>`_
-
 * `Jo Freeman <http://en.wikipedia.org/wiki/Jo_Freeman>`_
 
 * `John Brockman <http://en.wikipedia.org/wiki/John_Brockman_(literary_agent)>`_
@@ -57,10 +64,6 @@ Potential Mentors
   <http://www.constantvzw.org/cn_core/guests/g2.php?var_in=304>`_
 
 * `Lisa Fithian <http://en.wikipedia.org/wiki/Lisa_Fithian>`_
-
-* `Howard Rheingold <http://en.wikipedia.org/wiki/Howard_Rheingold>`_ --
-  `website <http://www.rheingold.com/>`__, `blog <http://www.smartmobs.com/>`__,
-  `@hrheingold <http://twitter.com/hrheingold>`_
 
 * `Kevin Kelly <http://en.wikipedia.org/wiki/Kevin_Kelly_(editor)>`_ -- `blog
   <http://www.kk.org/>`__, `@kevin2kelly <http://twitter.com/Kevin2kelly>`_
@@ -81,6 +84,10 @@ Potential Mentors
 * `Scilla Elworthy <http://en.wikipedia.org/wiki/Scilla_Elworthy>`_
 
 * `Starhawk <http://en.wikipedia.org/wiki/Starhawk>`_
+
+* `Stephen Fry <http://en.wikipedia.org/wiki/Stephen_Fry>`_ -- `website
+  <http://www.stephenfry.com/>`__, `@stephenfry
+  <http://twitter.com/stephenfry>`_
 
 * `Steve Jobs <http://en.wikipedia.org/wiki/Steve_Jobs>`_
 

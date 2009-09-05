@@ -104,40 +104,57 @@
 		<a href="/" title="Espians: On The Road To Espia"><img
 		  id="site-logo" src="http://cloud.github.com/downloads/tav/plexnet/gfx.espian-flag-embossed.png" alt="Espian Flag" width="64px" height="60px" /></a><form id="translation_form" class="menu-item-padding"><select id="lang_select" onchange="dotranslate(this);">
 		<option value="" id="select_language">Select Language</option>
-		<option value="&amp;langpair=en|ar" id="openar">العربية</option><option
-		value="&amp;langpair=en|bg" id="openbg">български</option><option
-		value="&amp;langpair=en|ca" id="openca">català</option><option
-		value="&amp;langpair=en|cs" id="opencs">česky</option><option
-		value="&amp;langpair=en|da" id="openda">Dansk</option><option
-		value="&amp;langpair=en|de" id="opende">Deutsch</option><option
-		value="&amp;langpair=en|el" id="openel">Ελληνικά</option><option
-		value="&amp;langpair=en|es" id="openes">Español</option><option
-		value="&amp;langpair=en|fi" id="openfi">suomi</option><option
-		value="&amp;langpair=en|fr" id="openfr">Français</option><option
-		value="&amp;langpair=en|hi" id="openhi">हिन्दी</option><option
-		value="&amp;langpair=en|hr" id="openhr">hrvatski</option><option
-		value="&amp;langpair=en|id" id="openid">Indonesia</option><option
-		value="&amp;langpair=en|it" id="openit">Italiano</option><option
-		value="&amp;langpair=en|iw" id="openiw">עברית</option><option
-		value="&amp;langpair=en|ja" id="openja">日本語</option><option
-		value="&amp;langpair=en|ko" id="openko">한국어</option><option
-		value="&amp;langpair=en|lt" id="openlt">Lietuvių</option><option
-		value="&amp;langpair=en|lv" id="openlv">latviešu</option><option
-		value="&amp;langpair=en|nl" id="opennl">Nederlands</option><option
-		value="&amp;langpair=en|no" id="openno">norsk</option><option
-		value="&amp;langpair=en|pl" id="openpl">Polski</option><option
-		value="&amp;langpair=en|pt" id="openpt">Português</option><option
-		value="&amp;langpair=en|ro" id="openro">Română</option><option
-		value="&amp;langpair=en|ru" id="openru">Русский</option><option
-		value="&amp;langpair=en|sk" id="opensk">slovenčina</option><option
-		value="&amp;langpair=en|sl" id="opensl">slovenščina</option><option
-		value="&amp;langpair=en|sr" id="opensr">српски</option><option
-		value="&amp;langpair=en|sv" id="opensv">Svenska</option><option
+		<option value="&amp;langpair=en|af" id="openaf">Afrikaans</option><option
+		value="&amp;langpair=en|sq" id="opensq">Albanian</option><option
+		value="&amp;langpair=en|ar" id="openar">Arabic (العربية)</option><option
+		value="&amp;langpair=en|be" id="openbe">Belarusian</option><option
+		value="&amp;langpair=en|bg" id="openbg">Bulgarian (български)</option><option
+		value="&amp;langpair=en|ca" id="openca">Catalan (català)</option><option
+		value="&amp;langpair=en|zh-CN" id="openzh-CN">Chinese (中文 [简体])</option><option
+		value="&amp;langpair=en|zh-TW" id="openzh-TW">Chinese (中文 [繁體])</option><option
+		value="&amp;langpair=en|hr" id="openhr">Croatian (hrvatski)</option><option
+		value="&amp;langpair=en|cs" id="opencs">Czech (česky)</option><option
+		value="&amp;langpair=en|da" id="openda">Danish (Dansk)</option><option
+		value="&amp;langpair=en|nl" id="opennl">Dutch (Nederlands)</option><option
+		value="&amp;langpair=en|et" id="openet">Estonian</option><option
+		value="&amp;langpair=en|fa" id="openfa">Farsi/Persian</option><option
 		value="&amp;langpair=en|tl" id="opentl">Filipino</option><option
-		value="&amp;langpair=en|uk" id="openuk">українська</option><option
-		value="&amp;langpair=en|vi" id="openvi">Tiếng Việt</option><option
-		value="&amp;langpair=en|zh-CN" id="openzh-CN">中文 (简体)</option><option
-		value="&amp;langpair=en|zh-TW" id="openzh-TW">中文 (繁體)</option>
+		value="&amp;langpair=en|fi" id="openfi">Finnish (suomi)</option><option
+		value="&amp;langpair=en|fr" id="openfr">French (Français)</option><option
+		value="&amp;langpair=en|gl" id="opengl">Galician</option><option
+		value="&amp;langpair=en|de" id="opende">German (Deutsch)</option><option
+		value="&amp;langpair=en|el" id="openel">Greek (Ελληνικά)</option><option
+		value="&amp;langpair=en|iw" id="openiw">Hebrew (עברית)</option><option
+		value="&amp;langpair=en|hi" id="openhi">Hindi (हिन्दी)</option><option
+		value="&amp;langpair=en|hu" id="openhu">Hungarian</option><option
+		value="&amp;langpair=en|is" id="openis">Icelandic</option><option
+		value="&amp;langpair=en|id" id="openid">Indonesian</option><option
+		value="&amp;langpair=en|ga" id="openga">Irish</option><option
+		value="&amp;langpair=en|it" id="openit">Italian (Italiano)</option><option
+		value="&amp;langpair=en|ja" id="openja">Japanese (日本語)</option><option
+		value="&amp;langpair=en|ko" id="openko">Korean (한국어)</option><option
+		value="&amp;langpair=en|lv" id="openlv">Latvian (latviešu)</option><option
+		value="&amp;langpair=en|lt" id="openlt">Lithuanian (Lietuvių)</option><option
+		value="&amp;langpair=en|mk" id="openmk">Macedonian</option><option
+		value="&amp;langpair=en|ms" id="openms">Malay</option><option
+		value="&amp;langpair=en|mt" id="openmt">Maltese</option><option
+		value="&amp;langpair=en|no" id="openno">Norwegian (norsk)</option><option
+		value="&amp;langpair=en|pl" id="openpl">Polish (Polski)</option><option
+		value="&amp;langpair=en|pt" id="openpt">Portuguese (Português)</option><option
+		value="&amp;langpair=en|ro" id="openro">Romanian (Română)</option><option
+		value="&amp;langpair=en|ru" id="openru">Russian (Русский)</option><option
+		value="&amp;langpair=en|sr" id="opensr">Serbian (српски)</option><option
+		value="&amp;langpair=en|sk" id="opensk">Slovak (slovenčina)</option><option
+		value="&amp;langpair=en|sl" id="opensl">Slovenian (slovenščina)</option><option
+		value="&amp;langpair=en|es" id="openes">Spanish (Español)</option><option
+		value="&amp;langpair=en|sw" id="opensw">Swahili</option><option
+		value="&amp;langpair=en|sv" id="opensv">Swedish (Svenska)</option><option
+		value="&amp;langpair=en|th" id="openth">Thai</option><option
+		value="&amp;langpair=en|tr" id="opentr">Turkish</option><option
+		value="&amp;langpair=en|uk" id="openuk">Ukrainian (українська)</option><option
+		value="&amp;langpair=en|vi" id="openvi">Vietnamese (Tiếng Việt)</option><option
+		value="&amp;langpair=en|cy" id="opency">Welsh</option><option
+		value="&amp;langpair=en|yi" id="openyi">Yiddish</option>
 		</select></form><a href="/" class="menu-item"
 		title="${site_title}">Home</a><a class="menu-item" title="About The
 		Espians" href="about-the-espians.html">About The Espians</a><a
