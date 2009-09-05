@@ -6,25 +6,82 @@ The Espians are a Metanational Collective of Visionaries, Artists, Engineers
 and Cultural Creatives. Led by `tav <http://tav.espians.com>`_, they have been
 working on Weapons of Mass Construction since 1999.
 
+.. class:: center
+
+  |twitter| `Follow @Espians <http://twitter.com/Espians>`_
+  |padding|
+  |facebook| `Join the Espians Page <http://www.facebook.com/Espians>`_
+
+------------------
+Featured Past Work
+------------------
+
+The Espians have worked on many projects during the last decade. This month's
+featured work is from 2006:
+
+  .. raw:: html
+
+    <a href="http://www.green.tv"><img src="http://cloud.github.com/downloads/tav/plexnet/gfx.greentv.png"
+       style="float: left; margin-right: 2em; margin-bottom: 2em;" width="210px" height="169px" /></a>
+
+  `green.tv <http://www.green.tv>`_
+
+  Created in partnership with UNEP and Greenpeace, and co-produced with
+  Largeblue, green.tv is an online tv channel dedicated to environmental issues.
+
 ----------------
 Currently Active
 ----------------
 
+* `@cre8radix <http://twitter.com/cre8radix>`_ is `Danny Bruder
+  <http://cre8radix.net/>`_, Germany.
+
 * `@evangineer <http://twitter.com/evangineer>`_ is `Mamading Ceesay
-  <http://evangineer.agoraworx.com/blog/entries.html>`_.
+  <http://evangineer.agoraworx.com/blog/entries.html>`_, UK.
 
-* fijal is Maciej Fijalkowski.
+* fijal is `Maciej Fijalkowski <http://morepypy.blogspot.com/>`_, Poland.
 
-* GReaper is Alex Tomkins.
+* GReaper is `Alex Tomkins <http://blogoholic.co.uk/>`_, UK.
 
-* `@jeffarch <http://twitter.com/jeffarch>`_ is Jeffry Archambeault.
+* `@happyseaurchin <http://twitter.com/happyseaurchin>`_ is `David Pinto
+  <http://2020worldwalk.blogspot.com/>`_, UK.
 
-* oierw is Mathew Ryden.
+* `@jeffarch <http://twitter.com/jeffarch>`_ is Jeffry Archambeault, USA.
 
-* `sbp <http://inamidst.com/sbp/>`_ is Sean B. Palmer.
+* JohnMW is `John McCane-Whitney <http://twitter.com/jmccanewhitney>`_, UK.
 
-* `@tav <http://twitter.com/tav>`_ is `Tav <http://tav.espians.com>`_
+* oierw is `Mathew Ryden <http://www.facebook.com/mathew.ryden>`_, USA.
+
+* `@olasofia <http://twitter.com/olasofia>`_ is `Sofia Bustamante
+  <http://sofiabustamante.com>`_, UK.
+
+* `@sbp <http://twitter.com/sbp>`_ is `Sean B. Palmer
+  <http://inamidst.com/sbp/>`_, UK.
+
+* `@tav <http://twitter.com/tav>`_ is `Tav <http://tav.espians.com>`_, UK.
 
 * `@thruflo <http://twitter.com/thruflo>`_ is `James Arthur
-  <http://www.thruflo.com>`_.
+  <http://www.thruflo.com>`_, UK.
 
+--------------------
+Currently Not Active
+--------------------
+
+There have been over a hundred amazing individuals who have been active Espians
+over the last 10 years. See the `pecu allocations
+<http://tav.espians.com/pecu-allocations-by-tav.html>`_ article to see a list of
+all who've contributed!
+
+
+.. |twitter| raw:: html
+
+  <img src="http://tav.github.com/static/gfx/twitter-icon.png" class="absmiddle" />
+
+.. |facebook| raw:: html
+
+  <img src="http://tav.github.com/static/gfx/facebook-icon.gif"
+  class="absmiddle" />
+
+.. |padding| raw:: html
+
+  &nbsp;&nbsp;&nbsp;

@@ -8,7 +8,7 @@ Just enter your nickname below and join in!
 
 .. raw:: html
 
-  <div class="center"><form action="http://webchat.freenode.net/" method="get"><input type="text" name="nick" value="" id="ircnickname" />&nbsp;<input type="submit" name="" value="Join the live chat!" onclick="window.location = 'https://webchat.freenode.net/?channels=esp&nick=' + document.getElementById('ircnickname').value; return false;" /></form></div>
+  <div class="center"><form action="http://webchat.freenode.net/" method="get"><input type="text" name="nick" value="" id="ircnickname" />&nbsp;<input type="submit" name="" value="Join the live chat!" onclick="window.location = 'http://webchat.freenode.net/?channels=esp&nick=' + document.getElementById('ircnickname').value; return false;" /></form></div>
 
 You can also read:
 
