@@ -30,8 +30,8 @@
 
   MONTHS = [
     'Zero Month',
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
     ]
 
 ?>
@@ -211,6 +211,7 @@
                 </script>
                 | <div class="retweetbutton">
                 <script type="text/javascript" src="http://tweetmeme.com/i/scripts/button.js"></script>
+				</div>
 	  </div>
 	  <div class="article-info">
 	  &#187; last updated by <span py:with="author=email2author[info.get('__by__', 'unknown')]"><a href="${author2link[author]}">${authors[author][0]}</a></span> on <span py:with="updated=info['__updated__']" class="post-date">${MONTHS[updated.month]} ${updated.day}, ${updated.year} @ <a href="http://github.com/tav/plexnet/blob/master/documentation/espians/${info['__name__']}.txt">${'%.2i:%.2i' % (updated.hour, updated.minute)}</a></span> <a href="http://creativecommons.org/publicdomain/zero/1.0/"><img src="http://upload.wikimedia.org/wikipedia/commons/thumb/d/d1/Cc-pd.svg/64px-Cc-pd.svg.png" width="20px" height="20px" alt="Public Domain" class="absmiddle" /></a>
