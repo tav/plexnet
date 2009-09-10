@@ -249,6 +249,13 @@ person. But given how lazy we all are, it is RECOMMENDED that Node operators at
 least use the phone to verify the fingerprint of new Trusted Nodes.
 Man-in-the-middle attacks are very real.
 
+-------------
+To Be Written
+-------------
+
+* There are about a hundred more sections to be written. Contact `tav
+  <http://tav.espians.com>`_ for more info or drop in on
+  irc://irc.freenode.net/esp to get involved!
 
 -----------
 Ignore This
@@ -476,8 +483,6 @@ likes of Lionhead's Black & White game and the Opera browser to the recent day
 iPhone and Wii. [Saffer-2007]_
 
 
-
-
 --------------
 Implementation
 --------------
@@ -493,7 +498,7 @@ A reference implementation is currently being developed using `Python
 <http://en.wikipedia.org/wiki/C++>`_ and `Javascript
 <http://en.wikipedia.org/wiki/JavaScript>`_:
 
-* http://code.google.com/p/plexnet
+* http://github.com/tav/plexnet/
 
 Downloadable packages will eventually be available at http://plexnet.org for all
 major modern platforms.
