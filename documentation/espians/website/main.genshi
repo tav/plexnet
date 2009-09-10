@@ -6,7 +6,7 @@
 
   from time import time
 
-  STATIC = 'http://tav.github.com/static'
+  STATIC = 'http://cloud.github.com/downloads/tav/plexnet'
 
   info = defined('info') and info or {}
 
@@ -65,17 +65,14 @@
 
   <!-- stylesheets -->
   <link rel="stylesheet" type="text/css" media="screen" title="default"
-		href="${STATIC}/css/screen.css?v=2" />
+		href="${STATIC}/css.screen.css?v=2" />
   <link rel="stylesheet" type="text/css" media="screen" title="default"
-		href="${STATIC}/css/asktav.css?v=2" />
+		href="${STATIC}/css.asktav.css?v=2" />
 
   <style type="text/css" media="print">
     /* @import url("${STATIC}/css/print.css"); */
     #ignore-this { display: none; }
   </style>
-
-  <link rel="stylesheet" type="text/css" media="screen" title="default"
-		href="static/extra.css" />
 
   <!--[if lte IE 8]>
     <style type="text/css">
@@ -91,7 +88,7 @@
     PAGE_URI = '${page_url}'
     facebookXdReceiverPath = 'http://www.espians.com/external/xd_receiver.html';
   </script>
-  <script type="text/javascript" src="${STATIC}/js/init.js" />
+  <script type="text/javascript" src="${STATIC}/js.init.js" />
   <script type="text/javascript" src="http://w.sharethis.com/button/sharethis.js#publisher=65b4c59a-e069-4896-84b4-7d8d7dce2b77&amp;type=website&amp;style=rotate&amp;post_services=facebook%2Cmyspace%2Cdigg%2Cdelicious%2Cybuzz%2Ctwitter%2Cstumbleupon%2Creddit%2Cfriendfeed%2Ctechnorati%2Cslashdot%2Cmixx%2Cblogger%2Cwordpress%2Ctypepad%2Cgoogle_bmarks%2Cwindows_live%2Cfark%2Cbus_exchange%2Cpropeller%2Cnewsvine%2Clinkedin%2Cyahoo_bmarks%2Clivejournal"></script>
 
 </head>
@@ -168,17 +165,17 @@
 		href="http://www.openideaproject.org/irclogs/browse/esp/latest"
 		title="Read the #esp IRC Logs">Logs</a><a class="menu-item-final"
 		href="http://twitter.com/Espians" title="Follow @Espians"
-		style="margin-right: 5px;"><img src="${STATIC}/gfx/twitter-icon.png"
+		style="margin-right: 5px;"><img src="${STATIC}/gfx.icon.twitter.png"
 		alt="Follow @Espians on Twitter" class="absmiddle" /></a><a
 		href="http://friendfeed.com/Espians" style="margin-right: 5px;"
 		title="Follow Espians on FriendFeed"><img
-		src="${STATIC}/gfx/friendfeed-icon.png" alt="FriendFeed"
+		src="${STATIC}/gfx.icon.friendfeed.png" alt="FriendFeed"
 		class="absmiddle" /></a><a style="margin-right: 5px;"
 		href="http://github.com/Espians" title="Follow Espians on GitHub"><img
-		src="${STATIC}/gfx/github-icon.png" alt="GitHub" class="absmiddle"
+		src="${STATIC}/gfx.icon.github.png" alt="GitHub" class="absmiddle"
 		/></a><a style="margin-right: 5px;"
-		href="http://www.facebook.com/pages/Espians/7261161315" title="Follow
-		Espians on Facebook"><img src="${STATIC}/gfx/facebook-icon.gif"
+		href="http://www.facebook.com/Espians" title="Follow
+		Espians on Facebook"><img src="${STATIC}/gfx.icon.facebook.gif"
 		alt="Facebook" class="absmiddle" /></a><a
 		href="http://feeds2.feedburner.com/${site_nick}" rel="alternate"
 		type="application/rss+xml" title="Subscribe to the RSS Feed"><img

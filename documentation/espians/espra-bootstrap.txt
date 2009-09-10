@@ -17,11 +17,19 @@ A Command Line for the Internet
                 :depth: 2
                 :backlinks: none
 
+
+**Note**:
+
+  This document is out of date and is here for historical purposes only. See the
+  video on the `Espra — Create Weapons of Mass Construction
+  <http://tav.espians.com/espra-create-weapons-of-mass-construction.html>`_
+  article for more up-to-date details.
+
 ---------------
 Getting Started
 ---------------
 
-.. image:: http://release.plexnet.org/gfx/tav.blog/username-password.png
+.. image:: http://cloud.github.com/downloads/tav/plexnet/gfx.username-password.png
            :class: float-right
            :alt: Password frustration comic
 
@@ -107,7 +115,7 @@ A rough layout of the Lookout screen:
 .. raw:: html
 
   <div class="center">
-    <img src="http://wiki.espians.com/upload/thumb/0/02/Espra_alpha_peek.jpg/450px-Espra_alpha_peek.jpg"
+    <img src="http://cloud.github.com/downloads/tav/plexnet/gfx.espra.screen.2007.jpg"
          alt="Bootstrap Interface" />
   </div>
 
@@ -181,7 +189,7 @@ and Linux ones.
 Trust Maps
 ----------
 
-.. image:: http://release.plexnet.org/gfx/tav.blog/trust-maps-mary.png
+.. image:: http://cloud.github.com/downloads/tav/plexnet/gfx.trust-maps-mary.png
            :alt: Trust Maps -- Trusting Mary in the context of Cars
            :class: float-right
            :width: 352

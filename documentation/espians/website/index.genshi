@@ -1,7 +1,7 @@
 <div xmlns:py="http://genshi.edgewall.org/">
 <?python
 
-  STATIC = 'http://tav.github.com/static'
+  STATIC = 'http://cloud.github.com/downloads/tav/plexnet'
 
   MONTHS = [
     'Zero Month',
@@ -223,7 +223,7 @@
 	  <td><strong>Recent Blog Comments</strong></td>
 	  <td class="right">
 		<a href="http://espians.disqus.com">Disqus Archive</a>
-		<img class="absmiddle" src="${STATIC}/gfx/disqus-icon.png" alt="disqus" />
+		<img class="absmiddle" src="${STATIC}/gfx.icon.disqus.png" alt="disqus" />
 	  </td>
 	</tr>
   </table>

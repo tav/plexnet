@@ -75,11 +75,11 @@ all who've contributed!
 
 .. |twitter| raw:: html
 
-  <img src="http://tav.github.com/static/gfx/twitter-icon.png" class="absmiddle" />
+  <img src="http://cloud.github.com/downloads/tav/plexnet/gfx.icon.twitter.png" class="absmiddle" />
 
 .. |facebook| raw:: html
 
-  <img src="http://tav.github.com/static/gfx/facebook-icon.gif"
+  <img src="http://cloud.github.com/downloads/tav/plexnet/gfx.icon.facebook.gif"
   class="absmiddle" />
 
 .. |padding| raw:: html
