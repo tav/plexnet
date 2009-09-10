@@ -57,7 +57,7 @@
   <meta http-equiv="content-language" content="en" />
   <meta name="verify-v1" content="aLcMPDDmDYvgufTDcJiiCOgPt/FOooMmGHiPj64BMbU=" />
 
-  <link rel="icon" type="image/png" href="http://cloud.github.com/downloads/tav/blog/gfx.espia.png" />
+  <link rel="icon" type="image/png" href="http://cloud.github.com/downloads/tav/plexnet/favicon-32x32.png" />
 
   <link rel="alternate" type="application/rss+xml" 
 		title="RSS Feed for ${site_title}"
