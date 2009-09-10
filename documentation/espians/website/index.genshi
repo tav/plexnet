@@ -48,6 +48,8 @@
     parse_tags_for_post(post)
 ?>
 
+<script language="javascript" src="http://cloud.github.com/downloads/tav/plexnet/js.tweets.js" type="text/javascript"></script>
+
 <style type="text/css">
 
   .more { display: none; }
@@ -78,6 +80,27 @@
     font-size: 0.8em;
     text-decoration: none;
     color: #778;
+  }
+
+  .tweet_item {
+    clear: both;
+    margin-bottom: 2em;
+  }
+
+  .tweet_avatar {
+    float: left;
+    margin-right: 0.5em;
+    margin-bottom: 1em;
+  }
+
+  .tweet_time {
+    margin-top: 0.5em;
+  }
+
+  .tweet_time a {
+    color: #868686;
+    font-size: 0.8em;
+    text-decoration: none;
   }
 
 </style>
@@ -216,6 +239,37 @@
 <script type="text/javascript" src="http://friendfeed.com/embed/widget/espians?v=2&amp;num=10&amp;hide_logo=1&amp;hide_subscribe=1"></script>
 
 -->
+
+<div class="section-info buffer">
+  <table cellspacing="0" cellpadding="0" width="100%">
+	<tr>
+	  <td><strong>Related Tweets</strong></td>
+	  <td class="right">
+		<a href="http://search.twitter.com/search?q=%23espians+OR+%23espra+OR+%23trustmap+OR+%23espia+OR+%40espians">Full Search on Twitter</a>
+		<img class="absmiddle" src="${STATIC}/gfx.icon.twitter.png" alt="disqus" />
+	  </td>
+	</tr>
+  </table>
+</div>
+<div class="tweet"></div>
+
+<script type='text/javascript'>
+    $(function(){
+        $(".tweet").tweet({
+            username: "espians",
+            join_text: false,
+            avatar_size: 48,
+            count: 10,
+            auto_join_text_default: "we said,",
+            auto_join_text_ed: "we",
+            auto_join_text_ing: "we were",
+            auto_join_text_reply: "we replied to",
+            auto_join_text_url: "we were checking out",
+            loading_text: "loading tweets...",
+            query: "#espians OR #espra OR #trustmap OR #espia OR @espians"
+        });
+    });
+</script>
 
 <div class="section-info buffer">
   <table cellspacing="0" cellpadding="0" width="100%">
