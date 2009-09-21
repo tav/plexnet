@@ -39,6 +39,7 @@
 
   <title>${Markup(site_title)} &#187; ${Markup(page_title)}</title>
   <meta content="text/html; charset=utf-8" http-equiv="content-type" />
+  <meta name="tweetmeme-title" content="${page_title}" />
 
   <!-- disable some internet explorer features -->
   <meta http-equiv="imagetoolbar" content="no" />
