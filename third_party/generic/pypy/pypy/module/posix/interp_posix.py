@@ -737,7 +737,11 @@ def getpgid(space, pid):
 
     Call the system call getpgid().
     """
-    return space.wrap(os.getpgid(pid))
+    try:
+        pgid = os.getpgid(pid)
+    except OSError, e:
+        raise wrap_oserror(space, e)
+    return space.wrap(pgid)
 getpgid.unwrap_spec = [ObjSpace, int]
 
 def setpgid(space, pid, pgrp):
@@ -781,7 +785,11 @@ def getsid(space, pid):
 
     Call the system call getsid().
     """
-    return space.wrap(os.getsid(pid))
+    try:
+        sid = os.getsid(pid)
+    except OSError, e:
+        raise wrap_oserror(space, e)
+    return space.wrap(sid)
 getsid.unwrap_spec = [ObjSpace, int]
 
 def setsid(space):
@@ -843,7 +851,7 @@ if _WIN:
     from pypy.rlib import rwin32
 
     eci = ExternalCompilationInfo(
-        includes = ['windows.h'],
+        includes = ['windows.h', 'wincrypt.h'],
         libraries = ['advapi32'],
         )
 

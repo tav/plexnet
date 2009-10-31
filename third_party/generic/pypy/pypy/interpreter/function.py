@@ -10,7 +10,9 @@ from pypy.rlib.unroll import unrolling_iterable
 from pypy.interpreter.error import OperationError
 from pypy.interpreter.baseobjspace import Wrappable
 from pypy.interpreter.eval import Code
-from pypy.interpreter.argument import Arguments, ArgumentsFromValuestack
+from pypy.interpreter.argument import Arguments
+from pypy.rlib import jit
+from pypy.rlib.debug import make_sure_not_resized
 
 funccallunrolling = unrolling_iterable(range(4))
 
@@ -27,6 +29,7 @@ class Function(Wrappable):
         self.w_func_globals = w_globals  # the globals dictionary
         self.closure   = closure    # normally, list of Cell instances or None
         self.defs_w    = defs_w     # list of w_default's
+        make_sure_not_resized(self.defs_w)
         self.w_func_dict = None # filled out below if needed
         self.w_module = None
 
@@ -38,14 +41,14 @@ class Function(Wrappable):
 
     def call_args(self, args):
         # delegate activation to code        
-        return self.code.funcrun(self, args)
+        return self.getcode().funcrun(self, args)
 
     def call_obj_args(self, w_obj, args):
         # delegate activation to code
-        return self.code.funcrun_obj(self, w_obj, args)
+        return self.getcode().funcrun_obj(self, w_obj, args)
 
     def getcode(self):
-        return self.code
+        return jit.hint(self.code, promote=True)
     
     def funccall(self, *args_w): # speed hack
         from pypy.interpreter import gateway
@@ -81,7 +84,7 @@ class Function(Wrappable):
                     if i < nargs:
                         new_frame.fastlocals_w[i] = args_w[i]
                 return new_frame.run()                                    
-        elif nargs >= 1 and fast_natural_arity == -1:
+        elif nargs >= 1 and fast_natural_arity == Code.PASSTHROUGHARGS1:
             assert isinstance(code, gateway.BuiltinCodePassThroughArguments1)
             return code.funcrun_obj(self, args_w[0],
                                     Arguments(self.space,
@@ -114,26 +117,25 @@ class Function(Wrappable):
                 return code.fastcall_4(self.space, self, frame.peekvalue(3),
                                        frame.peekvalue(2), frame.peekvalue(1),
                                         frame.peekvalue(0))
-        elif (nargs|PyCode.FLATPYCALL) == fast_natural_arity:
+        elif (nargs|Code.FLATPYCALL) == fast_natural_arity:
             assert isinstance(code, PyCode)
             return self._flat_pycall(code, nargs, frame)
-        elif fast_natural_arity == -1 and nargs >= 1:
+        elif fast_natural_arity&Code.FLATPYCALL:
+            natural_arity = fast_natural_arity&0xff
+            if natural_arity > nargs >= natural_arity-len(self.defs_w):
+                assert isinstance(code, PyCode)
+                return self._flat_pycall_defaults(code, nargs, frame,
+                                                  natural_arity-nargs)
+        elif fast_natural_arity == Code.PASSTHROUGHARGS1 and nargs >= 1:
             assert isinstance(code, gateway.BuiltinCodePassThroughArguments1)
             w_obj = frame.peekvalue(nargs-1)
             args = frame.make_arguments(nargs-1)
-            try:
-                return code.funcrun_obj(self, w_obj, args)
-            finally:
-                if isinstance(args, ArgumentsFromValuestack):
-                    args.frame = None
+            return code.funcrun_obj(self, w_obj, args)
                     
         args = frame.make_arguments(nargs)
-        try:
-            return self.call_args(args)
-        finally:
-            if isinstance(args, ArgumentsFromValuestack):
-                args.frame = None
+        return self.call_args(args)
 
+    @jit.unroll_safe
     def _flat_pycall(self, code, nargs, frame):
         # code is a PyCode
         new_frame = self.space.createframe(code, self.w_func_globals,
@@ -141,6 +143,25 @@ class Function(Wrappable):
         for i in xrange(nargs):
             w_arg = frame.peekvalue(nargs-1-i)
             new_frame.fastlocals_w[i] = w_arg
+            
+        return new_frame.run()                        
+
+    @jit.unroll_safe
+    def _flat_pycall_defaults(self, code, nargs, frame, defs_to_load):
+        # code is a PyCode
+        new_frame = self.space.createframe(code, self.w_func_globals,
+                                                   self.closure)
+        for i in xrange(nargs):
+            w_arg = frame.peekvalue(nargs-1-i)
+            new_frame.fastlocals_w[i] = w_arg
+            
+        defs_w = self.defs_w
+        ndefs = len(defs_w)
+        start = ndefs-defs_to_load
+        i = nargs
+        for j in xrange(start, ndefs):
+            new_frame.fastlocals_w[i] = defs_w[j]
+            i += 1
         return new_frame.run()                        
 
     def getdict(self):
@@ -165,7 +186,7 @@ class Function(Wrappable):
         else:
             name = None
         if not space.is_w(w_argdefs, space.w_None):
-            defs_w = space.unpackiterable(w_argdefs)
+            defs_w = space.viewiterable(w_argdefs)
         else:
             defs_w = []
         nfreevars = 0
@@ -253,7 +274,7 @@ class Function(Wrappable):
             w(self.code),
             w_func_globals,
             w_closure,
-            nt(self.defs_w[:]),
+            nt(self.defs_w),
             w_func_dict,
             self.w_module,
         ]
@@ -283,22 +304,22 @@ class Function(Wrappable):
         if space.is_w(w_func_dict, space.w_None):
             w_func_dict = None
         self.w_func_dict = w_func_dict
-        self.defs_w    = space.unpackiterable(w_defs_w)
+        self.defs_w    = space.viewiterable(w_defs_w)
         self.w_module = w_module
 
     def fget_func_defaults(space, self):
         values_w = self.defs_w
-        if not values_w:
+        if not values_w or None in values_w:
             return space.w_None
-        return space.newtuple(values_w[:])
+        return space.newtuple(values_w)
 
     def fset_func_defaults(space, self, w_defaults):
         if space.is_w(w_defaults, space.w_None):
             self.defs_w = []
             return
-        if not space.is_true( space.isinstance( w_defaults, space.w_tuple ) ):
+        if not space.is_true(space.isinstance(w_defaults, space.w_tuple)):
             raise OperationError( space.w_TypeError, space.wrap("func_defaults must be set to a tuple object or None") )
-        self.defs_w = space.unpackiterable( w_defaults )
+        self.defs_w = space.viewiterable(w_defaults)
 
     def fdel_func_defaults(space, self):
         self.defs_w = []

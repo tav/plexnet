@@ -1,11 +1,55 @@
+"""
+safely patch object attributes, dicts and environment variables. 
+
+Usage
+----------------
+
+Use the `monkeypatch funcarg`_ to safely patch environment
+variables, object attributes or dictionaries.  For example, if you want
+to set the environment variable ``ENV1`` and patch the
+``os.path.abspath`` function to return a particular value during a test
+function execution you can write it down like this:
+
+.. sourcecode:: python 
+
+    def test_mytest(monkeypatch):
+        monkeypatch.setenv('ENV1', 'myval')
+        monkeypatch.setattr(os.path, 'abspath', lambda x: '/')
+        ... # your test code 
+
+The function argument will do the modifications and memorize the 
+old state.  After the test function finished execution all 
+modifications will be reverted.  See the `monkeypatch blog post`_ 
+for an extensive discussion.  
+
+To add to a possibly existing environment parameter you
+can use this example: 
+
+.. sourcecode:: python 
+
+    def test_mypath_finding(monkeypatch):
+        monkeypatch.setenv('PATH', 'x/y', prepend=":")
+        #  x/y will be at the beginning of $PATH 
+
+.. _`monkeypatch blog post`: http://tetamap.wordpress.com/2009/03/03/monkeypatching-in-unit-tests-done-right/
+"""
+
 import os
 
-class MonkeypatchPlugin:
-    """ setattr-monkeypatching with automatical reversal after test. """
-    def pytest_funcarg__monkeypatch(self, pyfuncitem):
-        monkeypatch = MonkeyPatch()
-        pyfuncitem.addfinalizer(monkeypatch.finalize)
-        return monkeypatch
+def pytest_funcarg__monkeypatch(request):
+    """The returned ``monkeypatch`` funcarg provides three 
+    helper methods to modify objects, dictionaries or os.environ::
+
+        monkeypatch.setattr(obj, name, value)  
+        monkeypatch.setitem(mapping, name, value) 
+        monkeypatch.setenv(name, value) 
+
+    All such modifications will be undone when the requesting 
+    test function finished its execution. 
+    """
+    monkeypatch = MonkeyPatch()
+    request.addfinalizer(monkeypatch.finalize)
+    return monkeypatch
 
 notset = object()
 
@@ -22,8 +66,11 @@ class MonkeyPatch:
         self._setitem.insert(0, (dictionary, name, dictionary.get(name, notset)))
         dictionary[name] = value
 
-    def setenv(self, name, value):
-        self.setitem(os.environ, name, str(value))        
+    def setenv(self, name, value, prepend=None):
+        value = str(value)
+        if prepend and name in os.environ:
+            value = value + prepend + os.environ[name]
+        self.setitem(os.environ, name, value)
 
     def finalize(self):
         for obj, name, value in self._setattr:
@@ -76,12 +123,22 @@ def test_setenv():
     monkeypatch.finalize()
     assert 'XYZ123' not in os.environ
 
+def test_setenv_prepend():
+    import os
+    monkeypatch = MonkeyPatch()
+    monkeypatch.setenv('XYZ123', 2, prepend="-")
+    assert os.environ['XYZ123'] == "2"
+    monkeypatch.setenv('XYZ123', 3, prepend="-")
+    assert os.environ['XYZ123'] == "3-2"
+    monkeypatch.finalize()
+    assert 'XYZ123' not in os.environ
+
 def test_monkeypatch_plugin(testdir):
-    sorter = testdir.inline_runsource("""
+    reprec = testdir.inline_runsource("""
         pytest_plugins = 'pytest_monkeypatch', 
         def test_method(monkeypatch):
             assert monkeypatch.__class__.__name__ == "MonkeyPatch"
     """)
-    res = sorter.countoutcomes()
+    res = reprec.countoutcomes()
     assert tuple(res) == (1, 0, 0), res
         

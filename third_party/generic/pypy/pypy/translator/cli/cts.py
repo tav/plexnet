@@ -6,6 +6,7 @@ import exceptions
 
 from py.builtin import set
 from pypy.rpython.lltypesystem import lltype
+from pypy.rpython.lltypesystem import rffi
 from pypy.rpython.ootypesystem import ootype
 from pypy.translator.cli.option import getoption
 from pypy.translator.cli import oopspec
@@ -107,6 +108,7 @@ class CliArrayType(CliType):
 T = CliPrimitiveType
 class types:
     void =    T('void')
+    int16 =   T('int16')
     int32 =   T('int32')
     uint32 =  T('unsigned int32')
     int64 =   T('int64')
@@ -129,10 +131,12 @@ del T
 
 WEAKREF = types.weakref.classname()
 PYPY_DICT_OF_VOID = '[pypylib]pypy.runtime.DictOfVoid`2<%s, int32>'
+PYPY_DICT_OF_VOID_KEY = '[pypylib]pypy.runtime.DictOfVoidKey`2<int32, %s>'
 
 
 _lltype_to_cts = {
     ootype.Void: types.void,
+    rffi.SHORT: types.int16,
     ootype.Signed: types.int32,    
     ootype.Unsigned: types.uint32,
     ootype.SignedLongLong: types.int64,
@@ -147,6 +151,7 @@ _lltype_to_cts = {
     ootype.Unicode: types.string,
     ootype.UnicodeBuilder: types.string_builder,
     ootype.WeakReference: types.weakref,
+    ootype.Object: types.object,
 
     # maps generic types to their ordinal
     ootype.List.SELFTYPE_T: types.list,
@@ -276,6 +281,9 @@ class CTS(object):
                 else:
                     # XXX
                     return CliClassType(None, PYPY_DICT_OF_VOID % key_type)
+            elif key_type == types.void:
+                assert value_type != types.void
+                return CliClassType(None, PYPY_DICT_OF_VOID_KEY % value_type)
             return types.dict.specialize(key_type, value_type)
         elif isinstance(t, ootype.DictItemsIterator):
             key_type = self.lltype_to_cts(t._KEYTYPE)
@@ -297,20 +305,33 @@ class CTS(object):
     def ctor_name(self, t):
         return 'instance void %s::.ctor()' % self.lltype_to_cts(t)
 
+    def static_meth_to_signature(self, sm):
+        from pypy.translator.oosupport import metavm
+        graph = getattr(sm, 'graph', None)
+        if graph:
+            return self.graph_to_signature(graph)
+        module, name = metavm.get_primitive_name(sm)
+        func_name = '[pypylib]pypy.builtin.%s::%s' % (module, name)
+        T = ootype.typeOf(sm)
+        return self.format_signatue(func_name, T.ARGS, T.RESULT)
+
     def graph_to_signature(self, graph, is_method = False, func_name = None):
-        ret_type, ret_var = self.llvar_to_cts(graph.getreturnvar())
         func_name = func_name or graph.name
         func_name = self.escape_name(func_name)
         namespace = getattr(graph.func, '_namespace_', None)
         if namespace:
             func_name = '%s::%s' % (namespace, func_name)
 
-        args = [arg for arg in graph.getargs() if arg.concretetype is not ootype.Void]
+        ARGS = [arg.concretetype for arg in graph.getargs() if arg.concretetype is not ootype.Void]
         if is_method:
-            args = args[1:]
+            ARGS = ARGS[1:]
+        RESULT = graph.getreturnvar().concretetype
+        return self.format_signatue(func_name, ARGS, RESULT)
 
-        arg_types = [self.lltype_to_cts(arg.concretetype).typename() for arg in args]
+    def format_signatue(self, func_name, ARGS, RESULT):
+        arg_types = [self.lltype_to_cts(ARG).typename() for ARG in ARGS]
         arg_list = ', '.join(arg_types)
+        ret_type = self.lltype_to_cts(RESULT)
 
         return '%s %s(%s)' % (ret_type, func_name, arg_list)
 

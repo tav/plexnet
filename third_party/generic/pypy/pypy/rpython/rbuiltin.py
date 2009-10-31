@@ -52,9 +52,10 @@ class __extend__(annmodel.SomeBuiltin):
 
 def call_args_expand(hop, takes_kwds = True):
     hop = hop.copy()
-    from pypy.interpreter.argument import Arguments
-    arguments = Arguments.fromshape(None, hop.args_s[1].const, # shape
-                                    range(hop.nb_args-2))
+    from pypy.interpreter.argument import ArgumentsForTranslation
+    arguments = ArgumentsForTranslation.fromshape(
+            None, hop.args_s[1].const, # shape
+            range(hop.nb_args-2))
     if arguments.w_starstararg is not None:
         raise TyperError("**kwds call not implemented")
     if arguments.w_stararg is not None:
@@ -75,12 +76,13 @@ def call_args_expand(hop, takes_kwds = True):
             hop.args_s.append(s_tuple.items[i])
             hop.args_r.append(r_tuple.items_r[i])
 
-    kwds = arguments.kwds_w or {}
-    if not takes_kwds and kwds:
+    keywords = arguments.keywords
+    if not takes_kwds and keywords:
         raise TyperError("kwds args not supported")
     # prefix keyword arguments with 'i_'
     kwds_i = {}
-    for key, index in kwds.items():
+    for i, key in enumerate(keywords):
+        index = arguments.keywords_w[i]
         kwds_i['i_'+key] = index
 
     return hop, kwds_i
@@ -268,6 +270,16 @@ def rtype_OSError__init__(hop):
         v_errno = hop.inputarg(lltype.Signed, arg=1)
         r_self.setfield(v_self, 'errno', v_errno, hop.llops)
 
+def rtype_WindowsError__init__(hop):
+    if hop.nb_args == 2:
+        raise TyperError("WindowsError() should not be called with "
+                         "a single argument")
+    if hop.nb_args >= 3:
+        v_self = hop.args_v[0]
+        r_self = hop.args_r[0]
+        v_error = hop.inputarg(lltype.Signed, arg=1)
+        r_self.setfield(v_self, 'winerror', v_error, hop.llops)
+
 def rtype_we_are_translated(hop):
     hop.exception_cannot_occur()
     return hop.inputconst(lltype.Bool, True)
@@ -317,6 +329,15 @@ for name, value in globals().items():
 
 BUILTIN_TYPER[getattr(OSError.__init__, 'im_func', OSError.__init__)] = (
     rtype_OSError__init__)
+
+try:
+    WindowsError
+except NameError:
+    pass
+else:
+    BUILTIN_TYPER[
+        getattr(WindowsError.__init__, 'im_func', WindowsError.__init__)] = (
+        rtype_WindowsError__init__)
 
 BUILTIN_TYPER[object.__init__] = rtype_object__init__
 # annotation of low-level types
@@ -473,6 +494,10 @@ def rtype_cast_int_to_ptr(hop):
     return hop.genop('cast_int_to_ptr', [v_input],
                      resulttype = hop.r_result.lowleveltype)
 
+def rtype_identity_hash(hop):
+    vlist = hop.inputargs(hop.args_r[0])
+    return hop.genop('gc_identityhash', vlist, resulttype=lltype.Signed)
+
 def rtype_runtime_type_info(hop):
     assert isinstance(hop.args_r[0], rptr.PtrRepr)
     vlist = hop.inputargs(hop.args_r[0])
@@ -491,6 +516,7 @@ BUILTIN_TYPER[lltype.cast_ptr_to_int] = rtype_cast_ptr_to_int
 BUILTIN_TYPER[lltype.cast_int_to_ptr] = rtype_cast_int_to_ptr
 BUILTIN_TYPER[lltype.typeOf] = rtype_const_result
 BUILTIN_TYPER[lltype.nullptr] = rtype_const_result
+BUILTIN_TYPER[lltype.identityhash] = rtype_identity_hash
 BUILTIN_TYPER[lltype.getRuntimeTypeInfo] = rtype_const_result
 BUILTIN_TYPER[lltype.Ptr] = rtype_const_result
 BUILTIN_TYPER[lltype.runtime_type_info] = rtype_runtime_type_info

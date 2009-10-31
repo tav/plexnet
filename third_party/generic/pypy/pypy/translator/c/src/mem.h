@@ -2,25 +2,12 @@
 /************************************************************/
  /***  C header subsection: operations on LowLevelTypes    ***/
 
-/* alignment for arena-based garbage collectors: the following line
-   enforces an alignment that should be enough for any structure
-   containing pointers and 'double' fields. */
-struct rpy_memory_alignment_test1 {
-  double d;
-  void* p;
-};
-struct rpy_memory_alignment_test2 {
-  char c;
-  struct rpy_memory_alignment_test1 s;
-};
-#define MEMORY_ALIGNMENT	offsetof(struct rpy_memory_alignment_test2, s)
-#define ROUND_UP_FOR_ALLOCATION(x)	\
-		(((x) + (MEMORY_ALIGNMENT-1)) & ~(MEMORY_ALIGNMENT-1))
-
 extern char __gcmapstart;
 extern char __gcmapend;
 extern char __gccallshapes;
-extern char __gcnoreorderhack;
+extern void *__gcrootanchor;
+extern long pypy_asm_stackwalk(void*);
+#define __gcnoreorderhack __gcmapend
 
 /* The following pseudo-instruction is used by --gcrootfinder=asmgcc
    just after a call to tell gcc to put a GCROOT mark on each gc-pointer
@@ -43,10 +30,18 @@ extern char __gcnoreorderhack;
                     "0" (p), "m" (__gcnoreorderhack)); \
                _r; })
 
-#define OP_LLVM_GCMAPSTART(r)	r = &__gcmapstart
-#define OP_LLVM_GCMAPEND(r)	r = &__gcmapend
-#define OP_LLVM_GCCALLSHAPES(r)	r = &__gccallshapes
+#define pypy_asm_keepalive(v)  asm volatile ("/* keepalive %0 */" : : \
+                                             "g" (v))
 
+/* marker for trackgcroot.py */
+#define pypy_asm_stack_bottom()  asm volatile ("/* GC_STACK_BOTTOM */" : : )
+
+#define OP_GC_ASMGCROOT_STATIC(i, r)   r =      \
+               i == 0 ? (void*)&__gcmapstart :         \
+               i == 1 ? (void*)&__gcmapend :           \
+               i == 2 ? (void*)&__gccallshapes :       \
+               i == 3 ? (void*)&__gcrootanchor :       \
+               NULL
 
 #define RAW_MALLOC_ZERO_FILLED 0
 
@@ -137,13 +132,6 @@ PyObject* malloc_counters(PyObject* self, PyObject* args)
 	if (r && is_atomic)  /* the non-atomic versions return cleared memory */ \
                 memset((void*) r, 0, size);				\
   }
-
-/* as we said in rbuiltin.py: 
-# XXX this next little bit is a monstrous hack.  the Real Thing awaits
-# some kind of proper GC integration
-if GC integration has happened and this junk is still here, please delete it :)
-*/
-#define OP_CALL_BOEHM_GC_ALLOC(size, r) OP_BOEHM_ZERO_MALLOC(size, r, void *, 0, 0)
 
 #define OP_BOEHM_DISAPPEARING_LINK(link, obj, r)			   \
 	if (GC_base(obj) == NULL)					   \

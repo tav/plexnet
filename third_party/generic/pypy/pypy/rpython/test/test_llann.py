@@ -1,4 +1,5 @@
 from pypy.rpython.lltypesystem.lltype import *
+from pypy.rpython.ootypesystem import ootype
 from pypy.rpython.lltypesystem.rclass import OBJECTPTR
 from pypy.rpython.rclass import fishllattr
 from pypy.translator.translator import TranslationContext
@@ -388,6 +389,26 @@ class TestLowLevelAnnotateTestCase:
             lst.append(6)
         self.annotate(llf, [])
 
+    def test_adtmeths(self):
+        def h_length(s):
+            return s.foo
+        S = GcStruct("S", ('foo', Signed),
+                     adtmeths={"h_length": h_length,
+                               "stuff": 12})
+        def llf():
+            s = malloc(S)
+            s.foo = 321
+            return s.h_length()
+        s = self.annotate(llf, [])
+        assert s.knowntype == int and not s.is_constant()
+
+        def llf():
+            s = malloc(S)
+            return s.stuff
+        s = self.annotate(llf, [])
+        assert s.is_constant() and s.const == 12
+
+
 def test_pseudohighlevelcallable():
     t = TranslationContext()
     t.buildannotator()
@@ -445,6 +466,34 @@ def test_llhelper():
 
     res = interpret(h, [8, 5, 2])
     assert res == 99
+
+def test_oohelper():
+    S = ootype.Instance('S', ootype.ROOT, {'x': Signed, 'y': Signed})
+    def f(s,z):
+        #assert we_are_translated()
+        return s.x*s.y+z
+
+    def g(s):
+        #assert we_are_translated()
+        return s.x+s.y
+
+    F = ootype.StaticMethod([S, Signed], Signed)
+    G = ootype.StaticMethod([S], Signed)
+        
+    def h(x, y, z):
+        s = ootype.new(S)
+        s.x = x
+        s.y = y
+        fsm = llhelper(F, f)
+        gsm = llhelper(G, g)
+        assert typeOf(fsm) == F
+        return fsm(s, z)+fsm(s, z*2)+gsm(s)
+
+    res = h(8, 5, 2)
+    assert res == 99
+    res = interpret(h, [8, 5, 2], type_system='ootype')
+    assert res == 99
+
 
 
 def test_cast_instance_to_base_ptr():

@@ -18,7 +18,10 @@ class GCManagedHeap(object):
         self.gc.setup()
 
     def prepare_graphs(self, flowgraphs):
-        layoutbuilder = DirectRunLayoutBuilder(self.llinterp)
+        lltype2vtable = self.llinterp.typer.lltype2vtable
+        layoutbuilder = DirectRunLayoutBuilder(self.gc.__class__,
+                                               lltype2vtable,
+                                               self.llinterp)
         self.get_type_id = layoutbuilder.get_type_id
         layoutbuilder.initialize_gc_query_function(self.gc)
 
@@ -101,8 +104,8 @@ class GCManagedHeap(object):
                                   llmemory.cast_ptr_to_adr(toplevelcontainer))
         llheap.setinterior(toplevelcontainer, inneraddr, INNERTYPE, newvalue)
 
-    def collect(self):
-        self.gc.collect()
+    def collect(self, *gen):
+        self.gc.collect(*gen)
 
     def can_move(self, addr):
         return self.gc.can_move(addr)
@@ -141,15 +144,15 @@ class LLInterpRootWalker:
         gc = gcheap.gc
         if collect_static_in_prebuilt_gc:
             for addrofaddr in gcheap.constantroots:
-                if addrofaddr.address[0]:
+                if self.gcheap.gc.points_to_valid_gc_object(addrofaddr):
                     collect_static_in_prebuilt_gc(gc, addrofaddr)
         if collect_static_in_prebuilt_nongc:
             for addrofaddr in gcheap.constantrootsnongc:
-                if addrofaddr.address[0]:
+                if self.gcheap.gc.points_to_valid_gc_object(addrofaddr):
                     collect_static_in_prebuilt_nongc(gc, addrofaddr)
         if collect_stack_root:
             for addrofaddr in gcheap.llinterp.find_roots():
-                if addrofaddr.address[0]:
+                if self.gcheap.gc.points_to_valid_gc_object(addrofaddr):
                     collect_stack_root(gc, addrofaddr)
 
     def _walk_prebuilt_gc(self, collect):    # debugging only!  not RPython
@@ -159,9 +162,9 @@ class LLInterpRootWalker:
 
 class DirectRunLayoutBuilder(gctypelayout.TypeLayoutBuilder):
 
-    def __init__(self, llinterp):
+    def __init__(self, GCClass, lltype2vtable, llinterp):
         self.llinterp = llinterp
-        super(DirectRunLayoutBuilder, self).__init__()
+        super(DirectRunLayoutBuilder, self).__init__(GCClass, lltype2vtable)
 
     def make_finalizer_funcptr_for_type(self, TYPE):
         from pypy.rpython.memory.gctransform.support import get_rtti, \
@@ -205,7 +208,8 @@ def collect_constants(graphs):
 
 def reccollect(constants, llvalue):
     if (isinstance(llvalue, lltype._abstract_ptr)
-        and llvalue._obj is not None and llvalue._obj not in constants):
+        and llvalue._obj is not None and llvalue._obj not in constants
+        and not isinstance(llvalue._obj, int)):
         TYPE = llvalue._T
         constants[llvalue._obj] = True
         if isinstance(TYPE, lltype.Struct):

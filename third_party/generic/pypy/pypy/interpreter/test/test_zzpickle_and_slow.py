@@ -30,18 +30,21 @@ def _attach_helpers(space):
     from pypy.interpreter import pytraceback
     def hide_top_frame(space, w_frame):
         w_last = None
-        while w_frame.f_back:
+        while w_frame.f_back():
+            # should have been forced by traceback capturing
+            assert w_frame.f_back_forced
             w_last = w_frame
-            w_frame = w_frame.f_back
+            w_frame = w_frame.f_back()
         assert w_last
-        w_saved = w_last.f_back
-        w_last.f_back = None
+        w_saved = w_last.f_back()
+        w_last.f_back_some = None
         return w_saved
 
     def restore_top_frame(space, w_frame, w_saved):
-        while w_frame.f_back:
-            w_frame = w_frame.f_back
-        w_frame.f_back = w_saved
+        while w_frame.f_back():
+            assert w_frame.f_back_forced
+            w_frame = w_frame.f_back()
+        w_frame.f_back_some = w_saved
 
     def read_exc_type(space, w_frame):
         if w_frame.last_exception is None:
@@ -188,7 +191,7 @@ class AppTestInterpObjectPickling:
     def test_pickle_frame_with_exc(self):
         #import sys
         # avoid creating a closure for now
-        del self
+        self = None
         def f():
             try:
                 raise ValueError
@@ -360,6 +363,7 @@ class AppTestInterpObjectPickling:
         raises(TypeError, len, liter)
         assert list(liter) == list(result)
 
+    @py.test.mark.xfail
     def test_pickle_dictiter(self):
         import pickle
         tdict = {'2':2, '3':3, '5':5}
@@ -369,7 +373,19 @@ class AppTestInterpObjectPickling:
         result = pickle.loads(pckl)
         raises(TypeError, len, diter)
         assert list(diter) == list(result)
-    
+
+    def test_pickle_reversed(self):
+        import pickle
+        r = reversed(tuple(range(10)))
+        r.next()
+        r.next()
+        pickled = pickle.dumps(r)
+        result = pickle.loads(pickled)
+        result.next()
+        r.next()
+        assert type(r) is type(result)
+        assert list(r) == list(result)
+
     def test_pickle_enum(self):
         import pickle
         e      = enumerate(range(10))

@@ -58,7 +58,7 @@ def llexternal(name, args, result, _callable=None,
                compilation_info=ExternalCompilationInfo(),
                sandboxsafe=False, threadsafe='auto',
                canraise=False, _nowrapper=False, calling_conv='c',
-               oo_primitive=None):
+               oo_primitive=None, pure_function=False):
     """Build an external function that will invoke the C function 'name'
     with the given 'args' types and 'result' type.
 
@@ -79,6 +79,8 @@ def llexternal(name, args, result, _callable=None,
     ext_type = lltype.FuncType(args, result)
     if _callable is None:
         _callable = ll2ctypes.LL2CtypesCallable(ext_type, calling_conv)
+    if pure_function:
+        _callable._pure_function_ = True
     kwds = {}
     if oo_primitive:
         kwds['oo_primitive'] = oo_primitive
@@ -134,6 +136,7 @@ def llexternal(name, args, result, _callable=None,
         call_external_function = miniglobals['call_external_function']
         call_external_function._dont_inline_ = True
         call_external_function._annspecialcase_ = 'specialize:ll'
+        call_external_function._gctransformer_hint_close_stack_ = True
         call_external_function = func_with_new_name(call_external_function,
                                                     'ccall_' + name)
         # don't inline, as a hack to guarantee that no GC pointer is alive
@@ -203,6 +206,8 @@ def _make_wrapper_for(TP, callable, aroundstate=None):
     """ Function creating wrappers for callbacks. Note that this is
     cheating as we assume constant callbacks and we just memoize wrappers
     """
+    from pypy.rpython.lltypesystem import lltype
+    from pypy.rpython.lltypesystem.lloperation import llop
     if hasattr(callable, '_errorcode_'):
         errorcode = callable._errorcode_
     else:
@@ -211,6 +216,7 @@ def _make_wrapper_for(TP, callable, aroundstate=None):
     args = ', '.join(['a%d' % i for i in range(len(TP.TO.ARGS))])
     source = py.code.Source(r"""
         def wrapper(%s):    # no *args - no GIL for mallocing the tuple
+            llop.gc_stack_bottom(lltype.Void)   # marker for trackgcroot.py
             if aroundstate is not None:
                 before = aroundstate.before
                 after = aroundstate.after
@@ -220,8 +226,7 @@ def _make_wrapper_for(TP, callable, aroundstate=None):
             if after:
                 after()
             # from now on we hold the GIL
-            if aroundstate is not None:
-                aroundstate.callback_counter += 1
+            stackcounter.stacks_counter += 1
             try:
                 result = callable(%s)
             except Exception, e:
@@ -232,8 +237,7 @@ def _make_wrapper_for(TP, callable, aroundstate=None):
                     import traceback
                     traceback.print_exc()
                 result = errorcode
-            if aroundstate is not None:
-                aroundstate.callback_counter -= 1
+            stackcounter.stacks_counter -= 1
             if before:
                 before()
             # here we don't hold the GIL any more. As in the wrapper() produced
@@ -245,6 +249,7 @@ def _make_wrapper_for(TP, callable, aroundstate=None):
     miniglobals['Exception'] = Exception
     miniglobals['os'] = os
     miniglobals['we_are_translated'] = we_are_translated
+    miniglobals['stackcounter'] = stackcounter
     exec source.compile() in miniglobals
     return miniglobals['wrapper']
 _make_wrapper_for._annspecialcase_ = 'specialize:memo'
@@ -254,10 +259,16 @@ class AroundState:
     def _freeze_(self):
         self.before = None    # or a regular RPython function
         self.after = None     # or a regular RPython function
-        self.callback_counter = 0
         return False
 aroundstate = AroundState()
 aroundstate._freeze_()
+
+class StackCounter:
+    def _freeze_(self):
+        self.stacks_counter = 1     # number of "stack pieces": callbacks
+        return False                # and threads increase it by one
+stackcounter = StackCounter()
+stackcounter._freeze_()
 
 # ____________________________________________________________
 # Few helpers for keeping callback arguments alive
@@ -428,7 +439,8 @@ def COpaquePtr(*args, **kwds):
     return lltype.Ptr(COpaque(*args, **kwds))
 
 def CExternVariable(TYPE, name, eci, _CConstantClass=CConstant,
-                    sandboxsafe=False, _nowrapper=False):
+                    sandboxsafe=False, _nowrapper=False,
+                    c_type=None):
     """Return a pair of functions - a getter and a setter - to access
     the given global C variable.
     """
@@ -436,16 +448,17 @@ def CExternVariable(TYPE, name, eci, _CConstantClass=CConstant,
     from pypy.translator.tool.cbuild import ExternalCompilationInfo
     # XXX we cannot really enumerate all C types here, do it on a case-by-case
     #     basis
-    if TYPE == CCHARPP:
-        c_type = 'char **'
-    elif TYPE == CCHARP:
-        c_type = 'char *'
-    elif TYPE == INT:
-        c_type = 'int'
-    else:
-        c_type = PrimitiveType[TYPE]
-        assert c_type.endswith(' @')
-        c_type = c_type[:-2] # cut the trailing ' @'
+    if c_type is None:
+        if TYPE == CCHARPP:
+            c_type = 'char **'
+        elif TYPE == CCHARP:
+            c_type = 'char *'
+        elif TYPE == INT or TYPE == LONG:
+            assert False, "ambiguous type on 32-bit machines: give a c_type"
+        else:
+            c_type = PrimitiveType[TYPE]
+            assert c_type.endswith(' @')
+            c_type = c_type[:-2] # cut the trailing ' @'
 
     getter_name = 'get_' + name
     setter_name = 'set_' + name
@@ -739,7 +752,7 @@ def sizeof(tp):
         return size
     if isinstance(tp, lltype.Ptr):
         tp = ULONG     # XXX!
-    if tp is lltype.Char:
+    if tp is lltype.Char or tp is lltype.Bool:
         return 1
     if tp is lltype.UniChar:
         return r_wchar_t.BITS/8

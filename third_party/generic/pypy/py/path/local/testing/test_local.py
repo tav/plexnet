@@ -199,17 +199,6 @@ class TestExecutionOnWindows(LocalSetup):
         assert x.check(file=1)
         assert py.path.local.sysfind('jaksdkasldqwe') is None
 
-    def test_sysfind_in_currentdir(self):
-        cmd = py.path.local.sysfind('cmd')
-        root = cmd.new(dirname='', basename='') # c:\ in most installations
-
-        old = root.chdir()
-        try:
-            x = py.path.local.sysfind(cmd.relto(root))
-            assert x.check(file=1)
-        finally:
-             old.chdir()
-
 class TestExecution(LocalSetup):
     disabled = py.std.sys.platform == 'win32'
 

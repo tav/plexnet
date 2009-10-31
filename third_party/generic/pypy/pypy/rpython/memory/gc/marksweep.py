@@ -4,7 +4,7 @@ from pypy.rpython.lltypesystem.llmemory import NULL, raw_malloc_usage
 from pypy.rpython.memory.support import DEFAULT_CHUNK_SIZE
 from pypy.rpython.memory.support import get_address_stack
 from pypy.rpython.memory.gcheader import GCHeaderBuilder
-from pypy.rpython.lltypesystem import lltype, llmemory
+from pypy.rpython.lltypesystem import lltype, llmemory, rffi
 from pypy.rlib.objectmodel import free_non_gc_object
 from pypy.rpython.lltypesystem.lloperation import llop
 from pypy.rlib.rarithmetic import ovfcheck
@@ -19,14 +19,21 @@ X_CLONE = lltype.GcStruct('CloneData', ('gcobjectptr', llmemory.GCREF),
                                        ('pool',        X_POOL_PTR))
 X_CLONE_PTR = lltype.Ptr(X_CLONE)
 
+FL_WITHHASH = 0x01
+FL_CURPOOL  = 0x02
+
 memoryError = MemoryError()
 class MarkSweepGC(GCBase):
     HDR = lltype.ForwardReference()
     HDRPTR = lltype.Ptr(HDR)
     # need to maintain a linked list of malloced objects, since we used the
     # systems allocator and can't walk the heap
-    HDR.become(lltype.Struct('header', ('typeid', lltype.Signed),
+    HDR.become(lltype.Struct('header', ('typeid16', rffi.USHORT),
+                                       ('mark', lltype.Bool),
+                                       ('flags', lltype.Char),
                                        ('next', HDRPTR)))
+    typeid_is_in_field = 'typeid16'
+    withhash_flag_is_in_field = 'flags', FL_WITHHASH
 
     POOL = lltype.GcStruct('gc_pool')
     POOLPTR = lltype.Ptr(POOL)
@@ -41,10 +48,14 @@ class MarkSweepGC(GCBase):
     TRANSLATION_PARAMS = {'start_heap_size': 8*1024*1024} # XXX adjust
 
     def __init__(self, config, chunk_size=DEFAULT_CHUNK_SIZE, start_heap_size=4096):
+        self.param_start_heap_size = start_heap_size
         GCBase.__init__(self, config, chunk_size)
+
+    def setup(self):
+        GCBase.setup(self)
         self.heap_usage = 0          # at the end of the latest collection
         self.bytes_malloced = 0      # since the latest collection
-        self.bytes_malloced_threshold = start_heap_size
+        self.bytes_malloced_threshold = self.param_start_heap_size
         self.total_collection_time = 0.0
         self.malloced_objects = lltype.nullptr(self.HDR)
         self.malloced_objects_with_finalizer = lltype.nullptr(self.HDR)
@@ -75,14 +86,14 @@ class MarkSweepGC(GCBase):
         if self.bytes_malloced > self.bytes_malloced_threshold:
             self.collect()
 
-    def write_malloc_statistics(self, typeid, size, result, varsize):
+    def write_malloc_statistics(self, typeid16, size, result, varsize):
         pass
 
-    def write_free_statistics(self, typeid, result):
+    def write_free_statistics(self, typeid16, result):
         pass
 
-    def malloc_fixedsize(self, typeid, size, can_collect, has_finalizer=False,
-                         contains_weakptr=False):
+    def malloc_fixedsize(self, typeid16, size, can_collect,
+                         has_finalizer=False, contains_weakptr=False):
         if can_collect:
             self.maybe_collect()
         size_gc_header = self.gcheaderbuilder.size_gc_header
@@ -97,7 +108,9 @@ class MarkSweepGC(GCBase):
         if not result:
             raise memoryError
         hdr = llmemory.cast_adr_to_ptr(result, self.HDRPTR)
-        hdr.typeid = typeid << 1
+        hdr.typeid16 = typeid16
+        hdr.mark = False
+        hdr.flags = '\x00'
         if has_finalizer:
             hdr.next = self.malloced_objects_with_finalizer
             self.malloced_objects_with_finalizer = hdr
@@ -109,13 +122,13 @@ class MarkSweepGC(GCBase):
             self.malloced_objects = hdr
         self.bytes_malloced = bytes_malloced
         result += size_gc_header
-        #llop.debug_print(lltype.Void, 'malloc typeid', typeid,
+        #llop.debug_print(lltype.Void, 'malloc typeid', typeid16,
         #                 '->', llmemory.cast_adr_to_int(result))
-        self.write_malloc_statistics(typeid, tot_size, result, False)
+        self.write_malloc_statistics(typeid16, tot_size, result, False)
         return llmemory.cast_adr_to_ptr(result, llmemory.GCREF)
     malloc_fixedsize._dont_inline_ = True
 
-    def malloc_fixedsize_clear(self, typeid, size, can_collect,
+    def malloc_fixedsize_clear(self, typeid16, size, can_collect,
                                has_finalizer=False, contains_weakptr=False):
         if can_collect:
             self.maybe_collect()
@@ -132,7 +145,9 @@ class MarkSweepGC(GCBase):
             raise memoryError
         raw_memclear(result, tot_size)
         hdr = llmemory.cast_adr_to_ptr(result, self.HDRPTR)
-        hdr.typeid = typeid << 1
+        hdr.typeid16 = typeid16
+        hdr.mark = False
+        hdr.flags = '\x00'
         if has_finalizer:
             hdr.next = self.malloced_objects_with_finalizer
             self.malloced_objects_with_finalizer = hdr
@@ -144,14 +159,14 @@ class MarkSweepGC(GCBase):
             self.malloced_objects = hdr
         self.bytes_malloced = bytes_malloced
         result += size_gc_header
-        #llop.debug_print(lltype.Void, 'malloc typeid', typeid,
+        #llop.debug_print(lltype.Void, 'malloc typeid', typeid16,
         #                 '->', llmemory.cast_adr_to_int(result))
-        self.write_malloc_statistics(typeid, tot_size, result, False)
+        self.write_malloc_statistics(typeid16, tot_size, result, False)
         return llmemory.cast_adr_to_ptr(result, llmemory.GCREF)
     malloc_fixedsize_clear._dont_inline_ = True
 
-    def malloc_varsize(self, typeid, length, size, itemsize, offset_to_length,
-                       can_collect, has_finalizer=False):
+    def malloc_varsize(self, typeid16, length, size, itemsize,
+                       offset_to_length, can_collect):
         if can_collect:
             self.maybe_collect()
         size_gc_header = self.gcheaderbuilder.size_gc_header
@@ -169,26 +184,23 @@ class MarkSweepGC(GCBase):
             raise memoryError
         (result + size_gc_header + offset_to_length).signed[0] = length
         hdr = llmemory.cast_adr_to_ptr(result, self.HDRPTR)
-        hdr.typeid = typeid << 1
-        if has_finalizer:
-            hdr.next = self.malloced_objects_with_finalizer
-            self.malloced_objects_with_finalizer = hdr
-        else:
-            hdr.next = self.malloced_objects
-            self.malloced_objects = hdr
+        hdr.typeid16 = typeid16
+        hdr.mark = False
+        hdr.flags = '\x00'
+        hdr.next = self.malloced_objects
+        self.malloced_objects = hdr
         self.bytes_malloced = bytes_malloced
             
         result += size_gc_header
         #llop.debug_print(lltype.Void, 'malloc_varsize length', length,
-        #                 'typeid', typeid,
+        #                 'typeid', typeid16,
         #                 '->', llmemory.cast_adr_to_int(result))
-        self.write_malloc_statistics(typeid, tot_size, result, True)
+        self.write_malloc_statistics(typeid16, tot_size, result, True)
         return llmemory.cast_adr_to_ptr(result, llmemory.GCREF)
     malloc_varsize._dont_inline_ = True
 
-    def malloc_varsize_clear(self, typeid, length, size, itemsize,
-                             offset_to_length, can_collect,
-                             has_finalizer=False):
+    def malloc_varsize_clear(self, typeid16, length, size, itemsize,
+                             offset_to_length, can_collect):
         if can_collect:
             self.maybe_collect()
         size_gc_header = self.gcheaderbuilder.size_gc_header
@@ -207,24 +219,22 @@ class MarkSweepGC(GCBase):
         raw_memclear(result, tot_size)        
         (result + size_gc_header + offset_to_length).signed[0] = length
         hdr = llmemory.cast_adr_to_ptr(result, self.HDRPTR)
-        hdr.typeid = typeid << 1
-        if has_finalizer:
-            hdr.next = self.malloced_objects_with_finalizer
-            self.malloced_objects_with_finalizer = hdr
-        else:
-            hdr.next = self.malloced_objects
-            self.malloced_objects = hdr
+        hdr.typeid16 = typeid16
+        hdr.mark = False
+        hdr.flags = '\x00'
+        hdr.next = self.malloced_objects
+        self.malloced_objects = hdr
         self.bytes_malloced = bytes_malloced
             
         result += size_gc_header
         #llop.debug_print(lltype.Void, 'malloc_varsize length', length,
-        #                 'typeid', typeid,
+        #                 'typeid', typeid16,
         #                 '->', llmemory.cast_adr_to_int(result))
-        self.write_malloc_statistics(typeid, tot_size, result, True)
+        self.write_malloc_statistics(typeid16, tot_size, result, True)
         return llmemory.cast_adr_to_ptr(result, llmemory.GCREF)
     malloc_varsize_clear._dont_inline_ = True
 
-    def collect(self):
+    def collect(self, gen=0):
         # 1. mark from the roots, and also the objects that objects-with-del
         #    point to (using the list of malloced_objects_with_finalizer)
         # 2. walk the list of objects-without-del and free the ones not marked
@@ -260,10 +270,10 @@ class MarkSweepGC(GCBase):
         hdr = self.malloced_objects_with_finalizer
         while hdr:
             next = hdr.next
-            typeid = hdr.typeid >> 1
+            typeid = hdr.typeid16
             gc_info = llmemory.cast_ptr_to_adr(hdr)
             obj = gc_info + size_gc_header
-            if not hdr.typeid & 1:
+            if not hdr.mark:
                 self.add_reachable_to_stack(obj, objects)
             addr = llmemory.cast_ptr_to_adr(hdr)
             size = self.fixed_size(typeid)
@@ -280,31 +290,30 @@ class MarkSweepGC(GCBase):
             curr = objects.pop()
             gc_info = curr - size_gc_header
             hdr = llmemory.cast_adr_to_ptr(gc_info, self.HDRPTR)
-            if hdr.typeid & 1:
+            if hdr.mark:
                 continue
             self.add_reachable_to_stack(curr, objects)
-            hdr.typeid = hdr.typeid | 1
+            hdr.mark = True
         objects.delete()
         # also mark self.curpool
         if self.curpool:
             gc_info = llmemory.cast_ptr_to_adr(self.curpool) - size_gc_header
             hdr = llmemory.cast_adr_to_ptr(gc_info, self.HDRPTR)
-            hdr.typeid = hdr.typeid | 1
+            hdr.mark = True
         # go through the list of objects containing weak pointers
         # and kill the links if they go to dead objects
         # if the object itself is not marked, free it
         hdr = self.objects_with_weak_pointers
         surviving = lltype.nullptr(self.HDR)
         while hdr:
-            typeid = hdr.typeid >> 1
+            typeid = hdr.typeid16
             next = hdr.next
             addr = llmemory.cast_ptr_to_adr(hdr)
             size = self.fixed_size(typeid)
             estimate = raw_malloc_usage(size_gc_header + size)
-            if hdr.typeid & 1:
-                typeid = hdr.typeid >> 1
+            if hdr.mark:
                 offset = self.weakpointer_offset(typeid)
-                hdr.typeid = hdr.typeid & (~1)
+                hdr.mark = False
                 gc_info = llmemory.cast_ptr_to_adr(hdr)
                 weakref_obj = gc_info + size_gc_header
                 pointing_to = (weakref_obj + offset).address[0]
@@ -315,7 +324,7 @@ class MarkSweepGC(GCBase):
                     # pointed to object will die
                     # XXX what to do if the object has a finalizer which resurrects
                     # the object?
-                    if not hdr_pointing_to.typeid & 1:
+                    if not hdr_pointing_to.mark:
                         (weakref_obj + offset).address[0] = NULL
                 hdr.next = surviving
                 surviving = hdr
@@ -340,7 +349,7 @@ class MarkSweepGC(GCBase):
             ppnext += llmemory.offsetof(self.POOLNODE, 'linkedlist')
             hdr = poolnode.linkedlist
             while hdr:  #sweep
-                typeid = hdr.typeid >> 1
+                typeid = hdr.typeid16
                 next = hdr.next
                 addr = llmemory.cast_ptr_to_adr(hdr)
                 size = self.fixed_size(typeid)
@@ -348,8 +357,8 @@ class MarkSweepGC(GCBase):
                     length = (addr + size_gc_header + self.varsize_offset_to_length(typeid)).signed[0]
                     size += self.varsize_item_sizes(typeid) * length
                 estimate = raw_malloc_usage(size_gc_header + size)
-                if hdr.typeid & 1:
-                    hdr.typeid = hdr.typeid & (~1)
+                if hdr.mark:
+                    hdr.mark = False
                     ppnext.address[0] = addr
                     ppnext = llmemory.cast_ptr_to_adr(hdr)
                     ppnext += llmemory.offsetof(self.HDR, 'next')
@@ -432,17 +441,17 @@ class MarkSweepGC(GCBase):
         last = lltype.nullptr(self.HDR)
         while hdr:
             next = hdr.next
-            if hdr.typeid & 1:
+            if hdr.mark:
                 hdr.next = lltype.nullptr(self.HDR)
                 if not self.malloced_objects_with_finalizer:
                     self.malloced_objects_with_finalizer = hdr
                 else:
                     last.next = hdr
-                hdr.typeid = hdr.typeid & (~1)
+                hdr.mark = False
                 last = hdr
             else:
                 obj = llmemory.cast_ptr_to_adr(hdr) + size_gc_header
-                finalizer = self.getfinalizer(hdr.typeid >> 1)
+                finalizer = self.getfinalizer(hdr.typeid16)
                 # make malloced_objects_with_finalizer consistent
                 # for the sake of a possible collection caused by finalizer
                 if not self.malloced_objects_with_finalizer:
@@ -482,7 +491,7 @@ class MarkSweepGC(GCBase):
         size_gc_header = self.gcheaderbuilder.size_gc_header
         gc_info = gcobjectaddr - size_gc_header
         hdr = llmemory.cast_adr_to_ptr(gc_info, self.HDRPTR)
-        hdr.typeid = hdr.typeid & (~1)
+        hdr.mark = False
 
     STAT_HEAP_USAGE     = 0
     STAT_BYTES_MALLOCED = 1
@@ -492,15 +501,14 @@ class MarkSweepGC(GCBase):
         size_gc_header = self.gcheaderbuilder.size_gc_header
         gc_info = obj - size_gc_header
         hdr = llmemory.cast_adr_to_ptr(gc_info, self.HDRPTR)
-        return hdr.typeid >> 1
+        return hdr.typeid16
 
     def add_reachable_to_stack(self, obj, objects):
         self.trace(obj, self._add_reachable, objects)
 
     def _add_reachable(pointer, objects):
         obj = pointer.address[0]
-        if obj:
-            objects.append(obj)
+        objects.append(obj)
     _add_reachable = staticmethod(_add_reachable)
 
     def statistics(self, index):
@@ -513,13 +521,17 @@ class MarkSweepGC(GCBase):
 
     def init_gc_object(self, addr, typeid):
         hdr = llmemory.cast_adr_to_ptr(addr, self.HDRPTR)
-        hdr.typeid = typeid << 1
+        hdr.typeid16 = typeid
+        hdr.mark = False
+        hdr.flags = '\x00'
 
     def init_gc_object_immortal(self, addr, typeid, flags=0):
         # prebuilt gc structures always have the mark bit set
         # ignore flags
         hdr = llmemory.cast_adr_to_ptr(addr, self.HDRPTR)
-        hdr.typeid = (typeid << 1) | 1
+        hdr.typeid16 = typeid
+        hdr.mark = True
+        hdr.flags = '\x00'
 
     # experimental support for thread cloning
     def x_swap_pool(self, newpool):
@@ -575,7 +587,6 @@ class MarkSweepGC(GCBase):
         # in the specified pool.  A new pool is built to contain the
         # copies, and the 'gcobjectptr' and 'pool' fields of clonedata
         # are adjusted to refer to the result.
-        CURPOOL_FLAG = sys.maxint // 2 + 1
 
         # install a new pool into which all the mallocs go
         curpool = self.x_swap_pool(lltype.nullptr(X_POOL))
@@ -592,7 +603,8 @@ class MarkSweepGC(GCBase):
         hdr = hdr.next   # skip the POOL object itself
         while hdr:
             next = hdr.next
-            hdr.typeid |= CURPOOL_FLAG   # mark all objects from malloced_list
+            # mark all objects from malloced_list
+            hdr.flags = chr(ord(hdr.flags) | FL_CURPOOL)
             hdr.next = lltype.nullptr(self.HDR)  # abused to point to the copy
             oldobjects.append(llmemory.cast_ptr_to_adr(hdr))
             hdr = next
@@ -609,12 +621,11 @@ class MarkSweepGC(GCBase):
                 continue   # pointer is NULL
             oldhdr = llmemory.cast_adr_to_ptr(oldobj_addr - size_gc_header,
                                               self.HDRPTR)
-            typeid = oldhdr.typeid
-            if not (typeid & CURPOOL_FLAG):
+            if not (ord(oldhdr.flags) & FL_CURPOOL):
                 continue   # ignore objects that were not in the malloced_list
             newhdr = oldhdr.next      # abused to point to the copy
             if not newhdr:
-                typeid = (typeid & ~CURPOOL_FLAG) >> 1
+                typeid = oldhdr.typeid16
                 size = self.fixed_size(typeid)
                 # XXX! collect() at the beginning if the free heap is low
                 if self.is_varsize(typeid):
@@ -640,11 +651,15 @@ class MarkSweepGC(GCBase):
                 newhdr_addr = newobj_addr - size_gc_header
                 newhdr = llmemory.cast_adr_to_ptr(newhdr_addr, self.HDRPTR)
 
-                saved_id   = newhdr.typeid    # XXX hack needed for genc
+                saved_id   = newhdr.typeid16  # XXX hack needed for genc
+                saved_flg1 = newhdr.mark
+                saved_flg2 = newhdr.flags
                 saved_next = newhdr.next      # where size_gc_header == 0
                 raw_memcopy(oldobj_addr, newobj_addr, size)
-                newhdr.typeid = saved_id
-                newhdr.next   = saved_next
+                newhdr.typeid16 = saved_id
+                newhdr.mark     = saved_flg1
+                newhdr.flags    = saved_flg2
+                newhdr.next     = saved_next
 
                 offsets = self.offsets_to_gc_pointers(typeid)
                 i = 0
@@ -678,7 +693,7 @@ class MarkSweepGC(GCBase):
         next = lltype.nullptr(self.HDR)
         while oldobjects.non_empty():
             hdr = llmemory.cast_adr_to_ptr(oldobjects.pop(), self.HDRPTR)
-            hdr.typeid &= ~CURPOOL_FLAG   # reset the flag
+            hdr.flags = chr(ord(hdr.flags) &~ FL_CURPOOL)  # reset the flag
             hdr.next = next
             next = hdr
         oldobjects.delete()
@@ -692,6 +707,15 @@ class MarkSweepGC(GCBase):
         # build the new pool object collecting the new objects, and
         # reinstall the pool that was current at the beginning of x_clone()
         clonedata.pool = self.x_swap_pool(curpool)
+
+    def identityhash(self, obj):
+        obj = llmemory.cast_ptr_to_adr(obj)
+        hdr = self.header(obj)
+        if ord(hdr.flags) & FL_WITHHASH:
+            obj += self.get_size(obj)
+            return obj.signed[0]
+        else:
+            return llmemory.cast_adr_to_int(obj)
 
 
 class PrintingMarkSweepGC(MarkSweepGC):
@@ -717,6 +741,6 @@ class PrintingMarkSweepGC(MarkSweepGC):
     def write_free_statistics(self, typeid, result):
         llop.debug_print(lltype.Void, "free", typeid, " ", result)
 
-    def collect(self):
+    def collect(self, gen=0):
         self.count_mallocs = 0
-        MarkSweepGC.collect(self)
+        MarkSweepGC.collect(self, gen)

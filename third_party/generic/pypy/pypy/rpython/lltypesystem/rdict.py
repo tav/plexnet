@@ -2,7 +2,7 @@ from pypy.tool.pairtype import pairtype
 from pypy.annotation import model as annmodel
 from pypy.objspace.flow.model import Constant
 from pypy.rpython.rdict import AbstractDictRepr, AbstractDictIteratorRepr,\
-     rtype_newdict, dum_variant, dum_keys, dum_values, dum_items
+     rtype_newdict
 from pypy.rpython.lltypesystem import lltype
 from pypy.rlib.rarithmetic import r_uint, intmask
 from pypy.rlib.objectmodel import hlinvoke
@@ -273,22 +273,21 @@ class DictRepr(AbstractDictRepr):
         hop.exception_cannot_occur()
         return hop.gendirectcall(ll_update, v_dic1, v_dic2)
 
-    def _rtype_method_kvi(self, hop, spec):
+    def _rtype_method_kvi(self, hop, ll_func):
         v_dic, = hop.inputargs(self)
         r_list = hop.r_result
-        v_func = hop.inputconst(lltype.Void, spec)
         cLIST = hop.inputconst(lltype.Void, r_list.lowleveltype.TO)
         hop.exception_cannot_occur()
-        return hop.gendirectcall(ll_kvi, v_dic, cLIST, v_func)
+        return hop.gendirectcall(ll_func, cLIST, v_dic)
 
     def rtype_method_keys(self, hop):
-        return self._rtype_method_kvi(hop, dum_keys)
+        return self._rtype_method_kvi(hop, ll_dict_keys)
 
     def rtype_method_values(self, hop):
-        return self._rtype_method_kvi(hop, dum_values)
+        return self._rtype_method_kvi(hop, ll_dict_values)
 
     def rtype_method_items(self, hop):
-        return self._rtype_method_kvi(hop, dum_items)
+        return self._rtype_method_kvi(hop, ll_dict_items)
 
     def rtype_method_iterkeys(self, hop):
         hop.exception_cannot_occur()
@@ -422,7 +421,6 @@ def ll_dict_getitem(d, key):
     else: 
         raise KeyError 
 ll_dict_getitem.oopspec = 'dict.getitem(d, key)'
-ll_dict_getitem.oopargcheck = lambda d, key: bool(d)
 
 def ll_dict_setitem(d, key, value):
     hash = d.keyhash(key)
@@ -483,6 +481,7 @@ def ll_dict_delitem(d, key):
     num_entries = len(d.entries)
     if num_entries > DICT_INITSIZE and d.num_items < num_entries / 4:
         ll_dict_resize(d)
+ll_dict_delitem.oopspec = 'dict.delitem(d, key)'
 
 def ll_dict_resize(d):
     old_entries = d.entries
@@ -508,7 +507,6 @@ def ll_dict_resize(d):
 PERTURB_SHIFT = 5
 
 def ll_dict_lookup(d, key, hash):
-    DICT = lltype.typeOf(d).TO
     entries = d.entries
     mask = len(entries) - 1
     i = hash & mask
@@ -521,7 +519,7 @@ def ll_dict_lookup(d, key, hash):
             # correct hash, maybe the key is e.g. a different pointer to
             # an equal object
             found = d.keyeq(checkingkey, key)
-            if DICT.paranoia:
+            if d.paranoia:
                 if (entries != d.entries or
                     not entries.valid(i) or entries[i].key != checkingkey):
                     # the compare did major nasty stuff to the dict: start over
@@ -556,7 +554,7 @@ def ll_dict_lookup(d, key, hash):
                 # correct hash, maybe the key is e.g. a different pointer to
                 # an equal object
                 found = d.keyeq(checkingkey, key)
-                if DICT.paranoia:
+                if d.paranoia:
                     if (entries != d.entries or
                         not entries.valid(i) or entries[i].key != checkingkey):
                         # the compare did major nasty stuff to the dict:
@@ -650,7 +648,7 @@ class DictIteratorRepr(AbstractDictIteratorRepr):
                                          ('dict', r_dict.lowleveltype),
                                          ('index', lltype.Signed)))
         self.ll_dictiter = ll_dictiter
-        self.ll_dictnext = ll_dictnext
+        self.ll_dictnext = ll_dictnext_group[variant]
 
 
 def ll_dictiter(ITERPTR, d):
@@ -658,33 +656,43 @@ def ll_dictiter(ITERPTR, d):
     iter.dict = d
     iter.index = 0
     return iter
+ll_dictiter.oopspec = 'newdictiter(d)'
 
-def ll_dictnext(iter, func, RETURNTYPE):
-    dict = iter.dict
-    if dict:
-        entries = dict.entries
-        index = iter.index
-        entries_len = len(entries)
-        while index < entries_len:
-            entry = entries[index]
-            is_valid = entries.valid(index)
-            index = index + 1
-            if is_valid:
-                iter.index = index
-                if RETURNTYPE is lltype.Void:
-                    return None
-                elif func is dum_items:
-                    r = lltype.malloc(RETURNTYPE.TO)
-                    r.item0 = recast(RETURNTYPE.TO.item0, entry.key)
-                    r.item1 = recast(RETURNTYPE.TO.item1, entry.value)
-                    return r
-                elif func is dum_keys:
-                    return entry.key
-                elif func is dum_values:
-                    return entry.value
-        # clear the reference to the dict and prevent restarts
-        iter.dict = lltype.nullptr(lltype.typeOf(iter).TO.dict.TO)
-    raise StopIteration
+def _make_ll_dictnext(kind):
+    # make three versions of the following function: keys, values, items
+    def ll_dictnext(RETURNTYPE, iter):
+        # note that RETURNTYPE is None for keys and values
+        dict = iter.dict
+        if dict:
+            entries = dict.entries
+            index = iter.index
+            entries_len = len(entries)
+            while index < entries_len:
+                entry = entries[index]
+                is_valid = entries.valid(index)
+                index = index + 1
+                if is_valid:
+                    iter.index = index
+                    if RETURNTYPE is lltype.Void:
+                        return None
+                    elif kind == 'items':
+                        r = lltype.malloc(RETURNTYPE.TO)
+                        r.item0 = recast(RETURNTYPE.TO.item0, entry.key)
+                        r.item1 = recast(RETURNTYPE.TO.item1, entry.value)
+                        return r
+                    elif kind == 'keys':
+                        return entry.key
+                    elif kind == 'values':
+                        return entry.value
+            # clear the reference to the dict and prevent restarts
+            iter.dict = lltype.nullptr(lltype.typeOf(iter).TO.dict.TO)
+        raise StopIteration
+    ll_dictnext.oopspec = 'dictiter.next%s(iter)' % kind
+    return ll_dictnext
+
+ll_dictnext_group = {'keys'  : _make_ll_dictnext('keys'),
+                     'values': _make_ll_dictnext('values'),
+                     'items' : _make_ll_dictnext('items')}
 
 # _____________________________________________________________
 # methods
@@ -696,6 +704,7 @@ def ll_get(dict, key, default):
         return entries[i].value
     else: 
         return default
+ll_get.oopspec = 'dict.get(dict, key, default)'
 
 def ll_setdefault(dict, key, default):
     i = ll_dict_lookup(dict, key, dict.keyhash(key))
@@ -705,6 +714,7 @@ def ll_setdefault(dict, key, default):
     else:
         ll_dict_setitem(dict, key, default)
         return default
+ll_setdefault.oopspec = 'dict.setdefault(dict, key, default)'
 
 def ll_copy(dict):
     DICT = lltype.typeOf(dict).TO
@@ -727,6 +737,7 @@ def ll_copy(dict):
         if hasattr(ENTRY, 'f_hash'):     d_entry.f_hash     = entry.f_hash
         i += 1
     return d
+ll_copy.oopspec = 'dict.copy(dict)'
 
 def ll_clear(d):
     if len(d.entries) == d.num_pristine_entries == DICT_INITSIZE:
@@ -736,6 +747,7 @@ def ll_clear(d):
     d.num_items = 0
     d.num_pristine_entries = DICT_INITSIZE
     old_entries.delete()
+ll_clear.oopspec = 'dict.clear(d)'
 
 def ll_update(dic1, dic2):
     entries = dic2.entries
@@ -746,6 +758,7 @@ def ll_update(dic1, dic2):
             entry = entries[i]
             ll_dict_setitem(dic1, entry.key, entry.value)
         i += 1
+ll_update.oopspec = 'dict.update(dic1, dic2)'
 
 # this is an implementation of keys(), values() and items()
 # in a single function.
@@ -758,33 +771,40 @@ def recast(P, v):
     else:
         return v
 
-def ll_kvi(dic, LIST, func):
-    res = LIST.ll_newlist(dic.num_items)
-    entries = dic.entries
-    dlen = len(entries)
-    items = res.ll_items()
-    i = 0
-    p = 0
-    while i < dlen:
-        if entries.valid(i):
-            ELEM = lltype.typeOf(items).TO.OF
-            if ELEM is not lltype.Void:
-                entry = entries[i]
-                if func is dum_items:
-                    r = lltype.malloc(ELEM.TO)
-                    r.item0 = recast(ELEM.TO.item0, entry.key)
-                    r.item1 = recast(ELEM.TO.item1, entry.value)
-                    items[p] = r
-                elif func is dum_keys:
-                    items[p] = recast(ELEM, entry.key)
-                elif func is dum_values:
-                    items[p] = recast(ELEM, entry.value)
-            p += 1
-        i += 1
-    return res
+def _make_ll_keys_values_items(kind):
+    def ll_kvi(LIST, dic):
+        res = LIST.ll_newlist(dic.num_items)
+        entries = dic.entries
+        dlen = len(entries)
+        items = res.ll_items()
+        i = 0
+        p = 0
+        while i < dlen:
+            if entries.valid(i):
+                ELEM = lltype.typeOf(items).TO.OF
+                if ELEM is not lltype.Void:
+                    entry = entries[i]
+                    if kind == 'items':
+                        r = lltype.malloc(ELEM.TO)
+                        r.item0 = recast(ELEM.TO.item0, entry.key)
+                        r.item1 = recast(ELEM.TO.item1, entry.value)
+                        items[p] = r
+                    elif kind == 'keys':
+                        items[p] = recast(ELEM, entry.key)
+                    elif kind == 'values':
+                        items[p] = recast(ELEM, entry.value)
+                p += 1
+            i += 1
+        assert p == res.ll_length()
+        return res
+    ll_kvi.oopspec = 'dict.%s(dic)' % kind
+    return ll_kvi
+
+ll_dict_keys   = _make_ll_keys_values_items('keys')
+ll_dict_values = _make_ll_keys_values_items('values')
+ll_dict_items  = _make_ll_keys_values_items('items')
 
 def ll_contains(d, key):
     i = ll_dict_lookup(d, key, d.keyhash(key))
     return d.entries.valid(i)
 ll_contains.oopspec = 'dict.contains(d, key)'
-ll_contains.oopargcheck = lambda d, key: bool(d)

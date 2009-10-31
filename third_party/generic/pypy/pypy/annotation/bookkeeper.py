@@ -6,17 +6,17 @@ import sys, types, inspect, weakref
 from pypy.objspace.flow.model import Constant
 from pypy.annotation.model import SomeString, SomeChar, SomeFloat, \
      SomePtr, unionof, SomeInstance, SomeDict, SomeBuiltin, SomePBC, \
-     SomeInteger, SomeOOInstance, TLS, SomeAddress, \
+     SomeInteger, SomeOOInstance, SomeOOObject, TLS, SomeAddress, \
      SomeUnicodeCodePoint, SomeOOStaticMeth, s_None, s_ImpossibleValue, \
      SomeLLADTMeth, SomeBool, SomeTuple, SomeOOClass, SomeImpossibleValue, \
      SomeUnicodeString, SomeList, SomeObject, HarmlesslyBlocked, \
      SomeWeakRef, lltype_to_annotation
-from pypy.annotation.classdef import InstanceSource
-from pypy.annotation.listdef import ListDef
+from pypy.annotation.classdef import InstanceSource, ClassDef
+from pypy.annotation.listdef import ListDef, ListItem
 from pypy.annotation.dictdef import DictDef
 from pypy.annotation import description
 from pypy.annotation.signature import annotationoftype
-from pypy.interpreter.argument import Arguments
+from pypy.interpreter.argument import ArgumentsForTranslation
 from pypy.rlib.objectmodel import r_dict, Symbolic
 from pypy.tool.algo.unionfind import UnionFind
 from pypy.rpython.lltypesystem import lltype, llmemory
@@ -169,7 +169,6 @@ class Bookkeeper:
         self.pending_specializations = []   # list of callbacks
         self.external_class_cache = {}      # cache of ExternalType classes
 
-        self.needs_hash_support = {}
         self.needs_generic_instantiate = {}
 
         self.stats = Stats(self)
@@ -219,14 +218,40 @@ class Bookkeeper:
                 self.consider_call_site_for_pbc(pbc, 'simple_call', 
                                                 args_s, s_ImpossibleValue)
             self.emulated_pbc_calls = {}
-
-            for clsdef in self.needs_hash_support.keys():
-                for clsdef2 in self.needs_hash_support:
-                    if clsdef.issubclass(clsdef2) and clsdef is not clsdef2:
-                        del self.needs_hash_support[clsdef]
-                        break
         finally:
             self.leave()
+
+        # sanity check: no flags attached to heap stored instances
+
+        seen = set()
+
+        def check_no_flags(s_value_or_def):
+            if isinstance(s_value_or_def, SomeInstance):
+                assert not s_value_or_def.flags, "instance annotation with flags escaped to the heap"
+                check_no_flags(s_value_or_def.classdef)
+            elif isinstance(s_value_or_def, SomeList):
+                check_no_flags(s_value_or_def.listdef.listitem)
+            elif isinstance(s_value_or_def, SomeDict):
+                check_no_flags(s_value_or_def.dictdef.dictkey)
+                check_no_flags(s_value_or_def.dictdef.dictvalue)                
+            elif isinstance(s_value_or_def, SomeTuple):
+                for s_item in s_value_or_def.items:
+                    check_no_flags(s_item)
+            elif isinstance(s_value_or_def, ClassDef):
+                if s_value_or_def in seen:
+                    return
+                seen.add(s_value_or_def)
+                for attr in s_value_or_def.attrs.values():
+                    s_attr = attr.s_value
+                    check_no_flags(s_attr)
+            elif isinstance(s_value_or_def, ListItem):
+                if s_value_or_def in seen:
+                    return
+                seen.add(s_value_or_def)                
+                check_no_flags(s_value_or_def.s_value)
+            
+        for clsdef in self.classdefs:
+            check_no_flags(clsdef)
 
     def consider_call_site(self, call_op):
         binding = self.annotator.binding
@@ -367,6 +392,7 @@ class Bookkeeper:
                         for ek, ev in items:
                             result.dictdef.generalize_key(self.immutablevalue(ek))
                             result.dictdef.generalize_value(self.immutablevalue(ev))
+                            result.dictdef.seen_prebuilt_key(ek)
                         seen_elements = len(items)
                         # if the dictionary grew during the iteration,
                         # start over again
@@ -385,6 +411,7 @@ class Bookkeeper:
                 for ek, ev in x.iteritems():
                     dictdef.generalize_key(self.immutablevalue(ek, False))
                     dictdef.generalize_value(self.immutablevalue(ev, False))
+                    dictdef.seen_prebuilt_key(ek)
                 result = SomeDict(dictdef)
         elif tp is weakref.ReferenceType:
             x1 = x()
@@ -412,6 +439,8 @@ class Bookkeeper:
             result = SomeOOInstance(ootype.typeOf(x))
         elif isinstance(x, (ootype._record, ootype._string)):
             result = SomeOOInstance(ootype.typeOf(x))
+        elif isinstance(x, (ootype._object)):
+            result = SomeOOObject()
         elif callable(x):
             if hasattr(x, 'im_self') and hasattr(x, 'im_func'):
                 # on top of PyPy, for cases like 'l.append' where 'l' is a
@@ -661,10 +690,11 @@ class Bookkeeper:
     def build_args(self, op, args_s):
         space = RPythonCallsSpace()
         if op == "simple_call":
-            return Arguments(space, list(args_s))
+            return ArgumentsForTranslation(space, list(args_s))
         elif op == "call_args":
-            return Arguments.fromshape(space, args_s[0].const, # shape
-                                       list(args_s[1:]))
+            return ArgumentsForTranslation.fromshape(
+                    space, args_s[0].const, # shape
+                    list(args_s[1:]))
 
     def ondegenerated(self, what, s_value, where=None, called_from_graph=None):
         self.annotator.ondegenerated(what, s_value, where=where,
@@ -727,6 +757,7 @@ class RPythonCallsSpace:
             getattr(s_obj, 'from_ellipsis', False)):    # see newtuple()
             return [Ellipsis]
         raise CallPatternTooComplex, "'*' argument must be SomeTuple"
+    viewiterable = unpackiterable
 
     def is_w(self, one, other):
         return one is other

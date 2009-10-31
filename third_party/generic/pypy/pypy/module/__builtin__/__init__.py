@@ -27,23 +27,11 @@ class Module(MixedModule):
         'raw_input'     : 'app_io.raw_input',
         'input'         : 'app_io.input',
 
-        'sum'           : 'app_functional.sum',
         'apply'         : 'app_functional.apply',
-        'map'           : 'app_functional.map',
-        'filter'        : 'app_functional.filter',
-        'zip'           : 'app_functional.zip',
-        'reduce'        : 'app_functional.reduce',
         #'range'         : 'app_functional.range',
         # redirected to functional.py, applevel version
         # is still needed and should stay where it is.
-        'min'           : 'app_functional.min',
-        'max'           : 'app_functional.max',
-        'enumerate'     : 'app_functional.enumerate',
         'sorted'        : 'app_functional.sorted',
-        'reversed'      : 'app_functional.reversed',
-        '_install_pickle_support_for_reversed_iterator':
-        'app_functional._install_pickle_support_for_reversed_iterator',
-
         'globals'       : 'app_inspect.globals',
         'locals'        : 'app_inspect.locals',
         'vars'          : 'app_inspect.vars',
@@ -106,8 +94,17 @@ class Module(MixedModule):
 
         'range'         : 'functional.range_int',
         'xrange'        : 'functional.W_XRange',
+        'enumerate'     : 'functional.W_Enumerate',
         'all'           : 'functional.all',
         'any'           : 'functional.any',
+        'min'           : 'functional.min',
+        'max'           : 'functional.max',
+        'sum'           : 'functional.sum',
+        'map'           : 'functional.map',
+        'zip'           : 'functional.zip',
+        'reduce'        : 'functional.reduce',
+        'reversed'      : 'functional.reversed',
+        'filter'        : 'functional.filter',
         'super'         : 'descriptor.W_Super',
         'staticmethod'  : 'descriptor.StaticMethod',
         'classmethod'   : 'descriptor.ClassMethod',
@@ -144,14 +141,6 @@ class Module(MixedModule):
         self.builtins_by_index = [None] * len(OPTIMIZED_BUILTINS)
         for i, name in enumerate(OPTIMIZED_BUILTINS):
             self.builtins_by_index[i] = space.getattr(self, space.wrap(name))
-        # call installations for pickle support
-        for name in self.loaders.keys():
-            if name.startswith('_install_pickle_support_for_'):
-                w_install = self.get(name)
-                space.call_function(w_install)
-                # xxx hide the installer
-                space.delitem(self.w_dict, space.wrap(name))
-                del self.loaders[name]
         # install the more general version of isinstance() & co. in the space
         from pypy.module.__builtin__ import abstractinst as ab
         space.abstract_isinstance_w = ab.abstract_isinstance_w.__get__(space)

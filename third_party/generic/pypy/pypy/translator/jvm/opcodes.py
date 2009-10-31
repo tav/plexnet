@@ -77,11 +77,13 @@ opcodes = _proc_dict({
     'oosend':                   [JvmCallMethod, StoreResult],
     'ooupcast':                 DoNothing,
     'oodowncast':               [DownCast, StoreResult],
+    'cast_to_object':           DoNothing,
+    'cast_from_object':         [DownCast, StoreResult],
     'instanceof':               [CastTo, StoreResult],
     'subclassof':               [PushAllArgs, jvm.SWAP, jvm.CLASSISASSIGNABLEFROM, StoreResult],
     'classof':                  [PushAllArgs, jvm.OBJECTGETCLASS, StoreResult],
-    'ooidentityhash':           [PushAllArgs, jvm.OBJHASHCODE, StoreResult], 
-    'oohash':                   [PushAllArgs, jvm.OBJHASHCODE, StoreResult], 
+    'gc_id':                    [PushAllArgs, jvm.SYSTEMIDENTITYHASH, StoreResult],   # XXX not implemented
+    'gc_identityhash':          [PushAllArgs, jvm.SYSTEMIDENTITYHASH, StoreResult], 
     'oostring':                 [OOString, StoreResult],
     'oounicode':                [OOUnicode, StoreResult],
     'ooparse_float':            jvm.PYPYOOPARSEFLOAT,
@@ -94,6 +96,8 @@ opcodes = _proc_dict({
     'gc__collect':              jvm.SYSTEMGC,
     'gc_set_max_heap_size':     Ignore,
     'resume_point':             Ignore,
+    'jit_marker':               Ignore,
+    'promote_virtualizable':    Ignore,
 
     'debug_assert':              [], # TODO: implement?
 
@@ -122,18 +126,17 @@ opcodes = _proc_dict({
     'int_add_nonneg_ovf':       jvm.IADDOVF,
     'int_sub_ovf':              jvm.ISUBOVF,
     'int_mul_ovf':              jvm.IMULOVF,
-    'int_floordiv_ovf':         jvm.IDIV, # these can't overflow!
+    'int_floordiv_ovf':         jvm.IFLOORDIVOVF,
     'int_mod_zer':              _check_zer(jvm.IREM),
     'int_mod_ovf':              jvm.IREMOVF,
     'int_and_ovf':              jvm.IAND,
     'int_or_ovf':               jvm.IOR,
 
     'int_lshift_ovf':           jvm.ISHLOVF,
-    'int_lshift_ovf_val':       jvm.ISHLOVF, # VAL... what is val used for??
 
     'int_rshift_ovf':           jvm.ISHR, # these can't overflow!
     'int_xor_ovf':              jvm.IXOR,
-    'int_floordiv_ovf_zer':     _check_zer(jvm.IDIV),
+    'int_floordiv_ovf_zer':     jvm.IFLOORDIVZEROVF,
     'int_mod_ovf_zer':          _check_zer(jvm.IREMOVF),
 
     'uint_invert':              'bitwise_negate',
@@ -179,7 +182,8 @@ opcodes = _proc_dict({
     'llong_lshift':             [PushAllArgs, jvm.L2I, jvm.LSHL, StoreResult],
     'llong_rshift':             [PushAllArgs, jvm.L2I, jvm.LSHR, StoreResult],
     'llong_xor':                jvm.LXOR,
-    'llong_floordiv_ovf':       jvm.LDIV, # these can't overflow!
+    'llong_floordiv_ovf':       jvm.LFLOORDIVOVF,
+    'llong_floordiv_ovf_zer':   jvm.LFLOORDIVZEROVF,    
     'llong_mod_ovf':            jvm.LREMOVF,
     'llong_lshift_ovf':         jvm.LSHLOVF,
 
@@ -218,6 +222,4 @@ opcodes = _proc_dict({
     'truncate_longlong_to_int': jvm.L2I,
     'cast_longlong_to_float':   jvm.L2D,
     'cast_primitive':           [PushAllArgs, CastPrimitive, StoreResult],
-    'is_early_constant':        [PushPrimitive(ootype.Bool, False), StoreResult]
-    
 })

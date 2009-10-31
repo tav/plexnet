@@ -1,4 +1,6 @@
 """
+    provide temporary directories to test functions and methods. 
+
 example:
 
     pytest_plugins = "pytest_tmpdir" 
@@ -9,13 +11,9 @@ example:
 """
 import py
 
-class TmpdirPlugin:
-    """ provide temporary directories to test functions and methods. 
-    """ 
-
-    def pytest_funcarg__tmpdir(self, pyfuncitem):
-        name = pyfuncitem.name
-        return pyfuncitem.config.mktemp(name, numbered=True)
+def pytest_funcarg__tmpdir(request):
+    name = request.function.__name__ 
+    return request.config.mktemp(name, numbered=True)
 
 # ===============================================================================
 #
@@ -23,13 +21,11 @@ class TmpdirPlugin:
 #
 # ===============================================================================
 #
-def test_generic(plugintester):
-    plugintester.apicheck(TmpdirPlugin)
 
 def test_funcarg(testdir):
+    from py.__.test.funcargs import FuncargRequest
     item = testdir.getitem("def test_func(tmpdir): pass")
-    plugin = TmpdirPlugin()
-    p = plugin.pytest_funcarg__tmpdir(item)
+    p = pytest_funcarg__tmpdir(FuncargRequest(item))
     assert p.check()
     bn = p.basename.strip("0123456789-")
     assert bn.endswith("test_func")

@@ -7,11 +7,14 @@ The bytecode interpreter itself is implemented by the PyFrame class.
 import dis, imp, struct, types, new
 
 from pypy.interpreter import eval
+from pypy.interpreter.argument import Signature
 from pypy.interpreter.error import OperationError
 from pypy.interpreter.gateway import NoneNotWrapped 
 from pypy.interpreter.baseobjspace import ObjSpace, W_Root
 from pypy.rlib.rarithmetic import intmask
 from pypy.rlib.debug import make_sure_not_resized, make_sure_not_modified
+from pypy.rlib import jit
+from pypy.rlib.objectmodel import compute_hash
 
 # helper
 
@@ -48,11 +51,13 @@ def cpython_code_signature(code):
         argcount += 1
     else:
         kwargname = None
-    return argnames, varargname, kwargname
+    return Signature(argnames, varargname, kwargname)
 
 class PyCode(eval.Code):
     "CPython-style code objects."
     _immutable_ = True
+    _immutable_fields_ = ["co_consts_w[*]", "co_names_w[*]", "co_varnames[*]",
+                          "co_freevars[*]", "co_cellvars[*]"]
 
     def __init__(self, space,  argcount, nlocals, stacksize, flags,
                      code, consts, names, varnames, filename,
@@ -79,6 +84,9 @@ class PyCode(eval.Code):
         self.hidden_applevel = hidden_applevel
         self.magic = magic
         self._signature = cpython_code_signature(self)
+        self._initialize()
+
+    def _initialize(self):
         # Precompute what arguments need to be copied into cellvars
         self._args_as_cellvars = []
         
@@ -111,7 +119,7 @@ class PyCode(eval.Code):
 
         self._compute_flatcall()
 
-        if space.config.objspace.std.withcelldict:
+        if self.space.config.objspace.std.withcelldict:
             from pypy.objspace.std.celldict import init_code
             init_code(self)
 
@@ -120,7 +128,8 @@ class PyCode(eval.Code):
     def signature(self):
         return self._signature
     
-    def _from_code(space, code, hidden_applevel=False):
+    @classmethod
+    def _from_code(cls, space, code, hidden_applevel=False, code_hook=None):
         """ Initialize the code object from a real (CPython) one.
             This is just a hack, until we have our own compile.
             At the moment, we just fake this.
@@ -129,14 +138,16 @@ class PyCode(eval.Code):
         assert isinstance(code, types.CodeType)
         newconsts_w = [None] * len(code.co_consts)
         num = 0
+        if code_hook is None:
+            code_hook = cls._from_code
         for const in code.co_consts:
             if isinstance(const, types.CodeType): # from stable compiler
-                const = PyCode._from_code(space, const, hidden_applevel=hidden_applevel)
+                const = code_hook(space, const, hidden_applevel, code_hook)
             newconsts_w[num] = space.wrap(const)
             num += 1
         # stick the underlying CPython magic value, if the code object
         # comes from there
-        return PyCode(space, code.co_argcount,
+        return cls(space, code.co_argcount,
                       code.co_nlocals,
                       code.co_stacksize,
                       code.co_flags,
@@ -152,8 +163,6 @@ class PyCode(eval.Code):
                       list(code.co_cellvars),
                       hidden_applevel, cpython_magic)
 
-    _from_code = staticmethod(_from_code)
-
     def _code_new_w(space, argcount, nlocals, stacksize, flags,
                     code, consts, names, varnames, filename,
                     name, firstlineno, lnotab, freevars, cellvars,
@@ -166,11 +175,10 @@ class PyCode(eval.Code):
 
     _code_new_w = staticmethod(_code_new_w)
 
-    FLATPYCALL = 0x100
     
     def _compute_flatcall(self):
         # Speed hack!
-        self.fast_natural_arity = -99
+        self.fast_natural_arity = eval.Code.HOPELESS
         if self.co_flags & (CO_VARARGS | CO_VARKEYWORDS):
             return
         if len(self._args_as_cellvars) > 0:
@@ -178,17 +186,19 @@ class PyCode(eval.Code):
         if self.co_argcount > 0xff:
             return
         
-        self.fast_natural_arity = PyCode.FLATPYCALL | self.co_argcount
+        self.fast_natural_arity = eval.Code.FLATPYCALL | self.co_argcount
 
     def funcrun(self, func, args):
         frame = self.space.createframe(self, func.w_func_globals,
                                   func.closure)
         sig = self._signature
         # speed hack
-        args_matched = args.parse_into_scope(None, frame.fastlocals_w,
+        fresh_frame = jit.hint(frame, access_directly=True,
+                                      fresh_virtualizable=True)
+        args_matched = args.parse_into_scope(None, fresh_frame.fastlocals_w,
                                              func.name,
                                              sig, func.defs_w)
-        frame.init_cells()
+        fresh_frame.init_cells()
         return frame.run()
 
     def funcrun_obj(self, func, w_obj, args):
@@ -196,10 +206,12 @@ class PyCode(eval.Code):
                                   func.closure)
         sig = self._signature
         # speed hack
-        args_matched = args.parse_into_scope(w_obj, frame.fastlocals_w,
+        fresh_frame = jit.hint(frame, access_directly=True,
+                                      fresh_virtualizable=True)        
+        args_matched = args.parse_into_scope(w_obj, fresh_frame.fastlocals_w,
                                              func.name,
                                              sig, func.defs_w)
-        frame.init_cells()
+        fresh_frame.init_cells()
         return frame.run()
 
     def getvarnames(self):
@@ -293,15 +305,15 @@ class PyCode(eval.Code):
 
     def descr_code__hash__(self):
         space = self.space
-        result =  hash(self.co_name)
+        result =  compute_hash(self.co_name)
         result ^= self.co_argcount
         result ^= self.co_nlocals
         result ^= self.co_flags
         result ^= self.co_firstlineno
-        result ^= hash(self.co_code)
-        for name in self.co_varnames:  result ^= hash(name)
-        for name in self.co_freevars:  result ^= hash(name)
-        for name in self.co_cellvars:  result ^= hash(name)
+        result ^= compute_hash(self.co_code)
+        for name in self.co_varnames:  result ^= compute_hash(name)
+        for name in self.co_freevars:  result ^= compute_hash(name)
+        for name in self.co_cellvars:  result ^= compute_hash(name)
         w_result = space.wrap(intmask(result))
         for w_name in self.co_names_w:
             w_result = space.xor(w_result, space.hash(w_name))
@@ -375,7 +387,10 @@ class PyCode(eval.Code):
         ]
         return space.newtuple([new_inst, space.newtuple(tup)])
 
+    def get_repr(self):
+        return "<code object %s, file '%s', line %d>" % (
+            self.co_name, self.co_filename, self.co_firstlineno)
+
     def repr(self, space):
-        return space.wrap("<code object %s, file '%s', line %d>" % (
-            self.co_name, self.co_filename, self.co_firstlineno))
+        return space.wrap(self.get_repr())
     repr.unwrap_spec = ['self', ObjSpace]

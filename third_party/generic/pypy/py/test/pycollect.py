@@ -18,8 +18,8 @@ a tree of collectors and test items that this modules provides::
 """ 
 import py
 from py.__.test.collect import configproperty, warnoldcollect
-from py.__.code.source import findsource
 pydir = py.path.local(py.__file__).dirpath()
+from py.__.test import funcargs
 
 class PyobjMixin(object):
     def obj(): 
@@ -58,44 +58,23 @@ class PyobjMixin(object):
         s = ".".join(parts)
         return s.replace(".[", "[")
 
-    def getfslineno(self):
+    def _getfslineno(self):
         try:
             return self._fslineno
         except AttributeError:
             pass
         obj = self.obj
-        # let decorators etc specify a sane ordering
+        # xxx let decorators etc specify a sane ordering
         if hasattr(obj, 'place_as'):
             obj = obj.place_as
-        try:
-            code = py.code.Code(obj)
-        except TypeError:
-            # fallback to 
-            fn = (py.std.inspect.getsourcefile(obj) or
-                  py.std.inspect.getfile(obj))
-            fspath = fn and py.path.local(fn) or None
-            if fspath:
-                try:
-                    _, lineno = findsource(obj)
-                except IOError:
-                    lineno = None
-            else:
-                lineno = None
-        else:
-            fspath = code.path
-            lineno = code.firstlineno 
-        self._fslineno = fspath, lineno
-        return fspath, lineno
 
-    def repr_metainfo(self):
-        fspath, lineno = self.getfslineno()
+        self._fslineno = py.code.getfslineno(obj)
+        return self._fslineno
+
+    def reportinfo(self):
+        fspath, lineno = self._getfslineno()
         modpath = self.getmodpath()
-        return self.ReprMetaInfo(
-            fspath=fspath, 
-            lineno=lineno,
-            modpath=modpath,
-        )
-
+        return fspath, lineno, modpath 
 
 class PyCollectorMixin(PyobjMixin, py.test.collect.Collector): 
     Class = configproperty('Class')
@@ -114,7 +93,7 @@ class PyCollectorMixin(PyobjMixin, py.test.collect.Collector):
             return l
         name2items = self._buildname2items()
         colitems = name2items.values()
-        colitems.sort()
+        colitems.sort(key=lambda item: item.reportinfo()[:2])
         return colitems
 
     def _buildname2items(self): 
@@ -140,12 +119,11 @@ class PyCollectorMixin(PyobjMixin, py.test.collect.Collector):
             return self.join(name)
 
     def makeitem(self, name, obj):
-        res = self.config.pytestplugins.call_firstresult(
-            "pytest_pymodule_makeitem", modcol=self, name=name, obj=obj)
-        if res:
+        res = self.config.hook.pytest_pycollect_makeitem(
+            collector=self, name=name, obj=obj)
+        if res is not None:
             return res
-        if (self.classnamefilter(name)) and \
-            py.std.inspect.isclass(obj):
+        if self._istestclasscandidate(name, obj):
             res = self._deprecated_join(name)
             if res is not None:
                 return res 
@@ -154,11 +132,43 @@ class PyCollectorMixin(PyobjMixin, py.test.collect.Collector):
             res = self._deprecated_join(name)
             if res is not None:
                 return res 
-            if obj.func_code.co_flags & 32: # generator function 
+            if is_generator(obj):
+                # XXX deprecation warning 
                 return self.Generator(name, parent=self)
-            else: 
-                return self.Function(name, parent=self)
+            else:
+                return self._genfunctions(name, obj) 
 
+    def _istestclasscandidate(self, name, obj):
+        if self.classnamefilter(name) and \
+           py.std.inspect.isclass(obj):
+            if hasinit(obj):
+                # XXX WARN 
+                return False
+            return True
+            
+
+    def _genfunctions(self, name, funcobj):
+        module = self.getparent(Module).obj
+        # due to _buildname2items funcobj is the raw function, we need
+        # to work to get at the class 
+        clscol = self.getparent(Class)
+        cls = clscol and clscol.obj or None
+        metafunc = funcargs.Metafunc(funcobj, config=self.config, 
+            cls=cls, module=module)
+        gentesthook = self.config.hook._makecall(
+            "pytest_generate_tests", extralookup=module)
+        gentesthook(metafunc=metafunc)
+        if not metafunc._calls:
+            return self.Function(name, parent=self)
+        return funcargs.FunctionCollector(name=name, 
+            parent=self, calls=metafunc._calls)
+
+def is_generator(func):
+    try:
+        return (func.func_code.co_flags & 32) # generator function 
+    except AttributeError: # c / builtin functions have no func_code
+        return False 
+        
 class Module(py.test.collect.File, PyCollectorMixin):
     def _getobj(self):
         return self._memoizedcall('_obj', self._importtestmodule)
@@ -167,7 +177,7 @@ class Module(py.test.collect.File, PyCollectorMixin):
         # we assume we are only called once per module 
         mod = self.fspath.pyimport()
         #print "imported test module", mod
-        self.config.pytestplugins.consider_module(mod)
+        self.config.pluginmanager.consider_module(mod)
         return mod
 
     def setup(self): 
@@ -177,7 +187,7 @@ class Module(py.test.collect.File, PyCollectorMixin):
             #print "*" * 20, "INVOKE assertion", self
             py.magic.invoke(assertion=1)
         mod = self.obj
-        self.config.pytestplugins.register(mod)
+        #self.config.pluginmanager.register(mod)
         if hasattr(mod, 'setup_module'): 
             self.obj.setup_module(mod)
 
@@ -187,7 +197,7 @@ class Module(py.test.collect.File, PyCollectorMixin):
         if not self.config.option.nomagic:
             #print "*" * 20, "revoke assertion", self
             py.magic.revoke(assertion=1)
-        self.config.pytestplugins.unregister(self.obj)
+        #self.config.pluginmanager.unregister(self.obj)
 
 class Class(PyCollectorMixin, py.test.collect.Collector): 
 
@@ -211,9 +221,6 @@ class Class(PyCollectorMixin, py.test.collect.Collector):
             teardown_class = getattr(teardown_class, 'im_func', teardown_class) 
             teardown_class(self.obj) 
 
-    def _getsortvalue(self):  
-        return self.getfslineno()
-
 class Instance(PyCollectorMixin, py.test.collect.Collector): 
     def _getobj(self): 
         return self.parent.obj()  
@@ -235,8 +242,6 @@ class Instance(PyCollectorMixin, py.test.collect.Collector):
 class FunctionMixin(PyobjMixin):
     """ mixin for the code common to Function and Generator.
     """
-    def _getsortvalue(self):  
-        return self.getfslineno()
 
     def setup(self): 
         """ perform setup for this test function. """
@@ -251,7 +256,7 @@ class FunctionMixin(PyobjMixin):
             obj = self.parent.obj 
         setup_func_or_method = getattr(obj, name, None)
         if setup_func_or_method is not None: 
-            return setup_func_or_method(self.obj) 
+            setup_func_or_method(self.obj) 
 
     def teardown(self): 
         """ perform teardown for this test function. """
@@ -276,16 +281,17 @@ class FunctionMixin(PyobjMixin):
             traceback = ntraceback.filter()
         return traceback 
 
-    def repr_failure(self, excinfo, outerr):
-        return self._repr_failure_py(excinfo, outerr)
+    def repr_failure(self, excinfo, outerr=None):
+        assert outerr is None, "XXX outerr usage is deprecated"
+        return self._repr_failure_py(excinfo)
 
     shortfailurerepr = "F"
 
 class Generator(FunctionMixin, PyCollectorMixin, py.test.collect.Collector): 
     def collect(self):
-        # test generators are collectors yet participate in 
-        # the test-item setup and teardown protocol. 
-        # otherwise we could avoid global setupstate
+        # test generators are seen as collectors but they also 
+        # invoke setup/teardown on popular request 
+        # (induced by the common "test_*" naming shared with normal tests)
         self.config._setupstate.prepare(self) 
         l = []
         seen = {}
@@ -314,6 +320,7 @@ class Generator(FunctionMixin, PyCollectorMixin, py.test.collect.Collector):
             name = None
         call, args = obj[0], obj[1:]
         return name, call, args 
+    
 
 #
 #  Test Items 
@@ -323,22 +330,26 @@ class Function(FunctionMixin, py.test.collect.Item):
     """ a Function Item is responsible for setting up  
         and executing a Python callable test object.
     """
-    def __init__(self, name, parent=None, config=None, args=(), callobj=_dummy):
-        super(Function, self).__init__(name, parent, config=config) 
-        self._finalizers = []
-        self._args = args
+    _genid = None
+    def __init__(self, name, parent=None, args=None, 
+                 callspec=None, callobj=_dummy):
+        super(Function, self).__init__(name, parent)
+        self._args = args 
+        if self._isyieldedfunction():
+            assert not callspec, "yielded functions (deprecated) cannot have funcargs" 
+        else:
+            if callspec is not None:
+                self.funcargs = callspec.funcargs or {}
+                self._genid = callspec.id 
+                if hasattr(callspec, "param"):
+                    self._requestparam = callspec.param
+            else:
+                self.funcargs = {}
         if callobj is not _dummy: 
             self._obj = callobj 
 
-    def addfinalizer(self, func):
-        self._finalizers.append(func)
-        
-    def teardown(self):
-        finalizers = self._finalizers
-        while finalizers:
-            call = finalizers.pop()
-            call()
-        super(Function, self).teardown()
+    def _isyieldedfunction(self):
+        return self._args is not None
 
     def readkeywords(self):
         d = super(Function, self).readkeywords()
@@ -346,70 +357,33 @@ class Function(FunctionMixin, py.test.collect.Item):
         return d
 
     def runtest(self):
-        """ execute the given test function. """
-        if not self._deprecated_testexecution():
-            kw = self.lookup_allargs()
-            ret = self.config.pytestplugins.call_firstresult(
-                "pytest_pyfunc_call", pyfuncitem=self, args=self._args, kwargs=kw)
+        """ execute the underlying test function. """
+        self.config.hook.pytest_pyfunc_call(pyfuncitem=self)
 
-    def lookup_allargs(self):
-        kwargs = {}
-        if not self._args:  
-            # standard Python Test function/method case  
-            funcobj = self.obj 
-            startindex = getattr(funcobj, 'im_self', None) and 1 or 0 
-            argnames = py.std.inspect.getargs(self.obj.func_code)[0]
-            for i, argname in py.builtin.enumerate(argnames):
-                if i < startindex:
-                    continue 
-                try:
-                    kwargs[argname] = self.lookup_onearg(argname)
-                except LookupError, e:
-                    numdefaults = len(funcobj.func_defaults or ()) 
-                    if i + numdefaults >= len(argnames):
-                        continue # continue # seems that our args have defaults 
-                    else:
-                        raise
-        else:
-            pass # XXX lookup of arguments for yielded/generated tests as well ?
-        return kwargs
-
-    def lookup_onearg(self, argname):
-        prefix = "pytest_funcarg__"
-        #makerlist = self.config.pytestplugins.listattr(prefix + argname)
-        value = self.config.pytestplugins.call_firstresult(prefix + argname, pyfuncitem=self)
-        if value is not None:
-            return value
-        else:
-            self._raisefuncargerror(argname, prefix)
-
-    def _raisefuncargerror(self, argname, prefix="pytest_funcarg__"):
-        metainfo = self.repr_metainfo()
-        available = []
-        plugins = self.config.pytestplugins._plugins.values()
-        plugins.extend(self.config.pytestplugins.pyplugins._plugins)
-        for plugin in plugins:
-            for name in vars(plugin.__class__):
-                if name.startswith(prefix):
-                    name = name[len(prefix):]
-                    if name not in available:
-                        available.append(name) 
-        msg = "funcargument %r not found for: %s" %(argname,metainfo.verboseline())
-        msg += "\n available funcargs: %s" %(", ".join(available),)
-        raise LookupError(msg)
+    def setup(self):
+        super(Function, self).setup()
+        if hasattr(self, 'funcargs'): 
+            funcargs.fillfuncargs(self)
 
     def __eq__(self, other):
         try:
             return (self.name == other.name and 
                     self._args == other._args and
                     self.parent == other.parent and
-                    self.obj == other.obj)
+                    self.obj == other.obj and 
+                    getattr(self, '_genid', None) == 
+                    getattr(other, '_genid', None) 
+            )
         except AttributeError:
             pass
         return False
+
     def __ne__(self, other):
         return not self == other
 
 
-# DEPRECATED
-#from py.__.test.plugin.pytest_doctest import DoctestFile 
+def hasinit(obj):
+    init = getattr(obj, '__init__', None)
+    if init:
+        if not isinstance(init, type(object.__init__)):
+            return True

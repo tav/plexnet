@@ -1,4 +1,5 @@
 import sys
+from pypy.objspace.flow.model import Constant
 from pypy.translator.c.support import cdecl
 from pypy.translator.c.node import ContainerNode
 from pypy.rpython.lltypesystem.lltype import \
@@ -11,16 +12,24 @@ from pypy.translator.tool.cbuild import ExternalCompilationInfo
 
 class BasicGcPolicy(object):
     requires_stackless = False
-    
+    stores_hash_at_the_end = False
+
     def __init__(self, db, thread_enabled=False):
         self.db = db
         self.thread_enabled = thread_enabled
 
     def common_gcheader_definition(self, defnode):
-        return []
+        if defnode.db.gctransformer is not None:
+            HDR = defnode.db.gctransformer.HDR
+            return [(name, HDR._flds[name]) for name in HDR._names]
+        else:
+            return []
 
     def common_gcheader_initdata(self, defnode):
-        return []
+        if defnode.db.gctransformer is not None:
+            raise NotImplementedError
+        else:
+            return []
 
     def struct_gcheader_definition(self, defnode):
         return self.common_gcheader_definition(defnode)
@@ -34,9 +43,6 @@ class BasicGcPolicy(object):
     def array_gcheader_initdata(self, defnode):
         return self.common_gcheader_initdata(defnode)
 
-    def struct_after_definition(self, defnode):
-        return []
-
     def compilation_info(self):
         if not self.db:
             return ExternalCompilationInfo()
@@ -48,6 +54,12 @@ class BasicGcPolicy(object):
                               ],
             post_include_bits=['typedef void *GC_hidden_pointer;']
             )
+
+    def get_prebuilt_hash(self, obj):
+        return None
+
+    def need_no_typeptr(self):
+        return False
 
     def gc_startup_code(self):
         return []
@@ -83,6 +95,12 @@ class BasicGcPolicy(object):
     def OP_GC_THREAD_DIE(self, funcgen, op):
         return ''
 
+    def OP_GC_ASSUME_YOUNG_POINTERS(self, funcgen, op):
+        return ''
+
+    def OP_GC_STACK_BOTTOM(self, funcgen, op):
+        return ''
+
 
 class RefcountingInfo:
     static_deallocator = None
@@ -91,13 +109,6 @@ from pypy.rlib.objectmodel import CDefinedIntSymbolic
 
 class RefcountingGcPolicy(BasicGcPolicy):
     transformerclass = refcounting.RefcountingGCTransformer
-
-    def common_gcheader_definition(self, defnode):
-        if defnode.db.gctransformer is not None:
-            HDR = defnode.db.gctransformer.HDR
-            return [(name, HDR._flds[name]) for name in HDR._names]
-        else:
-            return []
 
     def common_gcheader_initdata(self, defnode):
         if defnode.db.gctransformer is not None:
@@ -182,6 +193,12 @@ class BoehmInfo:
 
 class BoehmGcPolicy(BasicGcPolicy):
     transformerclass = boehm.BoehmGCTransformer
+
+    def common_gcheader_initdata(self, defnode):
+        if defnode.db.gctransformer is not None:
+            return [lltype.identityhash_nocache(defnode.obj._as_ptr())]
+        else:
+            return []
 
     def array_setup(self, arraydefnode):
         pass
@@ -271,6 +288,7 @@ class NoneGcPolicy(BoehmGcPolicy):
 
 class FrameworkGcPolicy(BasicGcPolicy):
     transformerclass = framework.FrameworkGCTransformer
+    stores_hash_at_the_end = True
 
     def struct_setup(self, structdefnode, rtti):
         if rtti is not None and hasattr(rtti._obj, 'destructor_funcptr'):
@@ -306,18 +324,59 @@ class FrameworkGcPolicy(BasicGcPolicy):
         return framework.convert_weakref_to(ptarget)
 
     def OP_GC_RELOAD_POSSIBLY_MOVED(self, funcgen, op):
-        args = [funcgen.expr(v) for v in op.args]
-        return '%s = %s; /* for moving GCs */' % (args[1], args[0])
+        if isinstance(op.args[1], Constant):
+            return '/* %s */' % (op,)
+        else:
+            args = [funcgen.expr(v) for v in op.args]
+            return '%s = %s; /* for moving GCs */' % (args[1], args[0])
 
     def common_gcheader_definition(self, defnode):
         return defnode.db.gctransformer.gc_fields()
 
     def common_gcheader_initdata(self, defnode):
         o = top_container(defnode.obj)
-        return defnode.db.gctransformer.gc_field_values_for(o)
+        needs_hash = self.get_prebuilt_hash(o) is not None
+        return defnode.db.gctransformer.gc_field_values_for(o, needs_hash)
+
+    def get_prebuilt_hash(self, obj):
+        # for prebuilt objects that need to have their hash stored and
+        # restored.  Note that only structures that are StructNodes all
+        # the way have their hash stored (and not e.g. structs with var-
+        # sized arrays at the end).  'obj' must be the top_container.
+        TYPE = typeOf(obj)
+        if not isinstance(TYPE, lltype.GcStruct):
+            return None
+        if TYPE._is_varsize():
+            return None
+        return getattr(obj, '_hash_cache_', None)
+
+    def need_no_typeptr(self):
+        config = self.db.translator.config
+        return config.translation.gcconfig.removetypeptr
+
+    def OP_GC_GETTYPEPTR_GROUP(self, funcgen, op):
+        # expands to a number of steps, as per rpython/lltypesystem/opimpl.py,
+        # all implemented by a single call to a C macro.
+        [v_obj, c_grpptr, c_skipoffset, c_vtableinfo] = op.args
+        typename = funcgen.db.gettype(op.result.concretetype)
+        fieldname = c_vtableinfo.value[2]
+        return (
+        '%s = (%s)_OP_GET_NEXT_GROUP_MEMBER(%s, (unsigned short)%s->_%s, %s);'
+            % (funcgen.expr(op.result),
+               cdecl(typename, ''),
+               funcgen.expr(c_grpptr),
+               funcgen.expr(v_obj),
+               fieldname,
+               funcgen.expr(c_skipoffset)))
 
 class AsmGcRootFrameworkGcPolicy(FrameworkGcPolicy):
     transformerclass = asmgcroot.AsmGcRootFrameworkGCTransformer
+
+    def GC_KEEPALIVE(self, funcgen, v):
+        return 'pypy_asm_keepalive(%s);' % funcgen.expr(v)
+
+    def OP_GC_STACK_BOTTOM(self, funcgen, op):
+        return 'pypy_asm_stack_bottom();'
 
 
 name_to_gcpolicy = {

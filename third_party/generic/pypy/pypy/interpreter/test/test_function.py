@@ -1,5 +1,6 @@
 
 import unittest
+from pypy.interpreter import eval
 from pypy.interpreter.function import Function, Method, descr_function_get
 from pypy.interpreter.pycode import PyCode
 from pypy.interpreter.argument import Arguments
@@ -15,7 +16,7 @@ class AppTestFunctionIntrospection:
         assert f.func_defaults == None
         assert f.func_dict == {}
         assert type(f.func_globals) == dict
-        #self.assertEquals(f.func_closure, None)  XXX
+        assert f.func_closure is None
         assert f.func_doc == None
         assert f.func_name == 'f'
         assert f.__module__ == 'mymodulename'
@@ -69,6 +70,22 @@ class AppTestFunctionIntrospection:
         f = g(42)
         raises(TypeError, FuncType, f.func_code, f.func_globals, 'f2', None, None)
 
+    def test_write_code(self):
+        def f():
+            return 42
+        def g():
+            return 41
+        assert f() == 42
+        assert g() == 41
+        raises(TypeError, "f.func_code = 1")
+        f.func_code = g.func_code
+        assert f() == 41
+        def h():
+            return f() # a closure
+        raises(ValueError, "f.func_code = h.func_code")
+
+        
+
 class AppTestFunction: 
     def test_simple_call(self):
         def func(arg1, arg2):
@@ -76,6 +93,25 @@ class AppTestFunction:
         res = func(23,42)
         assert res[0] == 23
         assert res[1] == 42
+
+    def test_simple_call_default(self):
+        def func(arg1, arg2=11, arg3=111):
+            return arg1, arg2, arg3
+        res = func(1)
+        assert res[0] == 1
+        assert res[1] == 11
+        assert res[2] == 111
+        res = func(1, 22)
+        assert res[0] == 1
+        assert res[1] == 22
+        assert res[2] == 111
+        res = func(1, 22, 333)
+        assert res[0] == 1
+        assert res[1] == 22
+        assert res[2] == 333
+
+        raises(TypeError, func)
+        raises(TypeError, func, 1, 2, 3, 4)        
 
     def test_simple_varargs(self):
         def func(arg1, *args):
@@ -184,6 +220,21 @@ class AppTestFunction:
         obj = object()
         meth = func.__get__(obj, object)
         assert meth() == obj
+
+    def test_no_get_builtin(self):
+        assert not hasattr(dir, '__get__')
+        class A(object):
+            ord = ord
+        a = A()
+        assert a.ord('a') == 97
+
+    def test_builtin_as_special_method_is_not_bound(self):
+        class A(object):
+            __getattr__ = len
+        a = A()
+        assert a.a == 1
+        assert a.ab == 2
+        assert a.abcdefghij == 10
 
     def test_call_builtin(self):
         s = 'hello'
@@ -564,3 +615,75 @@ def f%s:
         """)
 
         assert space.is_true(w_res)
+
+    def test_flatcall_default_arg(self):
+        space = self.space
+        
+        def f(a, b):
+            return a+b
+        code = PyCode._from_code(self.space, f.func_code)
+        fn = Function(self.space, code, self.space.newdict(),
+                      defs_w=[space.newint(1)])
+
+        assert fn.code.fast_natural_arity == 2|eval.Code.FLATPYCALL
+
+        def bomb(*args):
+            assert False, "shortcutting should have avoided this"
+
+        code.funcrun = bomb
+        code.funcrun_obj = bomb
+
+        w_3 = space.newint(3)
+        w_4 = space.newint(4)
+        # ignore this for now
+        #w_res = space.call_function(fn, w_3)
+        # assert space.eq_w(w_res, w_4)
+
+        w_res = space.appexec([fn, w_3], """(f, x):
+        return f(x)
+        """)
+
+        assert space.eq_w(w_res, w_4)
+
+    def test_flatcall_default_arg_method(self):
+        space = self.space
+        
+        def f(self, a, b):
+            return a+b
+        code = PyCode._from_code(self.space, f.func_code)
+        fn = Function(self.space, code, self.space.newdict(),
+                      defs_w=[space.newint(1)])
+
+        assert fn.code.fast_natural_arity == 3|eval.Code.FLATPYCALL
+
+        def bomb(*args):
+            assert False, "shortcutting should have avoided this"
+
+        code.funcrun = bomb
+        code.funcrun_obj = bomb
+
+        w_3 = space.newint(3)
+
+        w_res = space.appexec([fn, w_3], """(f, x):
+        class A(object):
+           m = f
+        y = A().m(x)
+        b = A().m
+        z = b(x)
+        return y+10*z 
+        """)
+
+        assert space.eq_w(w_res, space.wrap(44))
+
+
+class TestFunction:
+
+    def test_func_defaults(self):
+        from pypy.interpreter import gateway
+        def g(w_a=gateway.NoneNotWrapped):
+            pass
+        app_g = gateway.interp2app_temp(g)
+        space = self.space
+        w_g = space.wrap(app_g)
+        w_defs = space.getattr(w_g, space.wrap("func_defaults"))
+        assert space.is_w(w_defs, space.w_None)

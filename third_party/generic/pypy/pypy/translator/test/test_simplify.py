@@ -15,6 +15,84 @@ def translate(func, argtypes, backend_optimize=True):
         t.view()
     return graphof(t, func), t
 
+def test_remove_ovfcheck_1():
+    # check that ovfcheck() is handled
+    from pypy.rlib.rarithmetic import ovfcheck
+    def f(x):
+        try:
+            return ovfcheck(x*2)
+        except OverflowError:
+            return -42
+    graph, _ = translate(f, [int])
+    assert len(graph.startblock.operations) == 1
+    assert graph.startblock.operations[0].opname == 'int_mul_ovf'
+    assert len(graph.startblock.exits) == 2
+    assert [link.target.operations for link in graph.startblock.exits] == \
+           [(), ()]
+
+def test_remove_ovfcheck_bug():
+    # check that ovfcheck() is correctly handled even if there is no
+    # try:except: immediately around it
+    from pypy.rlib.rarithmetic import ovfcheck
+    def f(x):
+        return ovfcheck(x*2) - 1
+    graph, _ = translate(f, [int])
+    assert len(graph.startblock.operations) == 2
+    assert graph.startblock.operations[0].opname == 'int_mul_ovf'
+    assert graph.startblock.operations[1].opname == 'int_sub'
+
+def test_remove_ovfcheck_lshift():
+    # check that ovfcheck_lshift() is handled
+    from pypy.rlib.rarithmetic import ovfcheck_lshift
+    def f(x):
+        try:
+            return ovfcheck_lshift(x, 2)
+        except OverflowError:
+            return -42
+    graph, _ = translate(f, [int])
+    assert len(graph.startblock.operations) == 1
+    assert graph.startblock.operations[0].opname == 'int_lshift_ovf'
+    assert len(graph.startblock.operations[0].args) == 2
+    assert len(graph.startblock.exits) == 2
+    assert [link.exitcase for link in graph.startblock.exits] == \
+           [None, OverflowError]
+    assert [link.target.operations for link in graph.startblock.exits] == \
+           [(), ()]
+
+def test_remove_ovfcheck_floordiv():
+    # check that ovfcheck() is handled even if the operation raises
+    # and catches another exception too, here ZeroDivisionError
+    from pypy.rlib.rarithmetic import ovfcheck
+    def f(x, y):
+        try:
+            return ovfcheck(x // y)
+        except OverflowError:
+            return -42
+        except ZeroDivisionError:
+            return -43
+    graph, _ = translate(f, [int, int])
+    assert len(graph.startblock.operations) == 1
+    assert graph.startblock.operations[0].opname == 'int_floordiv_ovf_zer'
+    assert len(graph.startblock.exits) == 3
+    assert [link.target.operations for link in graph.startblock.exits[1:]] == \
+           [(), ()]
+
+def test_remove_ovfcheck_floordiv_2():
+    # check that ovfcheck() is handled even if the operation raises
+    # and catches only another exception, here ZeroDivisionError
+    from pypy.rlib.rarithmetic import ovfcheck
+    def f(x, y):
+        try:
+            return ovfcheck(x // y)
+        except ZeroDivisionError:
+            return -43
+    graph, _ = translate(f, [int, int])
+    assert len(graph.startblock.operations) == 1
+    assert graph.startblock.operations[0].opname == 'int_floordiv_ovf_zer'
+    assert len(graph.startblock.exits) == 3
+    assert [link.target.operations for link in graph.startblock.exits[1:]] == \
+           [(), ()]
+
 def test_remove_direct_call_without_side_effects():
     def f(x):
         return x + 123
@@ -270,8 +348,7 @@ class TestLLSpecializeListComprehension:
         if conftest.option.view:
             t.view()
         t.buildrtyper(self.typesystem).specialize()
-        if self.typesystem == 'lltype':
-            backend_optimizations(t)
+        backend_optimizations(t)
         if conftest.option.view:
             t.view()
         graph = graphof(t, func)
@@ -285,6 +362,14 @@ class TestLLSpecializeListComprehension:
         interp, graph = self.specialize(main, [int])
         res = interp.eval_graph(graph, [10])
         assert res == 5 * 17
+
+    def test_simple_non_exact(self):
+        def main(n):
+            lst = [x*17 for x in range(n) if x < 5]
+            return len(lst)
+        interp, graph = self.specialize(main, [int])
+        res = interp.eval_graph(graph, [10])
+        assert res == 5
 
     def test_mutated_after_listcomp(self):
         def main(n):
@@ -315,6 +400,18 @@ class TestLLSpecializeListComprehension:
         res = interp.eval_graph(graph, [8, 3])
         assert res == 28 - 3
 
+    def test_dict(self):
+        def main(n, m):
+            d = {n: m, m: n}
+            lst = [i*17 for i in d]
+            return len(lst) + lst[0] + lst[-1]
+        interp, graph = self.specialize(main, [int, int])
+        res = interp.eval_graph(graph, [8, 5])
+        assert res == 2 + 8 * 17 + 5 * 17
+        res = interp.eval_graph(graph, [4, 4])
+        assert res == 1 + 4 * 17 + 4 * 17
+
+
     def test_list_iterator(self):
         # for now, this is not optimized as a list comp
         def main(n):
@@ -324,6 +421,18 @@ class TestLLSpecializeListComprehension:
         interp, graph = self.specialize(main, [int])
         res = interp.eval_graph(graph, [8])
         assert res == 5 * 17
+
+    def test_list_iterator_mutated_after_listcomp(self):
+        # for now, this is not optimized as a list comp
+        def main(n):
+            r = range(n)
+            lst = [i*17 for i in iter(r)]
+            lst.append(42)
+            return lst[5]
+        interp, graph = self.specialize(main, [int])
+        res = interp.eval_graph(graph, [8])
+        assert res == 5 * 17
+
 
     def test_dict_iterator(self):
         # for now, this is not optimized as a list comp
@@ -346,7 +455,6 @@ class TestLLSpecializeListComprehension:
         res = interp.eval_graph(graph, [10])
         assert res == 5 * 17
 
-## TODO: maxlength and fence hints are not supported by ootype
-## see doc/discussion/list_comprehension_ootype.txt
-##class TestOOSpecializeListComprehension(TestLLSpecializeListComprehension):
-##    typesystem = 'ootype'
+
+class TestOOSpecializeListComprehension(TestLLSpecializeListComprehension):
+   typesystem = 'ootype'

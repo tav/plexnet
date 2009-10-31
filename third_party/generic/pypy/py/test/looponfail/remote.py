@@ -12,7 +12,6 @@ from __future__ import generators
 import py
 from py.__.test.session import Session
 from py.__.test.dist.mypickle import PickleChannel
-from py.__.test import event
 from py.__.test.looponfail import util
 
 class LooponfailingSession(Session):
@@ -39,7 +38,6 @@ class LooponfailingSession(Session):
         colitems = loopstate.colitems
         loopstate.wasfailing = colitems and len(colitems)
         loopstate.colitems = self.remotecontrol.runsession(colitems or ())
-        #ev = event.LooponfailingInfo(loopstate.failreports, self.rootdirs)
         self.remotecontrol.setup()
 
 class LoopState:
@@ -118,7 +116,7 @@ def slave_runsession(channel, config, fullwidth, hasmarkup):
     config.option.looponfail = False 
     config.option.usepdb = False 
     trails = channel.receive()
-    config.pytestplugins.do_configure(config)
+    config.pluginmanager.do_configure(config)
     DEBUG("SLAVE: initsession()")
     session = config.initsession()
     # XXX configure the reporter object's terminal writer more directly
@@ -131,7 +129,7 @@ def slave_runsession(channel, config, fullwidth, hasmarkup):
             try:
                 colitem = py.test.collect.Collector._fromtrail(trail, config)
             except AssertionError, e:  
-                #XXX session.bus.notify of "test disappeared"
+                #XXX send info for "test disappeared" or so
                 continue 
             colitems.append(colitem)
     else:
@@ -139,16 +137,17 @@ def slave_runsession(channel, config, fullwidth, hasmarkup):
     session.shouldclose = channel.isclosed 
    
     class Failures(list):
-        def pyevent_itemtestreport(self, ev):
-            if ev.failed:
-                self.append(ev)
-        pyevent_collectionreport = pyevent_itemtestreport
+        def pytest_runtest_logreport(self, report):
+            if report.failed:
+                self.append(report)
+        pytest_collectreport = pytest_runtest_logreport
         
     failreports = Failures()
-    session.bus.register(failreports)
+    session.pluginmanager.register(failreports)
 
     DEBUG("SLAVE: starting session.main()")
     session.main(colitems)
-    ev = event.LooponfailingInfo(list(failreports), [config.topdir])
-    session.bus.notify("looponfailinfo", ev)
-    channel.send([x.colitem._totrail() for x in failreports if x.failed])
+    session.config.hook.pytest_looponfailinfo(
+        failreports=list(failreports), 
+        rootdirs=[config.topdir])
+    channel.send([rep.getnode()._totrail() for rep in failreports])

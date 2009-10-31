@@ -5,11 +5,11 @@ from pypy.rpython.error import TyperError
 from pypy.rpython.rmodel import Repr, IteratorRepr, IntegerRepr, inputconst
 from pypy.rpython.rstr import AbstractStringRepr, AbstractCharRepr
 from pypy.rpython.lltypesystem.lltype import typeOf, Ptr, Void, Signed, Bool
-from pypy.rpython.lltypesystem.lltype import nullptr, Char, UniChar
+from pypy.rpython.lltypesystem.lltype import nullptr, Char, UniChar, Number
 from pypy.rpython import robject
 from pypy.rlib.objectmodel import malloc_zero_filled
 from pypy.rlib.debug import ll_assert
-from pypy.rlib.rarithmetic import ovfcheck
+from pypy.rlib.rarithmetic import ovfcheck, widen
 from pypy.rpython.annlowlevel import ADTInterface
 
 ADTIFixedList = ADTInterface(None, {
@@ -42,16 +42,17 @@ class __extend__(annmodel.SomeList):
             # cannot do the rtyper.getrepr() call immediately, for the case
             # of recursive structures -- i.e. if the listdef contains itself
             rlist = rtyper.type_system.rlist
+            item_repr = lambda: rtyper.getrepr(listitem.s_value)
+            known_maxlength = getattr(self, 'known_maxlength', False)
             if self.listdef.listitem.resized:
-                return rlist.ListRepr(rtyper,
-                        lambda: rtyper.getrepr(listitem.s_value), listitem)
+                return rlist.ListRepr(rtyper, item_repr, listitem, known_maxlength)
             else:
-                return rlist.FixedSizeListRepr(rtyper,
-                        lambda: rtyper.getrepr(listitem.s_value), listitem)
+                return rlist.FixedSizeListRepr(rtyper, item_repr, listitem)
 
     def rtyper_makekey(self):
         self.listdef.listitem.dont_change_any_more = True
-        return self.__class__, self.listdef.listitem
+        known_maxlength = getattr(self, 'known_maxlength', False)
+        return self.__class__, self.listdef.listitem, known_maxlength
 
 
 class AbstractBaseListRepr(Repr):
@@ -159,6 +160,19 @@ class AbstractBaseListRepr(Repr):
         # ^^^ do this first, before item_repr.get_ll_eq_function()
         item_eq_func = self.item_repr.get_ll_eq_function()
         return list_eq
+
+    def _get_v_maxlength(self, hop):
+        from pypy.rpython.rint import signed_repr
+        v_iterable = hop.args_v[1]
+        s_iterable = hop.args_s[1]
+        r_iterable = hop.args_r[1]
+        hop2 = hop.copy()
+        while hop2.nb_args > 0:
+            hop2.r_s_popfirstarg()
+        hop2.v_s_insertfirstarg(v_iterable, s_iterable)
+        hop2.r_result = signed_repr
+        v_maxlength = r_iterable.rtype_len(hop2)
+        return v_maxlength
 
 
 class AbstractListRepr(AbstractBaseListRepr):
@@ -479,6 +493,8 @@ def ll_alloc_and_set(LIST, count, item):
     T = typeOf(item)
     if T is Char or T is UniChar:
         check = ord(item)
+    elif isinstance(T, Number):
+        check = widen(item)
     else:
         check = item
     if (not malloc_zero_filled) or check: # as long as malloc it is known to zero the allocated memory avoid zeroing twice
@@ -858,6 +874,7 @@ def ll_listslice_startonly(RESLIST, l1, start):
         i += 1
         j += 1
     return l
+ll_listslice_startonly._annenforceargs_ = (None, None, int)
 
 def ll_listslice_startstop(RESLIST, l1, start, stop):
     length = l1.ll_length()
@@ -897,6 +914,7 @@ def ll_listdelslice_startonly(l, start):
             l.ll_setitem_fast(j, null)
             j -= 1
     l._ll_resize_le(newlength)
+ll_listdelslice_startonly.oopspec = 'list.delslice_startonly(l, start)'
 
 def ll_listdelslice_startstop(l, start, stop):
     length = l.ll_length()
@@ -919,6 +937,7 @@ def ll_listdelslice_startstop(l, start, stop):
             l.ll_setitem_fast(j, null)
             j -= 1
     l._ll_resize_le(newlength)
+ll_listdelslice_startstop.oopspec = 'list.delslice_startstop(l, start, stop)'
 
 def ll_listsetslice(l1, start, stop, l2):
     count = l2.ll_length()
@@ -933,6 +952,7 @@ def ll_listsetslice(l1, start, stop, l2):
         l1.ll_setitem_fast(j, l2.ll_getitem_fast(i))
         i += 1
         j += 1
+ll_listsetslice.oopspec = 'list.setslice(l1, start, stop, l2)'
 
 # ____________________________________________________________
 #
@@ -1008,6 +1028,7 @@ def ll_inplace_mul(l, factor):
             i += 1
         j += length
     return res
+ll_inplace_mul.oopspec = 'list.inplace_mul(l, factor)'
 
 
 def ll_mul(RESLIST, l, factor):

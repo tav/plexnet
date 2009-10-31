@@ -8,7 +8,7 @@ from pypy.translator.translator import TranslationContext
 from pypy.rpython.test.tool import BaseRtypingTest, OORtypeMixin
 from pypy.rpython.lltypesystem.lltype import typeOf
 from pypy.rpython.ootypesystem import ootype
-from pypy.annotation.model import lltype_to_annotation
+from pypy.annotation.model import lltype_to_annotation, SomeString
 from pypy.translator.backendopt.all import backend_optimizations
 from pypy.translator.backendopt.checkvirtual import check_virtual_methods
 from pypy.rpython.ootypesystem import ootype
@@ -126,12 +126,14 @@ class TestEntryPoint(BaseEntryPoint):
 
     def __convert_method(self, arg_type):
         _conv = {
+            CTS.types.int16: 'ToInt16',
             CTS.types.int32: 'ToInt32',
             CTS.types.uint32: 'ToUInt32',
             CTS.types.int64: 'ToInt64',
             CTS.types.uint64: 'ToUInt64',
             CTS.types.bool: 'ToBoolean',
             CTS.types.char: 'ToChar',
+            CTS.types.string: 'ToString',
             }
 
         try:
@@ -149,6 +151,16 @@ def compile_function(func, annotation=[], graph=None, backendopt=True,
     exe_name = gen.build_exe()
     unpatch_os(olddefs) # restore original values
     return CliFunctionWrapper(exe_name, func.__name__, auto_raise_exc)
+
+def compile_graph(graph, translator, auto_raise_exc=False,
+                  exctrans=False, nowrap=False, standalone=False):
+    gen = _build_gen_from_graph(graph, translator, exctrans, nowrap,
+                                standalone=standalone)
+    gen.generate_source()
+    exe_name = gen.build_exe()
+    name = getattr(graph, 'name', '<graph>')
+    return CliFunctionWrapper(exe_name, name, auto_raise_exc)
+
 
 def _build_gen(func, annotation, graph=None, backendopt=True, exctrans=False,
                annotatorpolicy=None, nowrap=False):
@@ -179,13 +191,23 @@ def _build_gen(func, annotation, graph=None, backendopt=True, exctrans=False,
 
     if getoption('view'):
        t.view()
+       
+    return _build_gen_from_graph(main_graph, t, exctrans, nowrap)
 
+def _build_gen_from_graph(graph, t, exctrans=False, nowrap=False, standalone=False):
+    from pypy.translator.cli.entrypoint import get_entrypoint
+    
     if getoption('wd'):
         tmpdir = py.path.local('.')
     else:
         tmpdir = udir
 
-    return GenCli(tmpdir, t, TestEntryPoint(main_graph, not nowrap), exctrans=exctrans)
+    if standalone:
+        ep = get_entrypoint(graph)
+    else:
+        ep = TestEntryPoint(graph, not nowrap)
+        
+    return GenCli(tmpdir, t, ep, exctrans=exctrans)
 
 class CliFunctionWrapper(object):
     def __init__(self, exe_name, name=None, auto_raise_exc=False):
@@ -252,21 +274,28 @@ class ExceptionWrapper:
     def __repr__(self):
         return 'ExceptionWrapper(%s)' % repr(self.class_name)
 
+def get_annotation(x):
+    if isinstance(x, basestring) and len(x) > 1:
+        return SomeString()
+    else:
+        return lltype_to_annotation(typeOf(x))
+
 class CliTest(BaseRtypingTest, OORtypeMixin):
     def __init__(self):
         self._func = None
         self._ann = None
         self._cli_func = None
 
-    def _compile(self, fn, args, ann=None, backendopt=True, auto_raise_exc=False, exctrans=False):
+    def _compile(self, fn, args, ann=None, backendopt=True,
+                 auto_raise_exc=False, exctrans=False, policy=None):
         if ann is None:
-            ann = [lltype_to_annotation(typeOf(x)) for x in args]
+            ann = [get_annotation(x) for x in args]
         if self._func is fn and self._ann == ann:
             return self._cli_func
         else:
             self._cli_func = compile_function(fn, ann, backendopt=backendopt,
                                               auto_raise_exc=auto_raise_exc,
-                                              exctrans=exctrans)
+                                              exctrans=exctrans, annotatorpolicy=policy)
             self._func = fn
             self._ann = ann
             return self._cli_func
@@ -287,7 +316,7 @@ class CliTest(BaseRtypingTest, OORtypeMixin):
             backendopt = getattr(self, 'backendopt', True) # enable it by default
         return backendopt
     
-    def interpret(self, fn, args, annotation=None, backendopt=None, exctrans=False):
+    def interpret(self, fn, args, annotation=None, backendopt=None, exctrans=False, policy=None):
         backendopt = self._get_backendopt(backendopt)
         f = self._compile(fn, args, annotation, backendopt=backendopt, exctrans=exctrans)
         res = f(*args)

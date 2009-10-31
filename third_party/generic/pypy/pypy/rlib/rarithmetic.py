@@ -5,7 +5,7 @@ classes and operations to express integer arithmetic,
 such that before and after translation semantics are
 consistent
 
-r_uint   an unsigned integer which has not overflow
+r_uint   an unsigned integer which has no overflow
          checking. It is always positive and always
          truncated to the internal machine word size.
 intmask  mask a possibly long value when running on CPython
@@ -67,6 +67,7 @@ def intmask(n):
         return int(n)   # possibly bool->int
     if isinstance(n, objectmodel.Symbolic):
         return n        # assume Symbolics don't overflow
+    assert not isinstance(n, float)
     n = long(n)
     n &= LONG_MASK
     if n >= LONG_TEST:
@@ -95,6 +96,7 @@ _should_widen_type._annspecialcase_ = 'specialize:memo'
 del _bits, _itest, _Ltest
 
 def ovfcheck(r):
+    "NOT_RPYTHON"
     # to be used as ovfcheck(x <op> y)
     # raise OverflowError if the operation did overflow
     assert not isinstance(r, r_uint), "unexpected ovf check on unsigned"
@@ -111,6 +113,7 @@ def _local_ovfcheck(r):
     return r
 
 def ovfcheck_lshift(a, b):
+    "NOT_RPYTHON"
     return _local_ovfcheck(int(long(a) << b))
 
 FL_MAXINT = float(LONG_TEST-1)
@@ -459,23 +462,6 @@ def formatd_overflow(alt, prec, kind, x):
     fmt = "%%%s.%d%s" % (alt, prec, kind)
 
     return formatd(fmt, x)
-
-# a common string hash function
-
-def _hash_string(s):
-    length = len(s)
-    if length == 0:
-        x = -1
-    else:
-        x = ord(s[0]) << 7
-        i = 0
-        while i < length:
-            x = (1000003*x) ^ ord(s[i])
-            i += 1
-        x ^= length
-        if x == 0:
-            x = -1
-    return intmask(x)
 
 # the 'float' C type
 

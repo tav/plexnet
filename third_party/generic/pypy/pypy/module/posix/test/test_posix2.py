@@ -47,6 +47,10 @@ class AppTestPosix:
             cls.w_geteuid = space.wrap(os.geteuid())
         if hasattr(os, 'getgid'):
             cls.w_getgid = space.wrap(os.getgid())
+        if hasattr(os, 'getpgid'):
+            cls.w_getpgid = space.wrap(os.getpgid(os.getpid()))
+        if hasattr(os, 'getsid'):
+            cls.w_getsid0 = space.wrap(os.getsid(0))
         if hasattr(os, 'sysconf'):
             sysconf_name = os.sysconf_names.keys()[0]
             cls.w_sysconf_name = space.wrap(sysconf_name)
@@ -128,6 +132,19 @@ class AppTestPosix:
         assert st.st_atime == 41
         assert st.st_mtime == 42.1
         assert st.st_ctime == 43
+
+    def test_stat_exception(self):
+        import sys, errno
+        try:
+            self.posix.stat("nonexistentdir/nonexistentfile")
+        except OSError, e:
+            assert e.errno == errno.ENOENT
+            # On Windows, when the parent directory does not exist,
+            # the winerror is 3 (cannot find the path specified)
+            # instead of 2 (cannot find the file specified)
+            if sys.platform == 'win32':
+                assert isinstance(e, WindowsError)
+                assert e.winerror == 3
 
     def test_pickle(self):
         import pickle, os
@@ -349,10 +366,22 @@ class AppTestPosix:
             os = self.posix
             assert os.getgid() == self.getgid
 
+    if hasattr(os, 'getpgid'):
+        def test_os_getpgid(self):
+            os = self.posix
+            assert os.getpgid(os.getpid()) == self.getpgid
+            raises(OSError, os.getpgid, 1234567)
+
     if hasattr(os, 'setgid'):
         def test_os_setgid_error(self):
             os = self.posix
             raises(OSError, os.setgid, -100000)
+
+    if hasattr(os, 'getsid'):
+        def test_os_getsid(self):
+            os = self.posix
+            assert os.getsid(0) == self.getsid0
+            raises(OSError, os.getsid, -100000)
 
     if hasattr(os, 'sysconf'):
         def test_os_sysconf(self):

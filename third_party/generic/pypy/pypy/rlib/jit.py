@@ -1,3 +1,4 @@
+import sys
 from pypy.rpython.extregistry import ExtRegistryEntry
 from pypy.rlib.objectmodel import CDefinedIntSymbolic
 from pypy.rlib.unroll import unrolling_iterable
@@ -9,12 +10,37 @@ def purefunction(func):
 def hint(x, **kwds):
     return x
 
+def dont_look_inside(func):
+    func._jit_look_inside_ = False
+    return func
+
+def unroll_safe(func):
+    func._jit_unroll_safe_ = True
+    return func
+
 class Entry(ExtRegistryEntry):
     _about_ = hint
 
     def compute_result_annotation(self, s_x, **kwds_s):
         from pypy.annotation import model as annmodel
         s_x = annmodel.not_const(s_x)
+        access_directly = 's_access_directly' in kwds_s
+        fresh_virtualizable = 's_fresh_virtualizable' in kwds_s
+        if  access_directly or fresh_virtualizable:
+            assert access_directly, "lone fresh_virtualizable hint"
+            if isinstance(s_x, annmodel.SomeInstance):
+                from pypy.objspace.flow.model import Constant
+                classdesc = s_x.classdef.classdesc
+                virtualizable = classdesc.read_attribute('_virtualizable2_',
+                                                         Constant(None)).value
+                if virtualizable is not None:
+                    flags = s_x.flags.copy()
+                    flags['access_directly'] = True
+                    if fresh_virtualizable:
+                        flags['fresh_virtualizable'] = True
+                    s_x = annmodel.SomeInstance(s_x.classdef,
+                                                s_x.can_be_None,
+                                                flags)        
         return s_x
 
     def specialize_call(self, hop, **kwds_i):
@@ -49,28 +75,8 @@ class Entry(ExtRegistryEntry):
 
     def specialize_call(self, hop):
         from pypy.rpython.lltypesystem import lltype
+        hop.exception_cannot_occur()
         return hop.inputconst(lltype.Signed, _we_are_jitted)
-
-def _is_early_constant(x):
-    return False
-
-class Entry(ExtRegistryEntry):
-    _about_ = _is_early_constant
-
-    def compute_result_annotation(self, s_value):
-        from pypy.annotation import model as annmodel
-        s = annmodel.SomeBool()
-        if s_value.is_constant():
-            s.const = True
-        return s
-
-    def specialize_call(self, hop):
-        from pypy.rpython.lltypesystem import lltype
-        if hop.s_result.is_constant():
-            assert hop.s_result.const
-            return hop.inputconst(lltype.Bool, True)
-        v, = hop.inputargs(hop.args_r[0])
-        return hop.genop('is_early_constant', [v], resulttype=lltype.Bool)
 
 # ____________________________________________________________
 # User interface for the hotpath JIT policy
@@ -78,11 +84,24 @@ class Entry(ExtRegistryEntry):
 class JitHintError(Exception):
     """Inconsistency in the JIT hints."""
 
-PARAMETERS = {'threshold': 40,
-              'trace_eagerness': 10,
-              'hash_bits': 14,
+OPTIMIZER_SIMPLE = 0
+OPTIMIZER_FULL = 1
+
+DEBUG_OFF = 0
+DEBUG_PROFILE = 1
+DEBUG_STEPS = 2
+DEBUG_DETAILED = 3
+
+PARAMETERS = {'threshold': 1000,
+              'trace_eagerness': 200,
+              'trace_limit': 10000,
+              'inlining': False,
+              'optimizer': OPTIMIZER_FULL,
+              'debug' : DEBUG_STEPS,
               }
 unroll_parameters = unrolling_iterable(PARAMETERS.keys())
+
+# ____________________________________________________________
 
 class JitDriver:    
     """Base class to declare fine-grained user control on the JIT.  So
@@ -93,7 +112,10 @@ class JitDriver:
 
     virtualizables = []
     
-    def __init__(self, greens=None, reds=None, virtualizables=None):
+    def __init__(self, greens=None, reds=None, virtualizables=None,
+                 get_jitcell_at=None, set_jitcell_at=None,
+                 can_inline=None, get_printable_location=None,
+                 leave=None):
         if greens is not None:
             self.greens = greens
         if reds is not None:
@@ -105,27 +127,28 @@ class JitDriver:
         for v in self.virtualizables:
             assert v in self.reds
         self._alllivevars = dict.fromkeys(self.greens + self.reds)
-        self._params = PARAMETERS.copy()
-        if hasattr(self, 'on_enter_jit'):
-            self._make_on_enter_jit_wrappers()
         self._make_extregistryentries()
+        self.get_jitcell_at = get_jitcell_at
+        self.set_jitcell_at = set_jitcell_at
+        self.get_printable_location = get_printable_location
+        self.can_inline = can_inline
+        self.leave = leave
 
     def _freeze_(self):
         return True
 
-    def jit_merge_point(self, **livevars):
+    def jit_merge_point(_self, **livevars):
         # special-cased by ExtRegistryEntry
-        assert dict.fromkeys(livevars) == self._alllivevars
+        assert dict.fromkeys(livevars) == _self._alllivevars
 
-    def can_enter_jit(self, **livevars):
+    def can_enter_jit(_self, **livevars):
         # special-cased by ExtRegistryEntry
-        assert dict.fromkeys(livevars) == self._alllivevars
+        assert dict.fromkeys(livevars) == _self._alllivevars
 
     def _set_param(self, name, value):
         # special-cased by ExtRegistryEntry
         # (internal, must receive a constant 'name')
         assert name in PARAMETERS
-        self._params[name] = value
 
     def set_param(self, name, value):
         """Set one of the tunable JIT parameter."""
@@ -154,77 +177,6 @@ class JitDriver:
             self.set_param(name, value)
     set_user_param._annspecialcase_ = 'specialize:arg(0)'
 
-    def compute_invariants(self, reds, *greens):
-        """This can compute a value or tuple that is passed as a green
-        argument 'invariants' to on_enter_jit().  It should in theory
-        only depend on the 'greens', but in practice it can peek at the
-        reds currently stored in 'self'.  This allows the extraction in
-        an interpreter-specific way of whatever red information that
-        ultimately depends on the greens only.
-        """
-    compute_invariants._annspecialcase_ = 'specialize:arg(0)'
-
-    def _emulate_method_calls(self, bk, livevars_s):
-        # annotate "self.on_enter_jit()" if it is defined.
-        # self.on_enter_jit(invariants, reds, *greenvars) is called with a
-        # copy of the value of the red variables in 'reds'.  The red variables
-        # can be modified in order to give hints to the JIT about the
-        # redboxes.
-        from pypy.annotation import model as annmodel
-        if hasattr(self, 'on_enter_jit'):
-            args_s = []
-            for name in self.greens + self.reds:
-                args_s.append(livevars_s['s_' + name])
-
-            key = "rlib.jit.JitDriver._on_enter_jit"
-            s_func = bk.immutablevalue(self._on_enter_jit_wrapper)
-            s_result = bk.emulate_pbc_call(key, s_func, args_s)
-            assert annmodel.s_None.contains(s_result)
-
-            key = "rlib.jit.JitDriver._compute_invariants"
-            s_func = bk.immutablevalue(self._compute_invariants_wrapper)
-            bk.emulate_pbc_call(key, s_func, args_s)
-
-    def _make_on_enter_jit_wrappers(self):
-        # build some unrolling wrappers around on_enter_jit() and
-        # compute_invariants() which takes all green and red arguments
-        # and puts the red ones in a fresh instance of the
-        # RedVarsHolder.  This logic is here in jit.py because it needs
-        # to be annotated and rtyped as a high-level function.
-
-        num_green_args = len(self.greens)
-        unroll_reds = unrolling_iterable(self.reds)
-
-        class RedVarsHolder:
-            def __init__(self, *redargs):
-                i = 0
-                for name in unroll_reds:
-                    setattr(self, name, redargs[i])
-                    i += 1
-
-        self._RedVarsHolder = RedVarsHolder
-
-        def _on_enter_jit_wrapper(*allargs):
-            # This is what theoretically occurs when we are entering the
-            # JIT.  In truth, compute_invariants() is called only once
-            # per set of greens and its result is cached.  On the other
-            # hand, on_enter_jit() is compiled into machine code and so
-            # it runs every time the execution jumps from the regular
-            # interpreter to the machine code.  Also note that changes
-            # to the attribute of RedVarsHolder are reflected back in
-            # the caller.
-            reds = RedVarsHolder(*allargs[num_green_args:])
-            greens = allargs[:num_green_args]
-            invariants = self.compute_invariants(reds, *greens)
-            return self.on_enter_jit(invariants, reds, *greens)
-        self._on_enter_jit_wrapper = _on_enter_jit_wrapper
-
-        def _compute_invariants_wrapper(*allargs):
-            reds = RedVarsHolder(*allargs[num_green_args:])
-            greens = allargs[:num_green_args]
-            return self.compute_invariants(reds, *greens)
-        self._compute_invariants_wrapper = _compute_invariants_wrapper
-
     def _make_extregistryentries(self):
         # workaround: we cannot declare ExtRegistryEntries for functions
         # used as methods of a frozen object, but we can attach the
@@ -244,6 +196,10 @@ class JitDriver:
 #
 # Annotation and rtyping of some of the JitDriver methods
 
+class BaseJitCell(object):
+    __slots__ = ()
+
+
 class ExtEnterLeaveMarker(ExtRegistryEntry):
     # Replace a call to myjitdriver.jit_merge_point(**livevars)
     # with an operation jit_marker('jit_merge_point', myjitdriver, livevars...)
@@ -260,8 +216,33 @@ class ExtEnterLeaveMarker(ExtRegistryEntry):
             raise JitHintError("%s expects the following keyword "
                                "arguments: %s" % (self.instance,
                                                   expected))
-        driver._emulate_method_calls(self.bookkeeper, kwds_s)
+
+        if self.instance.__name__ == 'jit_merge_point':
+            self.annotate_hooks(**kwds_s)
+            
         return annmodel.s_None
+
+    def annotate_hooks(self, **kwds_s):
+        driver = self.instance.im_self
+        s_jitcell = self.bookkeeper.valueoftype(BaseJitCell)
+        self.annotate_hook(driver.get_jitcell_at, driver.greens, **kwds_s)
+        self.annotate_hook(driver.set_jitcell_at, driver.greens, [s_jitcell],
+                           **kwds_s)
+        self.annotate_hook(driver.can_inline, driver.greens, **kwds_s)
+        self.annotate_hook(driver.get_printable_location, driver.greens, **kwds_s)
+        self.annotate_hook(driver.leave, driver.greens + driver.reds, **kwds_s)
+
+    def annotate_hook(self, func, variables, args_s=[], **kwds_s):
+        if func is None:
+            return
+        bk = self.bookkeeper
+        s_func = bk.immutablevalue(func)
+        uniquekey = 'jitdriver.%s' % func.func_name
+        args_s = args_s[:]
+        for name in variables:
+            s_arg = kwds_s['s_' + name]
+            args_s.append(s_arg)
+        bk.emulate_pbc_call(uniquekey, s_func, args_s)
 
     def specialize_call(self, hop, **kwds_i):
         # XXX to be complete, this could also check that the concretetype
@@ -299,6 +280,7 @@ class ExtSetParam(ExtRegistryEntry):
 
     def specialize_call(self, hop):
         from pypy.rpython.lltypesystem import lltype
+        hop.exception_cannot_occur()
         driver = self.instance.im_self
         name = hop.args_s[0].const
         v_value = hop.inputarg(lltype.Signed, arg=1)

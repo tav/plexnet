@@ -3,13 +3,13 @@ from pypy.rpython.lltypesystem.lltype import \
      GcStruct, GcArray, RttiStruct, ContainerType, \
      parentlink, Ptr, PyObject, Void, OpaqueType, Float, \
      RuntimeTypeInfo, getRuntimeTypeInfo, Char, _subarray
-from pypy.rpython.lltypesystem import llmemory
+from pypy.rpython.lltypesystem import llmemory, llgroup
 from pypy.translator.c.funcgen import FunctionCodeGenerator
 from pypy.translator.c.external import CExternalFunctionCodeGenerator
 from pypy.translator.c.support import USESLOTS # set to False if necessary while refactoring
 from pypy.translator.c.support import cdecl, forward_cdecl, somelettersfrom
 from pypy.translator.c.support import c_char_array_constant, barebonearray
-from pypy.translator.c.primitive import PrimitiveType
+from pypy.translator.c.primitive import PrimitiveType, name_signed
 from pypy.rlib.rarithmetic import isinf, isnan
 from pypy.translator.c import extfunc
 from pypy.translator.tool.cbuild import ExternalCompilationInfo
@@ -67,6 +67,12 @@ class StructDefNode:
                                                   bare=True)
             self.prefix = somelettersfrom(STRUCT._name) + '_'
         self.dependencies = {}
+        #
+        self.fieldnames = STRUCT._names
+        if STRUCT._hints.get('typeptr', False):
+            if db.gcpolicy.need_no_typeptr():
+                assert self.fieldnames == ('typeptr',)
+                self.fieldnames = ()
 
     def setup(self):
         # this computes self.fields
@@ -80,7 +86,7 @@ class StructDefNode:
         if needs_gcheader(self.STRUCT):
             for fname, T in db.gcpolicy.struct_gcheader_definition(self):
                 self.fields.append((fname, db.gettype(T, who_asks=self)))
-        for name in STRUCT._names:
+        for name in self.fieldnames:
             T = self.c_struct_field_type(name)
             if name == STRUCT._arrayfld:
                 typename = db.gettype(T, varlength=self.varlength,
@@ -114,36 +120,17 @@ class StructDefNode:
         return self.prefix + name
 
     def verbatim_field_name(self, name):
-        if name.startswith('c_'):   # produced in this way by rffi
-            return name[2:]
-        else:
-            # field names have to start with 'c_' or be meant for names that
-            # vanish from the C source, like 'head' if 'inline_head' is set
-            raise ValueError("field %r should not be accessed in this way" % (
-                name,))
+        assert name.startswith('c_')   # produced in this way by rffi
+        return name[2:]
 
     def c_struct_field_type(self, name):
         return self.STRUCT._flds[name]
 
     def access_expr(self, baseexpr, fldname):
-        if self.STRUCT._hints.get('inline_head'):
-            first, FIRST = self.STRUCT._first_struct()
-            if fldname == first:
-                # "invalid" cast according to C99 but that's what CPython
-                # requires and does all the time :-/
-                return '(*(%s) &(%s))' % (cdecl(self.db.gettype(FIRST), '*'),
-                                          baseexpr)
         fldname = self.c_struct_field_name(fldname)
         return '%s.%s' % (baseexpr, fldname)
 
     def ptr_access_expr(self, baseexpr, fldname):
-        if self.STRUCT._hints.get('inline_head'):
-            first, FIRST = self.STRUCT._first_struct()
-            if fldname == first:
-                # "invalid" cast according to C99 but that's what CPython
-                # requires and does all the time :-/
-                return '(*(%s) %s)' % (cdecl(self.db.gettype(FIRST), '*'),
-                                       baseexpr)
         fldname = self.c_struct_field_name(fldname)
         return 'RPyField(%s, %s)' % (baseexpr, fldname)
 
@@ -162,12 +149,9 @@ class StructDefNode:
         if is_empty:
             yield '\t' + 'char _dummy; /* this struct is empty */'
         yield '};'
-        for line in self.db.gcpolicy.struct_after_definition(self):
-            yield line
 
     def visitor_lines(self, prefix, on_field):
-        STRUCT = self.STRUCT
-        for name in STRUCT._names:
+        for name in self.fieldnames:
             FIELD_T = self.c_struct_field_type(name)
             cname = self.c_struct_field_name(name)
             for line in on_field('%s.%s' % (prefix, cname),
@@ -176,8 +160,7 @@ class StructDefNode:
 
     def debug_offsets(self):
         # generate number exprs giving the offset of the elements in the struct
-        STRUCT = self.STRUCT
-        for name in STRUCT._names:
+        for name in self.fieldnames:
             FIELD_T = self.c_struct_field_type(name)
             if FIELD_T is Void:
                 yield '-1'
@@ -483,11 +466,15 @@ class ContainerNode(object):
         return hasattr(self.T, "_hints") and self.T._hints.get('thread_local')
 
     def forward_declaration(self):
+        if llgroup.member_of_group(self.obj):
+            return
         yield '%s;' % (
             forward_cdecl(self.implementationtypename,
                 self.name, self.db.standalone, self.is_thread_local()))
 
     def implementation(self):
+        if llgroup.member_of_group(self.obj):
+            return []
         lines = list(self.initializationexpr())
         lines[0] = '%s = %s' % (
             cdecl(self.implementationtypename, self.name, self.is_thread_local()),
@@ -533,7 +520,7 @@ class StructNode(ContainerNode):
             for i, thing in enumerate(self.db.gcpolicy.struct_gcheader_initdata(self)):
                 data.append(('gcheader%d'%i, thing))
         
-        for name in self.T._names:
+        for name in defnode.fieldnames:
             data.append((name, getattr(self.obj, name)))
         
         # Reasonably, you should only initialise one of the fields of a union
@@ -557,6 +544,49 @@ class StructNode(ContainerNode):
         yield '}'
 
 assert not USESLOTS or '__dict__' not in dir(StructNode)
+
+class GcStructNodeWithHash(StructNode):
+    # for the outermost level of nested structures, if it has a _hash_cache_.
+    nodekind = 'struct'
+    if USESLOTS:
+        __slots__ = ()
+
+    def get_hash_typename(self):
+        return 'struct _hashT_%s @' % self.name
+
+    def forward_declaration(self):
+        hash_typename = self.get_hash_typename()
+        hash_offset = self.db.gctransformer.get_hash_offset(self.T)
+        yield '%s {' % cdecl(hash_typename, '')
+        yield '\tunion {'
+        yield '\t\t%s;' % cdecl(self.implementationtypename, 'head')
+        yield '\t\tchar pad[%s];' % name_signed(hash_offset, self.db)
+        yield '\t} u;'
+        yield '\tlong hash;'
+        yield '};'
+        yield '%s;' % (
+            forward_cdecl(hash_typename, '_hash_' + self.name,
+                          self.db.standalone, self.is_thread_local()),)
+        yield '#define %s _hash_%s.u.head' % (self.name, self.name)
+
+    def implementation(self):
+        hash_typename = self.get_hash_typename()
+        hash = self.db.gcpolicy.get_prebuilt_hash(self.obj)
+        assert hash is not None
+        lines = list(self.initializationexpr())
+        lines.insert(0, '%s = { {' % (
+            cdecl(hash_typename, '_hash_' + self.name,
+                  self.is_thread_local()),))
+        lines.append('}, %s /* hash */ };' % name_signed(hash, self.db))
+        return lines
+
+def gcstructnode_factory(db, T, obj):
+    if db.gcpolicy.get_prebuilt_hash(obj) is not None:
+        cls = GcStructNodeWithHash
+    else:
+        cls = StructNode
+    return cls(db, T, obj)
+
 
 class ArrayNode(ContainerNode):
     nodekind = 'array'
@@ -917,10 +947,71 @@ def weakrefnode_factory(db, T, obj):
     #obj._converted_weakref = container     # hack for genllvm :-/
     return db.getcontainernode(container, _dont_write_c_code=False)
 
+class GroupNode(ContainerNode):
+    nodekind = 'group'
+    count_members = None
+
+    def __init__(self, *args):
+        ContainerNode.__init__(self, *args)
+        self.implementationtypename = 'struct group_%s_s @' % self.name
+
+    def basename(self):
+        return self.obj.name
+
+    def enum_dependencies(self):
+        # note: for the group used by the GC, it can grow during this phase,
+        # which means that we might not return all members yet.  This is
+        # fixed by finish_tables() in rpython/memory/gctransform/framework.py
+        for member in self.obj.members:
+            yield member._as_ptr()
+
+    def _fix_members(self):
+        if self.obj.outdated:
+            raise Exception(self.obj.outdated)
+        if self.count_members is None:
+            self.count_members = len(self.obj.members)
+        else:
+            # make sure no new member showed up, because it's too late
+            assert len(self.obj.members) == self.count_members
+
+    def forward_declaration(self):
+        self._fix_members()
+        yield ''
+        ctype = ['%s {' % cdecl(self.implementationtypename, '')]
+        for i, member in enumerate(self.obj.members):
+            structtypename = self.db.gettype(typeOf(member))
+            ctype.append('\t%s;' % cdecl(structtypename, 'member%d' % i))
+        ctype.append('} @')
+        ctype = '\n'.join(ctype)
+        yield '%s;' % (
+            forward_cdecl(ctype, self.name, self.db.standalone,
+                          self.is_thread_local()))
+        yield '#include "src/llgroup.h"'
+        yield 'PYPY_GROUP_CHECK_SIZE(%s);' % self.name
+        for i, member in enumerate(self.obj.members):
+            structnode = self.db.getcontainernode(member)
+            yield '#define %s %s.member%d' % (structnode.name,
+                                              self.name, i)
+        yield ''
+
+    def initializationexpr(self):
+        self._fix_members()
+        lines = ['{']
+        lasti = len(self.obj.members) - 1
+        for i, member in enumerate(self.obj.members):
+            structnode = self.db.getcontainernode(member)
+            lines1 = list(structnode.initializationexpr())
+            lines1[0] += '\t/* member%d: %s */' % (i, structnode.name)
+            if i != lasti:
+                lines1[-1] += ','
+            lines.extend(lines1)
+        lines.append('}')
+        return lines
+
 
 ContainerNodeFactory = {
     Struct:       StructNode,
-    GcStruct:     StructNode,
+    GcStruct:     gcstructnode_factory,
     Array:        ArrayNode,
     GcArray:      ArrayNode,
     FixedSizeArray: FixedSizeArrayNode,
@@ -928,4 +1019,5 @@ ContainerNodeFactory = {
     OpaqueType:   opaquenode_factory,
     PyObjectType: PyObjectNode,
     llmemory._WeakRefType: weakrefnode_factory,
+    llgroup.GroupType: GroupNode,
     }

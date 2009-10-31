@@ -1,23 +1,25 @@
+"""
+perform ReST syntax, local and remote reference tests on .rst/.txt files. 
+"""
 import py
 
-class RestdocPlugin:
-    def pytest_addoption(self, parser):
-        group = parser.addgroup("ReST", "ReST documentation check options")
-        group.addoption('-R', '--urlcheck',
-               action="store_true", dest="urlcheck", default=False, 
-               help="urlopen() remote links found in ReST text files.") 
-        group.addoption('--urltimeout', action="store", metavar="secs",
-            type="int", dest="urlcheck_timeout", default=5,
-            help="timeout in seconds for remote urlchecks")
-        group.addoption('--forcegen',
-               action="store_true", dest="forcegen", default=False,
-               help="force generation of html files.")
+def pytest_addoption(parser):
+    group = parser.addgroup("ReST", "ReST documentation check options")
+    group.addoption('-R', '--urlcheck',
+           action="store_true", dest="urlcheck", default=False, 
+           help="urlopen() remote links found in ReST text files.") 
+    group.addoption('--urltimeout', action="store", metavar="secs",
+        type="int", dest="urlcheck_timeout", default=5,
+        help="timeout in seconds for remote urlchecks")
+    group.addoption('--forcegen',
+           action="store_true", dest="forcegen", default=False,
+           help="force generation of html files.")
 
-    def pytest_collect_file(self, path, parent):
-        if path.ext == ".txt":
-            project = getproject(path)
-            if project is not None:
-                return ReSTFile(path, parent=parent, project=project)
+def pytest_collect_file(path, parent):
+    if path.ext in (".txt", ".rst"):
+        project = getproject(path)
+        if project is not None:
+            return ReSTFile(path, parent=parent, project=project)
 
 def getproject(path):
     for parent in path.parts(reverse=True):
@@ -64,6 +66,9 @@ class ReSTSyntaxTest(py.test.collect.Item):
         super(ReSTSyntaxTest, self).__init__(*args, **kwargs)
         self.project = project
 
+    def reportinfo(self):
+        return self.fspath, None, "syntax check"
+
     def runtest(self):
         self.restcheck(py.path.svnwc(self.fspath))
 
@@ -84,6 +89,60 @@ class ReSTSyntaxTest(py.test.collect.Item):
         from py.__.rest import directive
         directive.register_linkrole('api', self.resolve_linkrole)
         directive.register_linkrole('source', self.resolve_linkrole)
+
+        # XXX fake sphinx' "toctree" and refs
+        directive.register_linkrole('ref', self.resolve_linkrole)
+        
+        from docutils.parsers.rst import directives
+        def toctree_directive(name, arguments, options, content, lineno,
+                      content_offset, block_text, state, state_machine):
+            return []
+        toctree_directive.content = 1
+        toctree_directive.options = {'maxdepth': int, 'glob': directives.flag,
+                             'hidden': directives.flag}
+        directives.register_directive('toctree', toctree_directive)
+        self.register_pygments()
+
+    def register_pygments(self):
+        # taken from pygments-main/external/rst-directive.py 
+        from docutils.parsers.rst import directives
+        try:
+            from pygments.formatters import HtmlFormatter
+        except ImportError:
+            def pygments_directive(name, arguments, options, content, lineno,
+                                   content_offset, block_text, state, state_machine):
+                return []
+            pygments_directive.options = {}
+        else:
+            # The default formatter
+            DEFAULT = HtmlFormatter(noclasses=True)
+            # Add name -> formatter pairs for every variant you want to use
+            VARIANTS = {
+                # 'linenos': HtmlFormatter(noclasses=INLINESTYLES, linenos=True),
+            }
+
+            from docutils import nodes
+
+            from pygments import highlight
+            from pygments.lexers import get_lexer_by_name, TextLexer
+
+            def pygments_directive(name, arguments, options, content, lineno,
+                                   content_offset, block_text, state, state_machine):
+                try:
+                    lexer = get_lexer_by_name(arguments[0])
+                except ValueError:
+                    # no lexer found - use the text one instead of an exception
+                    lexer = TextLexer()
+                # take an arbitrary option if more than one is given
+                formatter = options and VARIANTS[options.keys()[0]] or DEFAULT
+                parsed = highlight(u'\n'.join(content), lexer, formatter)
+                return [nodes.raw('', parsed, format='html')]
+
+            pygments_directive.options = dict([(key, directives.flag) for key in VARIANTS])
+
+        pygments_directive.arguments = (1, 0, 1)
+        pygments_directive.content = 1
+        directives.register_directive('sourcecode', pygments_directive)
 
     def resolve_linkrole(self, name, text, check=True):
         apigen_relpath = self.project.apigen_relpath
@@ -125,6 +184,8 @@ class ReSTSyntaxTest(py.test.collect.Item):
             else:
                 relpath += '.html'
             return (text, apigen_relpath + 'source/%s' % (relpath,))
+        elif name == 'ref':
+            return ("", "") 
 
     def _checkskip(self, lpath, htmlpath=None):
         if not self.config.getvalue("forcegen"):
@@ -138,10 +199,12 @@ class ReSTSyntaxTest(py.test.collect.Item):
                     #return [] # no need to rebuild 
 
 class DoctestText(py.test.collect.Item): 
+    def reportinfo(self):
+        return self.fspath, None, "doctest"
+
     def runtest(self): 
         content = self._normalize_linesep()
-        newcontent = self.config.pytestplugins.call_firstresult(
-            'pytest_doctest_prepare_content', content=content)
+        newcontent = self.config.hook.pytest_doctest_prepare_content(content=content)
         if newcontent is not None:
             content = newcontent 
         s = content 
@@ -208,7 +271,7 @@ class LinkCheckerMaker(py.test.collect.Collector):
                 if tryfn.startswith('http:') or tryfn.startswith('https'): 
                     if self.config.getvalue("urlcheck"):
                         yield CheckLink(name, parent=self, 
-                            args=(tryfn, path, lineno, timeout), callobj=urlcheck)
+                            args=(tryfn, path, lineno, timeout), checkfunc=urlcheck)
                 elif tryfn.startswith('webcal:'):
                     continue
                 else: 
@@ -219,16 +282,19 @@ class LinkCheckerMaker(py.test.collect.Collector):
                         checkfn = tryfn 
                     if checkfn.strip() and (1 or checkfn.endswith('.html')): 
                         yield CheckLink(name, parent=self, 
-                            args=(tryfn, path, lineno), callobj=localrefcheck)
+                            args=(tryfn, path, lineno), checkfunc=localrefcheck)
         
-class CheckLink(py.test.collect.Function): 
-    def repr_metainfo(self):
-        return self.ReprMetaInfo(fspath=self.fspath, lineno=self._args[2],
-            modpath="checklink: %s" % (self._args[0],))
-    def setup(self): 
-        pass 
-    def teardown(self): 
-        pass 
+class CheckLink(py.test.collect.Item):
+    def __init__(self, name, parent, args, checkfunc):
+        super(CheckLink, self).__init__(name, parent)
+        self.args = args
+        self.checkfunc = checkfunc
+
+    def runtest(self):
+        return self.checkfunc(*self.args)
+
+    def reportinfo(self, basedir=None):
+        return (self.fspath, self.args[2], "checklink: %s" % self.args[0])
 
 def urlcheck(tryfn, path, lineno, TIMEOUT_URLOPEN): 
     old = py.std.socket.getdefaulttimeout()
@@ -285,8 +351,6 @@ def localrefcheck(tryfn, path, lineno):
 #
 # PLUGIN tests
 #
-def test_generic(plugintester):
-    plugintester.apicheck(RestdocPlugin)
 
 def test_deindent():
     assert deindent('foo') == 'foo'
@@ -298,6 +362,7 @@ def test_deindent():
 
 class TestApigenLinkRole:
     disabled = True
+
     # these tests are moved here from the former py/doc/conftest.py
     def test_resolve_linkrole(self):
         from py.__.doc.conftest import get_apigen_relpath
@@ -328,21 +393,26 @@ class TestApigenLinkRole:
                        "resolve_linkrole('source', 'py/foo/bar.py')")
 
 
-def pytest_funcarg__testdir(__call__, pyfuncitem):
-    testdir = __call__.execute(firstresult=True)
-    testdir.makepyfile(confrest="from py.__.misc.rest import Project")
-    testdir.plugins.append(RestdocPlugin())
-    return testdir
-    
 class TestDoctest:
+    def pytest_funcarg__testdir(self, request):
+        testdir = request.getfuncargvalue("testdir")
+        assert request.module.__name__ == __name__
+        testdir.makepyfile(confrest="from py.__.misc.rest import Project")
+        for p in testdir.plugins:
+            if p == globals():
+                break
+        else:
+            testdir.plugins.append(globals())
+        return testdir
+    
     def test_doctest_extra_exec(self, testdir):
         xtxt = testdir.maketxtfile(x="""
             hello::
                 .. >>> raise ValueError 
                    >>> None
         """)
-        sorter = testdir.inline_run(xtxt)
-        passed, skipped, failed = sorter.countoutcomes()
+        reprec = testdir.inline_run(xtxt)
+        passed, skipped, failed = reprec.countoutcomes()
         assert failed == 1
 
     def test_doctest_basic(self, testdir): 
@@ -364,23 +434,23 @@ class TestDoctest:
 
             end
         """)
-        sorter = testdir.inline_run(xtxt)
-        passed, skipped, failed = sorter.countoutcomes()
+        reprec = testdir.inline_run(xtxt)
+        passed, skipped, failed = reprec.countoutcomes()
         assert failed == 0 
         assert passed + skipped == 2
 
     def test_doctest_eol(self, testdir): 
         ytxt = testdir.maketxtfile(y=".. >>> 1 + 1\r\n   2\r\n\r\n")
-        sorter = testdir.inline_run(ytxt)
-        passed, skipped, failed = sorter.countoutcomes()
+        reprec = testdir.inline_run(ytxt)
+        passed, skipped, failed = reprec.countoutcomes()
         assert failed == 0 
         assert passed + skipped == 2
 
     def test_doctest_indentation(self, testdir):
         footxt = testdir.maketxtfile(foo=
             '..\n  >>> print "foo\\n  bar"\n  foo\n    bar\n')
-        sorter = testdir.inline_run(footxt)
-        passed, skipped, failed = sorter.countoutcomes()
+        reprec = testdir.inline_run(footxt)
+        passed, skipped, failed = reprec.countoutcomes()
         assert failed == 0
         assert skipped + passed == 2 
 
@@ -390,8 +460,8 @@ class TestDoctest:
 
             .. _`blah`: javascript:some_function()
         """)
-        sorter = testdir.inline_run(xtxt)
-        passed, skipped, failed = sorter.countoutcomes()
+        reprec = testdir.inline_run(xtxt)
+        passed, skipped, failed = reprec.countoutcomes()
         assert failed == 0
         assert skipped + passed == 3 
 
@@ -411,9 +481,9 @@ class TestDoctest:
                 False
 
         """)
-        sorter = testdir.inline_run(xtxt)
+        reprec = testdir.inline_run(xtxt)
         assert len(l) == 1
-        passed, skipped, failed = sorter.countoutcomes()
+        passed, skipped, failed = reprec.countoutcomes()
         assert passed >= 1
         assert not failed 
         assert skipped <= 1

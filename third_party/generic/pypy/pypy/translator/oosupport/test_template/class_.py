@@ -1,8 +1,8 @@
 import py
-from pypy.rpython.test.test_rclass import BaseTestRclass
+from pypy.rpython.test import test_rclass
 from pypy.rpython.test.test_rspecialcase import BaseTestRspecialcase
 
-class BaseTestClass(BaseTestRclass):    
+class BaseTestClass(test_rclass.TestOOtype):
     def test_abstract_method(self):
         class Base:
             pass
@@ -63,6 +63,9 @@ class BaseTestClass(BaseTestRclass):
             b = A(y)
             return a.x + b.x
         assert self.interpret(fn, [1, 2]) == 3
+
+    def test_cast_object_mix_null(self):
+        py.test.skip('cannot return ootype.NULL from translated functions')
 
 class BaseTestSpecialcase(BaseTestRspecialcase):
     pass

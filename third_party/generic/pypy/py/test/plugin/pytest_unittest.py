@@ -1,26 +1,26 @@
 """
-automatically collect and run traditional "unittest.py" style tests. 
+automatically discover and run traditional "unittest.py" style tests. 
 
-you can mix unittest TestCase subclasses and 
-py.test style tests in one test module. 
+Usage
+----------------
 
-XXX consider user-specified test_suite() 
+This plugin collects and runs Python `unittest.py style`_ tests. 
+It will automatically collect ``unittest.TestCase`` subclasses 
+and their ``test`` methods from the test modules of a project
+(usually following the ``test_*.py`` pattern). 
 
-this code is somewhat derived from Guido Wesdorps 
+This plugin is enabled by default. 
 
-    http://johnnydebris.net/svn/projects/py_unittest
-
-$HeadURL: https://codespeak.net/svn/py/branch/pytestplugin/contrib/py_unittest/conftest.py $
-$Id: conftest.py 60979 2009-01-14 22:29:32Z hpk $
+.. _`unittest.py style`: http://docs.python.org/library/unittest.html
 """
 import py
+import sys
 
-class UnittestPlugin:
-    """ discover and integrate traditional ``unittest.py`` tests. 
-    """
-    def pytest_pymodule_makeitem(self, modcol, name, obj):
-        if py.std.inspect.isclass(obj) and issubclass(obj, py.std.unittest.TestCase):
-            return UnitTestCase(name, parent=modcol)
+def pytest_pycollect_makeitem(collector, name, obj):
+    if 'unittest' not in sys.modules:
+        return # nobody could have possibly derived a subclass 
+    if py.std.inspect.isclass(obj) and issubclass(obj, py.std.unittest.TestCase):
+        return UnitTestCase(name, parent=collector)
 
 class UnitTestCase(py.test.collect.Class):
     def collect(self):
@@ -55,6 +55,9 @@ class UnitTestFunction(py.test.collect.Function):
         if obj is not _dummy:
             self._obj = obj
         self._sort_value = sort_value
+        if hasattr(self.parent, 'newinstance'):
+            self.parent.newinstance()
+            self.obj = self._getobj()
 
     def runtest(self):
         target = self.obj
@@ -70,9 +73,6 @@ class UnitTestFunction(py.test.collect.Function):
         instance.tearDown()
 
 
-def test_generic(plugintester):
-    plugintester.apicheck(UnittestPlugin)
-
 def test_simple_unittest(testdir):
     testpath = testdir.makepyfile("""
         import unittest
@@ -83,23 +83,34 @@ def test_simple_unittest(testdir):
             def test_failing(self):
                 self.assertEquals('foo', 'bar')
     """)
-    sorter = testdir.inline_run(testpath)
-    assert sorter.getreport("testpassing").passed
-    assert sorter.getreport("test_failing").failed 
+    reprec = testdir.inline_run(testpath)
+    assert reprec.matchreport("testpassing").passed
+    assert reprec.matchreport("test_failing").failed 
 
 def test_setup(testdir):
     testpath = testdir.makepyfile(test_two="""
         import unittest
-        pytest_plugins = "pytest_unittest" # XXX 
         class MyTestCase(unittest.TestCase):
             def setUp(self):
                 self.foo = 1
             def test_setUp(self):
                 self.assertEquals(1, self.foo)
     """)
-    sorter = testdir.inline_run(testpath)
-    rep = sorter.getreport("test_setUp")
+    reprec = testdir.inline_run(testpath)
+    rep = reprec.matchreport("test_setUp")
     assert rep.passed
+
+def test_new_instances(testdir):
+    testpath = testdir.makepyfile("""
+        import unittest
+        class MyTestCase(unittest.TestCase):
+            def test_func1(self):
+                self.x = 2
+            def test_func2(self):
+                assert not hasattr(self, 'x')
+    """)
+    reprec = testdir.inline_run(testpath)
+    reprec.assertoutcome(passed=2)
 
 def test_teardown(testdir):
     testpath = testdir.makepyfile(test_three="""
@@ -115,8 +126,8 @@ def test_teardown(testdir):
             def test_check(self):
                 self.assertEquals(MyTestCase.l, [None])
     """)
-    sorter = testdir.inline_run(testpath)
-    passed, skipped, failed = sorter.countoutcomes()
+    reprec = testdir.inline_run(testpath)
+    passed, skipped, failed = reprec.countoutcomes()
     print "COUNTS", passed, skipped, failed
     assert failed == 0, failed
     assert passed == 2

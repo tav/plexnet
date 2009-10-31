@@ -1,31 +1,27 @@
 import py
 
-def pytest_funcarg__pickletransport(pyfuncitem):
-    return ImmutablePickleTransport()
-
-def pytest_pyfunc_call(__call__, pyfuncitem, args, kwargs):
-    # for each function call we patch py._com.pyplugins
-    # so that the unpickling of config objects 
-    # (which bind to this mechanism) doesn't do harm 
-    # usually config objects are no meant to be unpickled in
-    # the same system 
+def setglobals(request):
     oldconfig = py.test.config 
-    oldcom = py._com.pyplugins 
+    oldcom = py._com.comregistry 
     print "setting py.test.config to None"
     py.test.config = None
-    py._com.pyplugins = py._com.PyPlugins()
-    try:
-        return __call__.execute(firstresult=True)
-    finally:
+    py._com.comregistry = py._com.Registry()
+    def resetglobals():
         print "setting py.test.config to", oldconfig
         py.test.config = oldconfig
-        py._com.pyplugins = oldcom
+        py._com.comregistry = oldcom
+    request.addfinalizer(resetglobals)
+
+def pytest_funcarg__testdir(request):
+    setglobals(request)
+    return request.getfuncargvalue("testdir")
 
 class ImmutablePickleTransport:
-    def __init__(self):
+    def __init__(self, request):
         from py.__.test.dist.mypickle import ImmutablePickler
         self.p1 = ImmutablePickler(uneven=0)
         self.p2 = ImmutablePickler(uneven=1)
+        setglobals(request)
 
     def p1_to_p2(self, obj):
         return self.p2.loads(self.p1.dumps(obj))
@@ -37,6 +33,8 @@ class ImmutablePickleTransport:
         p2config = self.p1_to_p2(config)
         p2config._initafterpickle(config.topdir)
         return p2config
+
+pytest_funcarg__pickletransport = ImmutablePickleTransport
 
 class TestImmutablePickling:
     def test_pickle_config(self, testdir, pickletransport):
@@ -89,11 +87,10 @@ class TestConfigPickling:
 
     def test_config_pickling_customoption(self, testdir):
         testdir.makeconftest("""
-            class ConftestPlugin:
-                def pytest_addoption(self, parser):
-                    group = parser.addgroup("testing group")
-                    group.addoption('-G', '--glong', action="store", default=42, 
-                        type="int", dest="gdest", help="g value.")
+            def pytest_addoption(parser):
+                group = parser.addgroup("testing group")
+                group.addoption('-G', '--glong', action="store", default=42, 
+                    type="int", dest="gdest", help="g value.")
         """)
         config = testdir.parseconfig("-G", "11")
         assert config.option.gdest == 11
@@ -110,11 +107,10 @@ class TestConfigPickling:
         tmp = testdir.tmpdir.ensure("w1", "w2", dir=1)
         tmp.ensure("__init__.py")
         tmp.join("conftest.py").write(py.code.Source("""
-            class ConftestPlugin:
-                def pytest_addoption(self, parser):
-                    group = parser.addgroup("testing group")
-                    group.addoption('-G', '--glong', action="store", default=42, 
-                        type="int", dest="gdest", help="g value.")
+            def pytest_addoption(parser):
+                group = parser.addgroup("testing group")
+                group.addoption('-G', '--glong', action="store", default=42, 
+                    type="int", dest="gdest", help="g value.")
         """))
         config = testdir.parseconfig(tmp, "-G", "11")
         assert config.option.gdest == 11
@@ -195,13 +191,10 @@ def test_config__setstate__wired_correctly_in_childprocess(testdir):
         from py.__.test.dist.mypickle import PickleChannel
         channel = PickleChannel(channel)
         config = channel.receive()
-        assert py.test.config.pytestplugins.pyplugins == py._com.pyplugins, "pyplugins wrong"
-        assert py.test.config.bus == py._com.pyplugins, "bus wrong"
+        assert py.test.config.pluginmanager.comregistry == py._com.comregistry, "comregistry wrong"
     """)
     channel = PickleChannel(channel)
     config = testdir.parseconfig()
     channel.send(config)
-    channel.waitclose() # this will raise 
+    channel.waitclose() # this will potentially raise 
     gw.exit()
-    
-

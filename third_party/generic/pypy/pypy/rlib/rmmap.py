@@ -3,6 +3,7 @@ from pypy.rpython.tool import rffi_platform
 from pypy.rpython.lltypesystem import rffi, lltype, llmemory
 from pypy.rlib import rposix
 from pypy.translator.tool.cbuild import ExternalCompilationInfo
+from pypy.rlib.nonconst import NonConstant
 
 import sys
 import os
@@ -612,7 +613,10 @@ if _POSIX:
         else:
             m.fd = os.dup(fd)
 
-        res = c_mmap(NULL, map_size, prot, flags, fd, 0)
+        # XXX if we use hintp below in alloc, the NonConstant
+        #     is necessary since we want a general version of c_mmap
+        #     to be annotated with a non-constant pointer.
+        res = c_mmap(NonConstant(NULL), map_size, prot, flags, fd, 0)
         if res == rffi.cast(PTR, -1):
             errno = _get_error_no()
             raise OSError(errno, os.strerror(errno))
@@ -634,6 +638,7 @@ if _POSIX:
             raise MemoryError
         hint.pos += map_size
         return res
+    alloc._annenforceargs_ = (int,)
 
     free = c_munmap
     
@@ -747,6 +752,7 @@ elif _MS_WINDOWS:
         lltype.free(arg, flavor='raw')
         # ignore errors, just try
         return res
+    alloc._annenforceargs_ = (int,)
 
     def free(ptr, map_size):
         VirtualFree(ptr, 0, MEM_RELEASE)

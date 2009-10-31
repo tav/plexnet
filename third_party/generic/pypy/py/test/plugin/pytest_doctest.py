@@ -1,19 +1,34 @@
+"""
+collect and execute doctests from modules and test files. 
+
+Usage
+-------------
+
+By default all files matching the ``test_*.txt`` pattern will 
+be run with the ``doctest`` module.  If you issue::
+
+    py.test --doctest-modules
+
+all python files in your projects will be doctest-run 
+as well. 
+"""
+
 import py
-
-class DoctestPlugin:
-    def pytest_addoption(self, parser):
-        parser.addoption("--doctest-modules", 
-            action="store_true", default=False,
-            dest="doctestmodules")
-    
-    def pytest_collect_file(self, path, parent):
-        if path.ext == ".py":
-            if parent.config.getvalue("doctestmodules"):
-                return DoctestModule(path, parent)
-        if path.check(fnmatch="test_*.txt"):
-            return DoctestTextfile(path, parent)
-
 from py.__.code.excinfo import Repr, ReprFileLocation
+
+def pytest_addoption(parser):
+    group = parser.addgroup("doctest options")
+    group.addoption("--doctest-modules", 
+        action="store_true", default=False,
+        help="search all python files for doctests", 
+        dest="doctestmodules")
+    
+def pytest_collect_file(path, parent):
+    if path.ext == ".py":
+        if parent.config.getvalue("doctestmodules"):
+            return DoctestModule(path, parent)
+    if path.check(fnmatch="test_*.txt"):
+        return DoctestTextfile(path, parent)
 
 class ReprFailDoctest(Repr):
     def __init__(self, reprlocation, lines):
@@ -30,19 +45,19 @@ class DoctestItem(py.test.collect.Item):
         super(DoctestItem, self).__init__(name=name, parent=parent)
         self.fspath = path 
 
-    def repr_failure(self, excinfo, outerr):
+    def repr_failure(self, excinfo):
         if excinfo.errisinstance(py.compat.doctest.DocTestFailure):
             doctestfailure = excinfo.value
             example = doctestfailure.example
             test = doctestfailure.test
             filename = test.filename 
-            lineno = example.lineno + 1
+            lineno = test.lineno + example.lineno + 1
             message = excinfo.type.__name__
             reprlocation = ReprFileLocation(filename, lineno, message)
             checker = py.compat.doctest.OutputChecker() 
             REPORT_UDIFF = py.compat.doctest.REPORT_UDIFF
             filelines = py.path.local(filename).readlines(cr=0)
-            i = max(0, lineno - 10)
+            i = max(test.lineno, max(0, lineno - 10)) # XXX? 
             lines = []
             for line in filelines[i:lineno]:
                 lines.append("%03d %s" % (i+1, line))
@@ -52,9 +67,9 @@ class DoctestItem(py.test.collect.Item):
             return ReprFailDoctest(reprlocation, lines)
         elif excinfo.errisinstance(py.compat.doctest.UnexpectedException):
             excinfo = py.code.ExceptionInfo(excinfo.value.exc_info)
-            return super(DoctestItem, self).repr_failure(excinfo, outerr)
+            return super(DoctestItem, self).repr_failure(excinfo)
         else: 
-            return super(DoctestItem, self).repr_failure(excinfo, outerr)
+            return super(DoctestItem, self).repr_failure(excinfo)
 
 class DoctestTextfile(DoctestItem):
     def runtest(self):
@@ -75,8 +90,8 @@ class DoctestModule(DoctestItem):
 #
 
 class TestDoctests:
+
     def test_collect_testtextfile(self, testdir):
-        testdir.plugins.append(DoctestPlugin())
         testdir.maketxtfile(whatever="")
         checkfile = testdir.maketxtfile(test_something="""
             alskdjalsdk
@@ -86,47 +101,39 @@ class TestDoctests:
         """)
         for x in (testdir.tmpdir, checkfile): 
             #print "checking that %s returns custom items" % (x,) 
-            items, events = testdir.inline_genitems(x)
-            print events.events
+            items, reprec = testdir.inline_genitems(x)
             assert len(items) == 1
             assert isinstance(items[0], DoctestTextfile)
 
     def test_collect_module(self, testdir):
-        testdir.plugins.append(DoctestPlugin())
         path = testdir.makepyfile(whatever="#")
         for p in (path, testdir.tmpdir): 
-            items, evrec = testdir.inline_genitems(p, '--doctest-modules')
-            print evrec.events
+            items, reprec = testdir.inline_genitems(p, '--doctest-modules')
             assert len(items) == 1
             assert isinstance(items[0], DoctestModule)
 
     def test_simple_doctestfile(self, testdir):
-        testdir.plugins.append(DoctestPlugin())
         p = testdir.maketxtfile(test_doc="""
             >>> x = 1
             >>> x == 1
             False
         """)
-        events = testdir.inline_run(p)
-        ev, = events.getnamed("itemtestreport")
-        assert ev.failed 
+        reprec = testdir.inline_run(p)
+        reprec.assertoutcome(failed=1)
 
     def test_doctest_unexpected_exception(self, testdir):
         from py.__.test.outcome import Failed 
 
-        testdir.plugins.append(DoctestPlugin())
         p = testdir.maketxtfile("""
             >>> i = 0
             >>> i = 1 
             >>> x
             2
         """)
-        sorter = testdir.inline_run(p)
-        events = sorter.getnamed("itemtestreport")
-        assert len(events) == 1
-        ev, = events
-        assert ev.failed
-        assert ev.longrepr 
+        reprec = testdir.inline_run(p)
+        call = reprec.getcall("pytest_runtest_logreport")
+        assert call.report.failed
+        assert call.report.longrepr 
         # XXX 
         #testitem, = items
         #excinfo = py.test.raises(Failed, "testitem.runtest()")
@@ -134,7 +141,6 @@ class TestDoctests:
         #assert repr.reprlocation 
 
     def test_doctestmodule(self, testdir):
-        testdir.plugins.append(DoctestPlugin())
         p = testdir.makepyfile("""
             '''
                 >>> x = 1
@@ -143,12 +149,32 @@ class TestDoctests:
 
             '''
         """)
-        events = testdir.inline_run(p, "--doctest-modules")
-        ev, = events.getnamed("itemtestreport")
-        assert ev.failed 
+        reprec = testdir.inline_run(p, "--doctest-modules")
+        reprec.assertoutcome(failed=1) 
+
+    def test_doctestmodule_external(self, testdir):
+        p = testdir.makepyfile("""
+            #
+            def somefunc():
+                '''
+                    >>> i = 0
+                    >>> i + 1
+                    2
+                '''
+        """)
+        result = testdir.runpytest(p, "--doctest-modules")
+        result.stdout.fnmatch_lines([
+            '004 *>>> i = 0',
+            '005 *>>> i + 1',
+            '*Expected:',
+            "*    2",
+            "*Got:",
+            "*    1",
+            "*:5: DocTestFailure"
+        ])
+        
 
     def test_txtfile_failing(self, testdir):
-        testdir.plugins.append('pytest_doctest')
         p = testdir.maketxtfile("""
             >>> i = 0
             >>> i + 1
@@ -164,8 +190,3 @@ class TestDoctests:
             "    1",
             "*test_txtfile_failing.txt:2: DocTestFailure"
         ])
-
-
-def test_generic(plugintester):
-    plugintester.apicheck(DoctestPlugin)
-

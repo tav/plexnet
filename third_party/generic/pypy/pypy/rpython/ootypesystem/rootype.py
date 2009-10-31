@@ -1,8 +1,15 @@
+from pypy.objspace.flow import model as flowmodel
 from pypy.annotation import model as annmodel
 from pypy.rpython.rmodel import Repr
 from pypy.rpython.ootypesystem import ootype
-from pypy.rpython.ootypesystem.ootype import Void, Class
+from pypy.rpython.ootypesystem.ootype import Void, Class, Object
 from pypy.tool.pairtype import pairtype
+
+class __extend__(annmodel.SomeOOObject):
+    def rtyper_makerepr(self, rtyper):
+        return ooobject_repr
+    def rtyper_makekey(self):
+        return self.__class__,
 
 class __extend__(annmodel.SomeOOClass):
     def rtyper_makerepr(self, rtyper):
@@ -29,6 +36,14 @@ class __extend__(annmodel.SomeOOStaticMeth):
         return self.__class__, self.method
 
 
+class OOObjectRepr(Repr):
+    lowleveltype = Object
+
+    def rtype_is_true(self, hop):
+        vlist = hop.inputargs(self)
+        return hop.genop('oononnull', vlist, resulttype=ootype.Bool)
+    
+ooobject_repr = OOObjectRepr()
 
 class OOClassRepr(Repr):
     lowleveltype = Class
@@ -86,6 +101,31 @@ class __extend__(pairtype(OOInstanceRepr, OOInstanceRepr)):
         v = rpair.rtype_eq(hop)
         return hop.genop("bool_not", [v], resulttype=ootype.Bool)
 
+
+class __extend__(pairtype(OOObjectRepr, OOObjectRepr)):
+    def rtype_is_((r_obj1, r_obj2), hop):
+        vlist = hop.inputargs(r_obj1, r_obj2)
+        return hop.genop('oois', vlist, resulttype=ootype.Bool)
+
+    rtype_eq = rtype_is_
+
+    def rtype_ne(rpair, hop):
+        v = rpair.rtype_eq(hop)
+        return hop.genop("bool_not", [v], resulttype=ootype.Bool)
+
+
+class __extend__(pairtype(OOClassRepr, OOClassRepr)):
+    def rtype_is_((r_obj1, r_obj2), hop):
+        vlist = hop.inputargs(r_obj1, r_obj2)
+        return hop.genop('oois', vlist, resulttype=ootype.Bool)
+
+    rtype_eq = rtype_is_
+
+    def rtype_ne(rpair, hop):
+        v = rpair.rtype_eq(hop)
+        return hop.genop("bool_not", [v], resulttype=ootype.Bool)
+
+
 class OOBoundMethRepr(Repr):
     def __init__(self, ootype, name):
         self.lowleveltype = ootype
@@ -105,6 +145,13 @@ class OOBoundMethRepr(Repr):
         return hop.genop("oosend", [cname]+vlist,
                          resulttype = hop.r_result.lowleveltype)
 
+    def rtype_call_args(self, hop):
+        from pypy.rpython.rbuiltin import call_args_expand
+        hop, _ = call_args_expand(hop, takes_kwds=False)
+        hop.swap_fst_snd_args()
+        hop.r_s_popfirstarg()
+        return self.rtype_simple_call(hop)
+
 
 class OOStaticMethRepr(Repr):
     def __init__(self, METHODTYPE):
@@ -123,6 +170,23 @@ class OOStaticMethRepr(Repr):
         hop.swap_fst_snd_args()
         hop.r_s_popfirstarg()
         return self.rtype_simple_call(hop)
+
+    def rtype_simple_call(self, hop):
+        vlist = hop.inputargs(*hop.args_r)
+        nexpected = len(self.lowleveltype.ARGS)
+        nactual = len(vlist)-1
+        if nactual != nexpected: 
+            raise TyperError("argcount mismatch:  expected %d got %d" %
+                            (nexpected, nactual))
+        if isinstance(vlist[0], flowmodel.Constant):
+            if hasattr(vlist[0].value, 'graph'):
+                hop.llops.record_extra_call(vlist[0].value.graph)
+            opname = 'direct_call'
+        else:
+            opname = 'indirect_call'
+            vlist.append(hop.inputconst(ootype.Void, None))
+        hop.exception_is_here()
+        return hop.genop(opname, vlist, resulttype = self.lowleveltype.RESULT)
 
 
 class __extend__(pairtype(OOInstanceRepr, OOBoundMethRepr)):

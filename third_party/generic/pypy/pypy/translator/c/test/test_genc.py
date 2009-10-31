@@ -12,7 +12,6 @@ from pypy.tool.udir import udir
 from pypy.translator.gensupp import uniquemodulename
 from pypy.translator.backendopt.all import backend_optimizations
 from pypy.translator.interactive import Translation
-from pypy import conftest
 
 def compile(fn, argtypes, view=False, gcpolicy="ref", backendopt=True,
             annotatorpolicy=None):
@@ -24,7 +23,7 @@ def compile(fn, argtypes, view=False, gcpolicy="ref", backendopt=True,
     # XXX fish
     t.driver.config.translation.countmallocs = True
     compiled_fn = t.compile_c()
-    if conftest.option.view:
+    if getattr(py.test.config.option, 'view', False):
         t.view()
     malloc_counters = t.driver.cbuilder.get_malloc_counters()
     def checking_fn(*args, **kwds):
@@ -291,7 +290,7 @@ def test_nan():
     res = g2(0)
     assert isnan(res)
 
-def test_x():
+def test_prebuilt_instance_with_dict():
     class A:
         pass
     a = A()
@@ -376,23 +375,13 @@ def test_refcount_pyobj_setfield_increfs():
         pass
     print f(C)
 
-def test_oswrite():
+def test_print():
     def f():
-        import os
-        os.write(1,"o")
-
-    t = TranslationContext()
-    s = t.buildannotator().build_types(f, [])
-    rtyper = t.buildrtyper(type_system="lltype")
-    rtyper.specialize()
-
-def test_x():
-    py.test.skip("Failing test. Seems that print allocs one bit too much")
-    def f():
-        print "xxx"
+        for i in range(10):
+            print "xxx"
 
     fn = compile(f, [])
-    fn()
+    fn(expected_extra_mallocs=1)
 
 def test_name():
     def f():
@@ -403,6 +392,6 @@ def test_name():
     t = Translation(f, [], backend="c")
     t.annotate()
     compiled_fn = t.compile_c()
-    if conftest.option.view:
+    if py.test.config.option.view:
         t.view()
     assert 'pypy_xyz_f' in t.driver.cbuilder.c_source_filename.read()

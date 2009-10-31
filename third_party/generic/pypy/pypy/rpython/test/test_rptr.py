@@ -112,6 +112,20 @@ def test_odd_ints():
 
     interpret(fn, [11521])
 
+def test_odd_ints_opaque():
+    T = GcStruct('T')
+    Q = GcOpaqueType('Q')
+    PT = Ptr(T)
+    PQ = Ptr(Q)
+    def fn(n):
+        t = cast_int_to_ptr(PT, n)
+        assert typeOf(t) == PT
+        assert cast_ptr_to_int(t) == n
+        o = cast_opaque_ptr(PQ, t)
+        assert cast_ptr_to_int(o) == n
+
+    fn(13)
+    interpret(fn, [11521])
 
 def test_Ptr():
     S = GcStruct('s')
@@ -313,3 +327,13 @@ def test_interior_ptr_with_setitem():
     res = interpret(f, [])
     assert res == 1
  
+def test_isinstance_Ptr():
+    S = GcStruct("S", ('x', Signed))
+    def f(n):
+        x = isinstance(Signed, Ptr)
+        return x + (typeOf(x) is Ptr(S)) + len(n)
+    def lltest():
+        f([])
+        return f([1])
+    s, t = ll_rtype(lltest, [])
+    assert s.is_constant() == False

@@ -21,9 +21,7 @@ def rtype_is_None(robj1, rnone2, hop, pos=0):
     if robj1 == none_frozen_pbc_repr:
         return hop.inputconst(ootype.Bool, True)
     v1 = hop.inputarg(robj1, pos)
-    v2 = hop.genop('oononnull', [v1], resulttype=ootype.Bool)
-    v3 = hop.genop('bool_not', [v2], resulttype=ootype.Bool)
-    return v3
+    return hop.genop('ooisnull', [v1], resulttype=ootype.Bool)
 
 
 class FunctionsPBCRepr(AbstractFunctionsPBCRepr):
@@ -116,10 +114,11 @@ class MethodImplementations(object):
 
 class MethodsPBCRepr(AbstractMethodsPBCRepr):
 
-    def __init__(self, rtyper, s_pbc):
-        AbstractMethodsPBCRepr.__init__(self, rtyper, s_pbc)
-        sampledesc = s_pbc.descriptions.iterkeys().next()
-        self.concretetable, _ = get_concrete_calltable(rtyper,
+    concretetable = None # set by _setup_repr_final
+
+    def _setup_repr_final(self):
+        sampledesc = self.s_pbc.descriptions.iterkeys().next()
+        self.concretetable, _ = get_concrete_calltable(self.rtyper,
                                              sampledesc.funcdesc.getcallfamily())
 
     def rtype_simple_call(self, hop):
@@ -183,7 +182,7 @@ class MultipleFrozenPBCRepr(AbstractMultipleFrozenPBCRepr):
     def __init__(self, rtyper, access_set):
         self.rtyper = rtyper
         self.access_set = access_set
-        self.lowleveltype = ootype.Instance('pbc', PBCROOT)
+        self.lowleveltype = ootype.Instance('pbc', PBCROOT, _hints={'immutable': True})
         self.pbc_cache = {}
 
     def _setup_repr(self):

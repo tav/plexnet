@@ -454,6 +454,8 @@ recursively. """
             except py.process.cmdexec.Error, e:
                 if e.err.find('is not a working copy')!=-1:
                     return False
+                if e.err.lower().find('not a versioned resource') != -1:
+                    return False
                 raise
             else:
                 return True 
@@ -668,6 +670,10 @@ class XMLWCStatus(WCStatus):
             elif itemstatus == 'ignored':
                 wcpath = rootwcpath.join(path, abs=1)
                 rootstatus.ignored.append(wcpath)
+                continue
+            elif itemstatus == 'incomplete':
+                wcpath = rootwcpath.join(path, abs=1)
+                rootstatus.incomplete.append(wcpath)
                 continue
 
             rev = statusel.getAttribute('revision')

@@ -20,21 +20,21 @@ class TestGatewayManagerPopen:
         for spec in GatewayManager(l, defaultchdir="abc").specs:
             assert spec.chdir == "abc"
         
-    def test_popen_makegateway_events(self, eventrecorder):
+    def test_popen_makegateway_events(self, _pytest):
+        rec = _pytest.gethookrecorder(py.execnet._HookSpecs)
         hm = GatewayManager(["popen"] * 2)
         hm.makegateways()
-        event = eventrecorder.popevent("gwmanage_newgateway")
-        gw, platinfo = event.args[:2]
-        assert gw.id == "[1]" 
-        platinfo.executable = gw._rinfo().executable
-        event = eventrecorder.popevent("gwmanage_newgateway")
-        gw, platinfo = event.args[:2]
-        assert gw.id == "[2]" 
+        call = rec.popcall("pyexecnet_gwmanage_newgateway")
+        assert call.gateway.id == "[1]" 
+        assert call.platinfo.executable == call.gateway._rinfo().executable
+        call = rec.popcall("pyexecnet_gwmanage_newgateway")
+        assert call.gateway.id == "[2]" 
         assert len(hm.gateways) == 2
         hm.exit()
         assert not len(hm.gateways) 
 
-    def test_popens_rsync(self, source):
+    def test_popens_rsync(self, mysetup):
+        source = mysetup.source
         hm = GatewayManager(["popen"] * 2)
         hm.makegateways()
         assert len(hm.gateways) == 2
@@ -46,7 +46,8 @@ class TestGatewayManagerPopen:
         hm.exit()
         assert not len(hm.gateways) 
 
-    def test_rsync_popen_with_path(self, source, dest):
+    def test_rsync_popen_with_path(self, mysetup):
+        source, dest = mysetup.source, mysetup.dest 
         hm = GatewayManager(["popen//chdir=%s" %dest] * 1)
         hm.makegateways()
         source.ensure("dir1", "dir2", "hello")
@@ -60,18 +61,18 @@ class TestGatewayManagerPopen:
         assert dest.join("dir1", "dir2").check()
         assert dest.join("dir1", "dir2", 'hello').check()
 
-    def test_hostmanage_rsync_same_popen_twice(self, source, dest, eventrecorder):
+    def test_hostmanage_rsync_same_popen_twice(self, mysetup, _pytest):
+        source, dest = mysetup.source, mysetup.dest 
+        rec = _pytest.gethookrecorder(py.execnet._HookSpecs)
         hm = GatewayManager(["popen//chdir=%s" %dest] * 2)
         hm.makegateways()
         source.ensure("dir1", "dir2", "hello")
         hm.rsync(source)
-        event = eventrecorder.popevent("gwmanage_rsyncstart") 
-        source2 = event.kwargs['source'] 
-        gws = event.kwargs['gateways'] 
-        assert source2 == source 
-        assert len(gws) == 1
-        assert hm.gateways[0] == gws[0]
-        event = eventrecorder.popevent("gwmanage_rsyncfinish") 
+        call = rec.popcall("pyexecnet_gwmanage_rsyncstart") 
+        assert call.source == source 
+        assert len(call.gateways) == 1
+        assert hm.gateways[0] == call.gateways[0]
+        call = rec.popcall("pyexecnet_gwmanage_rsyncfinish") 
 
     def test_multi_chdir_popen_with_path(self, testdir):
         import os
@@ -111,13 +112,16 @@ class TestGatewayManagerPopen:
         assert l[0].startswith(curwd)
         assert l[0].endswith("hello")
 
-def pytest_funcarg__source(pyfuncitem):
-    return py.test.ensuretemp(pyfuncitem.getmodpath()).mkdir("source")
-def pytest_funcarg__dest(pyfuncitem):
-    return py.test.ensuretemp(pyfuncitem.getmodpath()).mkdir("dest")
+class pytest_funcarg__mysetup:
+    def __init__(self, request):
+        tmp = request.config.mktemp(request.function.__name__, numbered=True)
+        self.source = tmp.mkdir("source")
+        self.dest = tmp.mkdir("dest")
+        request.getfuncargvalue("_pytest") # to have patching of py._com.comregistry
 
 class TestHRSync:
-    def test_hrsync_filter(self, source, dest):
+    def test_hrsync_filter(self, mysetup):
+        source, dest = mysetup.source, mysetup.dest
         source.ensure("dir", "file.txt")
         source.ensure(".svn", "entries")
         source.ensure(".somedotfile", "moreentries")
@@ -131,7 +135,8 @@ class TestHRSync:
         assert 'file.txt' in basenames
         assert 'somedir' in basenames
 
-    def test_hrsync_one_host(self, source, dest):
+    def test_hrsync_one_host(self, mysetup):
+        source, dest = mysetup.source, mysetup.dest
         gw = py.execnet.makegateway("popen//chdir=%s" % dest)
         finished = []
         rsync = HostRSync(source)

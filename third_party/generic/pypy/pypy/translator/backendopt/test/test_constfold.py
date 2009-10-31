@@ -4,6 +4,7 @@ from pypy.translator.translator import TranslationContext, graphof
 from pypy.rpython.llinterp import LLInterpreter
 from pypy.rpython.lltypesystem import lltype
 from pypy.rpython.lltypesystem.lloperation import llop
+from pypy.rpython import rclass
 from pypy.rlib import objectmodel
 from pypy.translator.backendopt.constfold import constant_fold_graph
 from pypy import conftest
@@ -26,8 +27,10 @@ def check_graph(graph, args, expected_result, t):
     assert res == expected_result
 
 
-def test_simple():
-    S1 = lltype.GcStruct('S1', ('x', lltype.Signed), hints={'immutable': True})
+def test_simple(S1=None):
+    if S1 is None:
+        S1 = lltype.GcStruct('S1', ('x', lltype.Signed),
+                             hints={'immutable': True})
     s1 = lltype.malloc(S1)
     s1.x = 123
     def g(y):
@@ -40,6 +43,14 @@ def test_simple():
     constant_fold_graph(graph)
     assert summary(graph) == {'direct_call': 1}
     check_graph(graph, [], 124, t)
+
+
+def test_immutable_fields():
+    accessor = rclass.FieldListAccessor()
+    S2 = lltype.GcStruct('S2', ('x', lltype.Signed),
+                         hints={'immutable_fields': accessor})
+    accessor.initialize(S2, ['x'])
+    test_simple(S2)
 
 
 def test_along_link():
@@ -335,3 +346,21 @@ def test_merge_if_blocks_bug():
     constant_fold_graph(graph)
     check_graph(graph, [4], -123, t)
     check_graph(graph, [9], 9, t)
+
+def test_merge_if_blocks_bug_2():
+    def fn():
+        n = llop.same_as(lltype.Signed, 66)
+        if n == 1: return 5
+        elif n == 2: return 6
+        elif n == 3: return 8
+        elif n == 4: return -123
+        elif n == 5: return 12973
+        else: return n
+    
+    graph, t = get_graph(fn, [])
+    from pypy.translator.backendopt.removenoops import remove_same_as
+    from pypy.translator.backendopt import merge_if_blocks
+    remove_same_as(graph)
+    merge_if_blocks.merge_if_blocks_once(graph)
+    constant_fold_graph(graph)
+    check_graph(graph, [], 66, t)

@@ -1,5 +1,6 @@
 from pypy.translator.cli import oopspec
 from pypy.rpython.ootypesystem import ootype
+from pypy.rpython.lltypesystem import rffi
 from pypy.translator.oosupport.metavm import Generator, InstructionList, MicroInstruction,\
      PushAllArgs, StoreResult, GetField, SetField, DownCast
 from pypy.translator.oosupport.metavm import _Call as _OOCall
@@ -197,7 +198,7 @@ class _SetArrayElem(MicroInstruction):
             generator.ilasm.opcode('ldnull')
         else:
             generator.load(v_elem)
-        elemtype = generator.cts.lltype_to_cts(v_array.concretetype)
+        elemtype = generator.cts.lltype_to_cts(v_array.concretetype._ELEMENT)
         generator.ilasm.opcode('stelem', elemtype)
 
 class _TypeOf(MicroInstruction):
@@ -249,22 +250,32 @@ class _SetStaticField(MicroInstruction):
         generator.load(op.args[2])
         generator.ilasm.store_static_field(cts_type, desc)
 
-class _FieldInfoForConst(MicroInstruction):
+
+class _DebugPrint(MicroInstruction):
     def render(self, generator, op):
-        from pypy.translator.cli.constant import CONST_CLASS
-        llvalue = op.args[0].value
-        constgen = generator.db.constant_generator
-        const = constgen.record_const(llvalue)
-        generator.ilasm.opcode('ldtoken', CONST_CLASS)
-        generator.ilasm.call('class [mscorlib]System.Type class [mscorlib]System.Type::GetTypeFromHandle(valuetype [mscorlib]System.RuntimeTypeHandle)')
-        generator.ilasm.opcode('ldstr', '"%s"' % const.name)
-        generator.ilasm.call_method('class [mscorlib]System.Reflection.FieldInfo class [mscorlib]System.Type::GetField(string)', virtual=True)
+        MAXARGS = 4
+        if len(op.args) > MAXARGS:
+            generator.db.genoo.log.WARNING('debug_print supported only up to '
+                                           '%d arguments (got %d)' % (MAXARGS, len(op.args)))
+            return
+        signature = ', '.join(['object'] * len(op.args))
+        
+        for arg in op.args:
+            generator.load(arg)
+            TYPE = arg.concretetype
+            if not isinstance(TYPE, ootype.OOType):
+                # assume it's a primitive type, needs boxing
+                boxtype = generator.cts.lltype_to_cts(TYPE)
+                generator.ilasm.opcode('box', boxtype)
+
+        generator.ilasm.call('void [pypylib]pypy.runtime.Utils::debug_print(%s)' % signature)
 
 
 OOTYPE_TO_MNEMONIC = {
     ootype.Bool: 'i1', 
     ootype.Char: 'i2',
     ootype.UniChar: 'i2',
+    rffi.SHORT: 'i2',
     ootype.Signed: 'i4',
     ootype.SignedLongLong: 'i8',
     ootype.Unsigned: 'u4',
@@ -293,5 +304,5 @@ TypeOf = _TypeOf()
 EventHandler = _EventHandler()
 GetStaticField = _GetStaticField()
 SetStaticField = _SetStaticField()
-FieldInfoForConst = _FieldInfoForConst()
 CastPrimitive = _CastPrimitive()
+DebugPrint = _DebugPrint()

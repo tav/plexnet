@@ -19,8 +19,8 @@ from pypy.rpython.lltypesystem import lltype
 from pypy.rpython.robject import PyObjRepr, pyobj_repr
 from pypy.rpython.extregistry import ExtRegistryEntry
 from pypy.annotation import model as annmodel
-from pypy.rlib.objectmodel import UnboxedValue
 from pypy.rlib.rarithmetic import intmask
+from pypy.rlib import objectmodel
 
 #
 #  There is one "vtable" per user class, with the following structure:
@@ -332,12 +332,6 @@ class InstanceRepr(AbstractInstanceRepr):
                     mangled_name = 'inst_' + name
                     fields[name] = mangled_name, r
                     llfields.append((mangled_name, r.lowleveltype))
-            #
-            # hash() support
-            if self.rtyper.needs_hash_support(self.classdef):
-                from pypy.rpython import rint
-                fields['_hash_cache_'] = 'hash_cache', rint.signed_repr
-                llfields.append(('hash_cache', Signed))
 
             self.rbase = getinstancerepr(self.rtyper, self.classdef.basedef,
                                          self.gcflavor)
@@ -348,9 +342,7 @@ class InstanceRepr(AbstractInstanceRepr):
                 adtmeths = {}
             if hints is None:
                 hints = {}
-            if '_immutable_' in self.classdef.classdesc.classdict:
-                hints = hints.copy()
-                hints['immutable'] = True
+            hints = self._check_for_immutable_hints(hints)
             object_type = MkStruct(self.classdef.name,
                                    ('super', self.rbase.object_type),
                                    hints=hints,
@@ -365,6 +357,7 @@ class InstanceRepr(AbstractInstanceRepr):
             attachRuntimeTypeInfo(self.object_type)
 
     def _setup_repr_final(self):
+        AbstractInstanceRepr._setup_repr_final(self)
         if self.gcflavor == 'gc':
             if (self.classdef is not None and
                 self.classdef.classdesc.lookup('__del__') is not None):
@@ -387,9 +380,13 @@ class InstanceRepr(AbstractInstanceRepr):
                                                   OBJECT, destrptr)
             vtable = self.rclass.getvtable()
             self.rtyper.type_for_typeptr[vtable._obj] = self.lowleveltype.TO
+            self.rtyper.lltype2vtable[self.lowleveltype.TO] = vtable
 
     def common_repr(self): # -> object or nongcobject reprs
         return getinstancerepr(self.rtyper, None, self.gcflavor)
+
+    def _get_field(self, attr):
+        return self.fields[attr]
 
     def null_instance(self):
         return nullptr(self.object_type)
@@ -400,21 +397,6 @@ class InstanceRepr(AbstractInstanceRepr):
     def create_instance(self):
         return malloc(self.object_type, flavor=self.gcflavor)
 
-    def get_ll_hash_function(self):
-        if self.classdef is None:
-            raise TyperError, 'missing hash support flag in classdef'
-        if self.rtyper.needs_hash_support(self.classdef):
-            try:
-                return self._ll_hash_function
-            except AttributeError:
-                INSPTR = self.lowleveltype
-                def _ll_hash_function(ins):
-                    return ll_inst_hash(cast_pointer(INSPTR, ins))
-                self._ll_hash_function = _ll_hash_function
-                return _ll_hash_function
-        else:
-            return self.rbase.get_ll_hash_function()
-
     def initialize_prebuilt_data(self, value, classdef, result):
         if self.classdef is not None:
             # recursively build the parent part of the instance
@@ -423,8 +405,6 @@ class InstanceRepr(AbstractInstanceRepr):
             for name, (mangled_name, r) in self.fields.items():
                 if r.lowleveltype is Void:
                     llattrvalue = None
-                elif name == '_hash_cache_': # hash() support
-                    continue   # already done by initialize_prebuilt_hash()
                 else:
                     try:
                         attrvalue = getattr(value, name)
@@ -445,12 +425,9 @@ class InstanceRepr(AbstractInstanceRepr):
             result.typeptr = rclass.getvtable()
 
     def initialize_prebuilt_hash(self, value, result):
-        if self.classdef is not None:
-            self.rbase.initialize_prebuilt_hash(value, result.super)
-            if '_hash_cache_' in self.fields:
-                mangled_name, r = self.fields['_hash_cache_']
-                llattrvalue = hash(value)
-                setattr(result, mangled_name, llattrvalue)
+        llattrvalue = getattr(value, '__precomputed_identity_hash', None)
+        if llattrvalue is not None:
+            lltype.init_identity_hash(result, llattrvalue)
 
     def getfieldrepr(self, attr):
         """Return the repr used for the given attribute."""
@@ -469,6 +446,7 @@ class InstanceRepr(AbstractInstanceRepr):
             cname = inputconst(Void, mangled_name)
             if force_cast:
                 vinst = llops.genop('cast_pointer', [vinst], resulttype=self)
+            self.hook_access_field(vinst, cname, llops, flags)
             return llops.genop('getfield', [vinst, cname], resulttype=r)
         else:
             if self.classdef is None:
@@ -484,12 +462,16 @@ class InstanceRepr(AbstractInstanceRepr):
             cname = inputconst(Void, mangled_name)
             if force_cast:
                 vinst = llops.genop('cast_pointer', [vinst], resulttype=self)
+            self.hook_access_field(vinst, cname, llops, flags)
             llops.genop('setfield', [vinst, cname, vvalue])
         else:
             if self.classdef is None:
                 raise MissingRTypeAttribute(attr)
             self.rbase.setfield(vinst, attr, vvalue, llops, force_cast=True,
                                 flags=flags)
+
+    def hook_access_field(self, vinst, cname, llops, flags):
+        pass        # for virtualizables; see rvirtualizable2.py
 
     def new_instance(self, llops, classcallhop=None):
         """Build a new instance, without calling __init__."""
@@ -512,10 +494,7 @@ class InstanceRepr(AbstractInstanceRepr):
                 mangled_name, r = self.allinstancefields[fldname]
                 if r.lowleveltype is Void:
                     continue
-                if fldname == '_hash_cache_':
-                    value = Constant(0, Signed)
-                else:
-                    value = self.classdef.classdesc.read_attribute(fldname, None)
+                value = self.classdef.classdesc.read_attribute(fldname, None)
                 if value is not None:
                     cvalue = inputconst(r.lowleveltype,
                                         r.convert_desc_or_const(value))
@@ -585,7 +564,6 @@ class InstanceRepr(AbstractInstanceRepr):
         res = rstr.ll_strconcat(res, ll_int2hex(uid, False))
         res = rstr.ll_strconcat(res, rstr.instance_str_suffix)
         return res
-    ll_str._look_inside_me_ = False
 
     def rtype_isinstance(self, hop):
         class_repr = get_type_repr(hop.rtyper)
@@ -605,41 +583,6 @@ class InstanceRepr(AbstractInstanceRepr):
         else:
             return hop.gendirectcall(ll_isinstance, v_obj, v_cls)
 
-
-def buildinstancerepr(rtyper, classdef, gcflavor='gc'):
-    if classdef is None:
-        unboxed = []
-        virtualizable = False
-        virtualizable2 = False
-    else:
-        unboxed = [subdef for subdef in classdef.getallsubdefs()
-                          if subdef.classdesc.pyobj is not None and
-                             issubclass(subdef.classdesc.pyobj, UnboxedValue)]
-        virtualizable = classdef.classdesc.read_attribute('_virtualizable_',
-                                                          Constant(False)).value
-        virtualizable2 = classdef.classdesc.read_attribute('_virtualizable2_',
-                                                           Constant(False)).value
-    if virtualizable:
-        assert len(unboxed) == 0
-        assert gcflavor == 'gc'
-        from pypy.rpython.lltypesystem import rvirtualizable
-        return rvirtualizable.VirtualizableInstanceRepr(rtyper, classdef)
-    elif virtualizable2:
-        assert len(unboxed) == 0
-        assert gcflavor == 'gc'
-        from pypy.rpython.lltypesystem import rvirtualizable2
-        return rvirtualizable2.Virtualizable2InstanceRepr(rtyper, classdef)
-    elif len(unboxed) == 0:
-        return InstanceRepr(rtyper, classdef, gcflavor)
-    else:
-        # the UnboxedValue class and its parent classes need a
-        # special repr for their instances
-        if len(unboxed) != 1:
-            raise TyperError("%r has several UnboxedValue subclasses" % (
-                classdef,))
-        assert gcflavor == 'gc'
-        from pypy.rpython.lltypesystem import rtagged
-        return rtagged.TaggedInstanceRepr(rtyper, classdef, unboxed[0])
 
 
 class __extend__(pairtype(InstanceRepr, InstanceRepr)):
@@ -720,18 +663,6 @@ def ll_isinstance_exact(obj, cls):
 
 def ll_runtime_type_info(obj):
     return obj.typeptr.rtti
-
-def ll_inst_hash(ins):
-    if not ins:
-        return 0    # for None
-    cached = ins.hash_cache
-    if cached == 0:
-        # XXX this should ideally be done in a GC-dependent way: we only
-        # need a hash_cache for moving GCs, and we only need the '~' to
-        # avoid Boehm keeping the object alive if the value is passed
-        # around
-       cached = ins.hash_cache = ~cast_ptr_to_int(ins)
-    return cached
 
 def ll_inst_type(obj):
     if obj:

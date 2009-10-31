@@ -6,6 +6,7 @@ from pypy.tool.algo.unionfind import UnionFind
 from pypy.objspace.flow.model import Block, Link, Variable, SpaceOperation
 from pypy.objspace.flow.model import Constant, checkgraph
 from pypy.annotation import model as annmodel
+from pypy.interpreter.argument import Signature
 
 def flatten_star_args(funcdesc, args_s):
     argnames, vararg, kwarg = funcdesc.signature
@@ -38,8 +39,8 @@ def flatten_star_args(funcdesc, args_s):
             graph.startblock.isstartblock = False
             graph.startblock = newstartblock
             newstartblock.isstartblock = True
-            argnames += tuple(['.star%d' % i for i in range(nb_extra_args)])
-            graph.signature = argnames, None, None
+            argnames = argnames + ['.star%d' % i for i in range(nb_extra_args)]
+            graph.signature = Signature(argnames)
             # note that we can mostly ignore defaults: if nb_extra_args > 0, 
             # then defaults aren't applied.  if nb_extra_args == 0, then this 
             # just removes the *arg and the defaults keep their meaning.
@@ -48,29 +49,38 @@ def flatten_star_args(funcdesc, args_s):
             checkgraph(graph)
             return graph
 
-        key = nb_extra_args
-        name_suffix = '_star%d' % (nb_extra_args,)
-        return flattened_s, key, name_suffix, builder
+        key = ('star', nb_extra_args)
+        return flattened_s, key, builder
 
     else:
-        return args_s, None, '', None
+        return args_s, None, None
 
 def default_specialize(funcdesc, args_s):
     # first flatten the *args
-    args_s, key, name_suffix, builder = flatten_star_args(funcdesc, args_s)
+    args_s, key, builder = flatten_star_args(funcdesc, args_s)
     # two versions: a regular one and one for instances with 'access_directly'
-    for s_obj in args_s:
+    jit_look_inside = getattr(funcdesc.pyobj, '_jit_look_inside_', True)
+    # change args_s in place, "official" interface
+    access_directly = False
+    for i, s_obj in enumerate(args_s):
         if (isinstance(s_obj, annmodel.SomeInstance) and
             'access_directly' in s_obj.flags):
-            key = (AccessDirect, key)
-            name_suffix += '_AccessDirect'
-            break
+            if jit_look_inside:
+                access_directly = True
+                key = (AccessDirect, key)
+                break                
+            else:
+                new_flags = s_obj.flags.copy()
+                del new_flags['access_directly']
+                new_s_obj = annmodel.SomeInstance(s_obj.classdef, s_obj.can_be_None,
+                                              flags = new_flags)
+                args_s[i] = new_s_obj
+
     # done
-    if name_suffix:
-        alt_name = '%s%s' % (funcdesc.name, name_suffix)
-    else:
-        alt_name = None
-    return funcdesc.cachedgraph(key, alt_name=alt_name, builder=builder)
+    graph = funcdesc.cachedgraph(key, builder=builder)
+    if access_directly:
+        graph.access_directly = True
+    return graph
 
 class AccessDirect(object):
     """marker for specialization: set when any arguments is a SomeInstance
@@ -307,113 +317,6 @@ def cartesian_product(lstlst):
         for value in lstlst[0]:
             yield (value,) + tuple_tail
 
-##    """NOT_RPYTHON"""
-##    if len(arglist_s) != 1:
-##        raise Exception("memo call: only 1 argument functions supported"
-##                        " at the moment (%r)" % (funcdesc,))
-##    s, = arglist_s
-##    from pypy.annotation.model import SomeImpossibleValue
-##    return memo1(funcdesc, func, s)
-
-### XXX OBSCURE to support methodmemo()... needs to find something more 
-###     reasonable :-(
-##KEY_NUMBERS = {}
-
-##def memo1(funcdesc, func, s, key='memo1'):
-##    from pypy.annotation.model import SomeImpossibleValue
-##    # compute the concrete results and store them directly on the descs,
-##    # using a strange attribute name
-##    num = KEY_NUMBERS.setdefault(key, len(KEY_NUMBERS))
-##    attrname = '$memo%d_%d_%s' % (uid(funcdesc), num, funcdesc.name)
-##    for desc in s.descriptions:
-##        s_result = desc.s_read_attribute(attrname)
-##        if isinstance(s_result, SomeImpossibleValue):
-##            # first time we see this 'desc'
-##            if desc.pyobj is None:
-##                raise Exception("memo call with a class or PBC that has no "
-##                                "corresponding Python object (%r)" % (desc,))
-##            result = func(desc.pyobj)
-##            desc.create_new_attribute(attrname, result)
-##    # get or build the graph of the function that reads this strange attr
-##    def memoized(x, y=None):
-##        return getattr(x, attrname)
-##    def builder(translator, func):
-##        return translator.buildflowgraph(memoized)   # instead of 'func'
-##    return funcdesc.cachedgraph(key, alt_name='memo_%s' % funcdesc.name, 
-##                                     builder=builder)
-
-##def methodmemo(funcdesc, arglist_s):
-##    """NOT_RPYTHON"""
-##    from pypy.annotation.model import SomePBC, SomeImpossibleValue
-##    # call the function now, and collect possible results
-##    for s in arglist_s:
-##        if not isinstance(s, SomePBC):
-##            if isinstance(s, SomeImpossibleValue):
-##                return s    # we will probably get more possible args later
-##            raise Exception("method-memo call: argument must be a class or"
-##                            " a frozen PBC, got %r" % (s,))
-##    if len(arglist_s) != 2:
-##        raise Exception("method-memo call: expected  2 arguments function" 
-##                        " at the moment (%r)" % (funcdesc,))
-##    from pypy.annotation.model import SomeImpossibleValue
-##    from pypy.annotation.description import FrozenDesc
-##    func = funcdesc.pyobj
-##    if func is None:
-##        raise Exception("method-memo call: no Python function object to call"
-##                        " (%r)" % (funcdesc,))
-##    # compute the concrete results and store them directly on the descs,
-##    # using a strange attribute name.  The goal is to store in the pbcs of
-##    # 's1' under the common 'attrname' a reader function; each reader function
-##    # will read a field 'attrname2' from the pbcs of 's2', where 'attrname2'
-##    # differs for each pbc of 's1'. This is all specialized also
-##    # considering the type of s1 to support return value 
-##    # polymorphism.
-##    s1, s2 = arglist_s
-##    s1_type = s1.knowntype
-##    if s2.is_constant():
-##        return memo1(funcdesc, lambda val1: func(val1, s2.const),
-##                    s1, ('memo1of2', s1_type, Constant(s2.const)))
-##    memosig = "%d_%d_%s" % (uid(funcdesc), uid(s1_type), funcdesc.name)
-
-##    attrname = '$memoreader%s' % memosig 
-##    for desc1 in s1.descriptions:
-##        attrname2 = '$memofield%d_%s' % (uid(desc1), memosig)
-##        s_reader = desc1.s_read_attribute(attrname)
-##        if isinstance(s_reader, SomeImpossibleValue):
-##            # first time we see this 'desc1': sanity-check 'desc1' and
-##            # create its reader function
-##            assert isinstance(desc1, FrozenDesc), (
-##                "XXX not implemented: memo call with a class as first arg")
-##            if desc1.pyobj is None:
-##                raise Exception("method-memo call with a class or PBC"
-##                                " that has no "
-##                                "corresponding Python object (%r)" % (desc1,))
-##            def reader(y, attrname2=attrname2):
-##                return getattr(y, attrname2)
-##            desc1.create_new_attribute(attrname, reader)
-##        for desc2 in s2.descriptions:
-##            s_result = desc2.s_read_attribute(attrname2)
-##            if isinstance(s_result, SomeImpossibleValue):
-##                # first time we see this 'desc1+desc2' combination
-##                if desc2.pyobj is None:
-##                    raise Exception("method-memo call with a class or PBC"
-##                                  " that has no "
-##                                  "corresponding Python object (%r)" % (desc2,))
-##                # concrete call, to get the concrete result
-##                result = func(desc1.pyobj, desc2.pyobj)
-##                #print 'func(%s, %s) -> %s' % (desc1.pyobj, desc2.pyobj, result)
-##                #print 'goes into %s.%s'% (desc2,attrname2)
-##                #print 'with reader %s.%s'% (desc1,attrname)
-##                desc2.create_new_attribute(attrname2, result)
-##    # get or build the graph of the function that reads this indirect
-##    # settings of attributes
-##    def memoized(x, y):
-##        reader_fn = getattr(x, attrname)
-##        return reader_fn(y)
-##    def builder(translator, func):
-##        return translator.buildflowgraph(memoized)   # instead of 'func'
-##    return funcdesc.cachedgraph(s1_type, alt_name='memo_%s' % funcdesc.name, 
-##                                         builder=builder)
 
 def make_constgraphbuilder(n, v=None, factory=None, srcmodule=None):
     def constgraphbuilder(translator, ignore):
@@ -423,10 +326,16 @@ def make_constgraphbuilder(n, v=None, factory=None, srcmodule=None):
         else:
             computed_v = v
         miniglobals = {'v': computed_v, '__name__': srcmodule}
-        exec "constf = lambda %s: v" % args in miniglobals
+        exec py.code.Source("constf = lambda %s: v" % args).compile() in miniglobals
         return translator.buildflowgraph(miniglobals['constf'])
     return constgraphbuilder
 
+def maybe_star_args(funcdesc, key, args_s):
+    args_s, key1, builder = flatten_star_args(funcdesc, args_s)
+    if key1 is not None:
+        key = key + key1
+    return funcdesc.cachedgraph(key, builder=builder)
+ 
 def specialize_argvalue(funcdesc, args_s, *argindices):
     from pypy.annotation.model import SomePBC
     key = []
@@ -441,11 +350,11 @@ def specialize_argvalue(funcdesc, args_s, *argindices):
             raise Exception("specialize:arg(%d): argument not constant: %r"
                             % (i, s))
     key = tuple(key)
-    return funcdesc.cachedgraph(key)
+    return maybe_star_args(funcdesc, key, args_s)
 
 def specialize_argtype(funcdesc, args_s, *argindices):
     key = tuple([args_s[i].knowntype for i in argindices])
-    return funcdesc.cachedgraph(key)
+    return maybe_star_args(funcdesc, key, args_s)
 
 def specialize_arglistitemtype(funcdesc, args_s, i):
     s = args_s[i]
@@ -453,4 +362,4 @@ def specialize_arglistitemtype(funcdesc, args_s, i):
         key = None
     else:
         key = s.listdef.listitem.s_value.knowntype
-    return funcdesc.cachedgraph(key)        
+    return maybe_star_args(funcdesc, key, args_s)

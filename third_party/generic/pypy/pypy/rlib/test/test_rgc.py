@@ -2,7 +2,7 @@ from pypy.rpython.test.test_llinterp import gengraph, interpret
 from pypy.rpython.lltypesystem import lltype
 from pypy.rlib import rgc # Force registration of gc.collect
 import gc
-import py
+import py, sys
 
 def test_collect():
     def f():
@@ -13,11 +13,30 @@ def test_collect():
     assert len(ops) == 1
     op = ops[0][1]
     assert op.opname == 'gc__collect'
-
+    assert len(op.args) == 0
 
     res = interpret(f, [])
     
     assert res is None
+
+def test_collect_0():
+    if sys.version_info < (2, 5):
+        py.test.skip("requires Python 2.5 to call gc.collect() with an arg")
+
+    def f():
+        return gc.collect(0)
+
+    t, typer, graph = gengraph(f, [])
+    ops = list(graph.iterblockops())
+    assert len(ops) == 1
+    op = ops[0][1]
+    assert op.opname == 'gc__collect'
+    assert len(op.args) == 1    
+    assert op.args[0].value == 0
+
+    res = interpret(f, [])
+    
+    assert res is None    
     
 def test_can_move():
     T0 = lltype.GcStruct('T')

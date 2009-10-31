@@ -200,6 +200,11 @@ def test_tbentry_reinterpret():
 def test_excinfo_exconly():
     excinfo = py.test.raises(ValueError, h)
     assert excinfo.exconly().startswith('ValueError')
+    excinfo = py.test.raises(ValueError, 
+        "raise ValueError('hello\\nworld')")
+    msg = excinfo.exconly(tryshort=True)
+    assert msg.startswith('ValueError')
+    assert msg.endswith("world")
 
 def test_excinfo_repr():
     excinfo = py.test.raises(ValueError, h)
@@ -242,7 +247,6 @@ def test_entrysource_Queue_example():
     assert s.startswith("def get")
 
 def test_codepath_Queue_example():
-    py.test.skip("try harder to get at the paths of code objects.")
     import Queue
     try:
         Queue.Queue().get(timeout=0.001)
@@ -625,6 +629,29 @@ raise ValueError()
         assert tw.lines[9] == ""
         assert tw.lines[10].endswith("mod.py:3: ValueError")
 
+    def test_toterminal_long_filenames(self):
+        mod = self.importasmod("""
+            def f():
+                raise ValueError()
+        """)
+        excinfo = py.test.raises(ValueError, mod.f)
+        tw = TWMock()
+        path = py.path.local(mod.__file__)
+        old = path.dirpath().chdir()
+        try: 
+            repr = excinfo.getrepr(abspath=False)
+            repr.toterminal(tw)
+            line = tw.lines[-1]
+            x = py.path.local().bestrelpath(path) 
+            if len(x) < len(str(path)):
+                assert line == "mod.py:3: ValueError" 
+
+            repr = excinfo.getrepr(abspath=True)
+            repr.toterminal(tw)
+            line = tw.lines[-1]
+            assert line == "%s:3: ValueError" %(path,)
+        finally:
+            old.chdir()
 
     def test_format_excinfo(self):
         mod = self.importasmod("""

@@ -2,7 +2,6 @@ import py, os
 from conftesthandle import Conftest
 
 from py.__.test import parseopt
-from py.__.misc.warn import APIWARN
 
 def ensuretemp(string, dir=1): 
     """ return temporary directory path with
@@ -21,34 +20,35 @@ class Error(Exception):
     """ Test Configuration Error. """
 
 class Config(object): 
-    """ central bus for dealing with configuration/initialization data. """ 
+    """ test configuration object, provides access to config valueso, 
+        the pluginmanager and plugin api. 
+    """
     Option = py.compat.optparse.Option # deprecated
     Error = Error
     basetemp = None
     _sessionclass = None
 
-    def __init__(self, pytestplugins=None, topdir=None): 
+    def __init__(self, pluginmanager=None, topdir=None): 
         self.option = CmdOptions()
         self.topdir = topdir
         self._parser = parseopt.Parser(
             usage="usage: %prog [options] [file_or_dir] [file_or_dir] [...]",
             processopt=self._processopt,
         )
-        if pytestplugins is None:
-            pytestplugins = py.test._PytestPlugins()
-        assert isinstance(pytestplugins, py.test._PytestPlugins)
-        self.bus = pytestplugins.pyplugins
-        self.pytestplugins = pytestplugins
+        if pluginmanager is None:
+            pluginmanager = py.test._PluginManager()
+        assert isinstance(pluginmanager, py.test._PluginManager)
+        self.pluginmanager = pluginmanager
         self._conftest = Conftest(onimport=self._onimportconftest)
-        self._setupstate = SetupState() 
+        self.hook = pluginmanager.hook
 
     def _onimportconftest(self, conftestmodule):
         self.trace("loaded conftestmodule %r" %(conftestmodule,))
-        self.pytestplugins.consider_conftest(conftestmodule)
+        self.pluginmanager.consider_conftest(conftestmodule)
 
     def trace(self, msg):
         if getattr(self.option, 'traceconfig', None):
-            self.bus.notify("trace", "config", msg) 
+            self.hook.pytest_trace(category="config", msg=msg)
 
     def _processopt(self, opt):
         if hasattr(opt, 'default') and opt.dest:
@@ -64,7 +64,7 @@ class Config(object):
                     val = eval(val)
                 opt.default = val 
             else:
-                name = "pytest_option_" + opt.dest
+                name = "option_" + opt.dest
                 try:
                     opt.default = self._conftest.rget(name)
                 except (ValueError, KeyError):
@@ -74,8 +74,9 @@ class Config(object):
 
     def _preparse(self, args):
         self._conftest.setinitial(args) 
-        self.pytestplugins.consider_env()
-        self.pytestplugins.do_addoption(self._parser)
+        self.pluginmanager.consider_preparse(args)
+        self.pluginmanager.consider_env()
+        self.pluginmanager.do_addoption(self._parser)
 
     def parse(self, args): 
         """ parse cmdline arguments into this config object. 
@@ -106,7 +107,7 @@ class Config(object):
         # * registering to py lib plugins 
         # * setting py.test.config 
         self.__init__(
-            pytestplugins=py.test._PytestPlugins(py._com.pyplugins),
+            pluginmanager=py.test._PluginManager(py._com.comregistry),
             topdir=py.path.local(),
         )
         # we have to set py.test.config because preparse()
@@ -154,7 +155,8 @@ class Config(object):
         if pkgpath is None:
             pkgpath = path.check(file=1) and path.dirpath() or path
         Dir = self._conftest.rget("Directory", pkgpath)
-        col = Dir(pkgpath, config=self)
+        col = Dir(pkgpath)
+        col.config = self 
         return col._getfsnode(path)
 
     def getconftest_pathlist(self, name, path=None):
@@ -178,7 +180,7 @@ class Config(object):
         """ add a named group of options to the current testing session. 
             This function gets invoked during testing session initialization. 
         """ 
-        APIWARN("1.0", "define plugins to add options", stacklevel=2)
+        py.log._apiwarn("1.0", "define plugins to add options", stacklevel=2)
         group = self._parser.addgroup(groupname)
         for opt in specs:
             group._addoption_instance(opt)
@@ -238,20 +240,6 @@ class Config(object):
         finally: 
             config_per_process = py.test.config = oldconfig 
 
-    def _getcapture(self, path=None):
-        if self.option.nocapture:
-            iocapture = "no" 
-        else:
-            iocapture = self.getvalue("iocapture", path=path)
-        if iocapture == "fd": 
-            return py.io.StdCaptureFD()
-        elif iocapture == "sys":
-            return py.io.StdCapture()
-        elif iocapture == "no": 
-            return py.io.StdCapture(out=False, err=False, in_=False)
-        else:
-            raise self.Error("unknown io capturing: " + iocapture)
-
     def getxspecs(self):
         xspeclist = []
         for xspec in self.getvalue("tx"):
@@ -284,7 +272,6 @@ class Config(object):
         if pydir is not None:
             roots.append(pydir)
         return roots 
-
     
 #
 # helpers
@@ -312,37 +299,9 @@ def gettopdir(args):
     else:
         return pkgdir.dirpath()
 
-class SetupState(object):
-    """ shared state for setting up/tearing down test items or collectors. """
-    def __init__(self):
-        self.stack = []
-
-    def teardown_all(self): 
-        while self.stack: 
-            col = self.stack.pop() 
-            col.teardown() 
-
-    def teardown_exact(self, item):
-        if self.stack and self.stack[-1] == item:
-            col = self.stack.pop()
-            col.teardown()
-     
-    def prepare(self, colitem): 
-        """ setup objects along the collector chain to the test-method
-            Teardown any unneccessary previously setup objects."""
-
-        needed_collectors = colitem.listchain() 
-        while self.stack: 
-            if self.stack == needed_collectors[:len(self.stack)]: 
-                break 
-            col = self.stack.pop() 
-            col.teardown()
-        for col in needed_collectors[len(self.stack):]: 
-            col.setup() 
-            self.stack.append(col) 
 
 # this is the one per-process instance of py.test configuration 
 config_per_process = Config(
-    pytestplugins=py.test._PytestPlugins(py._com.pyplugins)
+    pluginmanager=py.test._PluginManager(py._com.comregistry)
 )
 

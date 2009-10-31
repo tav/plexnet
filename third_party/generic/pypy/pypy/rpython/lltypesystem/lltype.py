@@ -798,8 +798,8 @@ def cast_opaque_ptr(PTRTYPE, ptr):
                         "%s to %s" % (CURTYPE, PTRTYPE))
     if (isinstance(CURTYPE.TO, OpaqueType)
         and not isinstance(PTRTYPE.TO, OpaqueType)):
-        if hasattr(ptr, '_cast_to_ptr'):
-            return ptr._cast_to_ptr(PTRTYPE)
+        if hasattr(ptr._obj, '_cast_to_ptr'):
+            return ptr._obj._cast_to_ptr(PTRTYPE)
         if not ptr:
             return nullptr(PTRTYPE.TO)
         try:
@@ -816,6 +816,7 @@ def cast_opaque_ptr(PTRTYPE, ptr):
         if not ptr:
             return nullptr(PTRTYPE.TO)
         return opaqueptr(PTRTYPE.TO, 'hidden', container = ptr._obj,
+                                               ORIGTYPE = CURTYPE,
                                                solid     = ptr._solid)
     elif (isinstance(CURTYPE.TO, OpaqueType)
           and isinstance(PTRTYPE.TO, OpaqueType)):
@@ -899,7 +900,7 @@ def top_container(container):
         top_parent = parent
     return top_parent
 
-def normalizeptr(p):
+def normalizeptr(p, check=True):
     # If p is a pointer, returns the same pointer casted to the largest
     # containing structure (for the cast where p points to the header part).
     # Also un-hides pointers to opaque.  Null pointers become None.
@@ -907,12 +908,17 @@ def normalizeptr(p):
     T = typeOf(p)
     if not isinstance(T, Ptr):
         return p      # primitive
-    if not p:
+    obj = p._getobj(check)
+    if not obj:
         return None   # null pointer
     if type(p._obj0) is int:
         return p      # a pointer obtained by cast_int_to_ptr
-    container = p._obj._normalizedcontainer()
-    if container is not p._obj:
+    container = obj._normalizedcontainer()
+    if type(container) is int:
+        # this must be an opaque ptr originating from an integer
+        assert isinstance(obj, _opaque)
+        return cast_int_to_ptr(obj.ORIGTYPE, container)
+    if container is not obj:
         p = _ptr(Ptr(typeOf(container)), container, p._solid)
     return p
 
@@ -994,25 +1000,31 @@ class _abstract_ptr(object):
         return (type(self._obj0) not in (type(None), int) and
                 self._getobj(check=False)._was_freed())
 
+    def _lookup_adtmeth(self, member_name):
+        if isinstance(self._T, ContainerType):
+            try:
+                adtmember = self._T._adtmeths[member_name]
+            except KeyError:
+                pass
+            else:
+                try:
+                    getter = adtmember.__get__
+                except AttributeError:
+                    return adtmember
+                else:
+                    return getter(self)
+        raise AttributeError
+
     def __getattr__(self, field_name): # ! can only return basic or ptr !
         if isinstance(self._T, Struct):
             if field_name in self._T._flds:
                 o = self._obj._getattr(field_name)
                 return self._expose(field_name, o)
-        if isinstance(self._T, ContainerType):
-            try:
-                adtmeth = self._T._adtmeths[field_name]
-            except KeyError:
-                pass
-            else:
-                try:
-                    getter = adtmeth.__get__
-                except AttributeError:
-                    return adtmeth
-                else:
-                    return getter(self)
-        raise AttributeError("%r instance has no field %r" % (self._T,
-                                                              field_name))
+        try:
+            return self._lookup_adtmeth(field_name)
+        except AttributeError:
+            raise AttributeError("%r instance has no field %r" % (self._T,
+                                                                  field_name))
 
     def __setattr__(self, field_name, val):
         if isinstance(self._T, Struct):
@@ -1113,6 +1125,19 @@ class _abstract_ptr(object):
             return callb(*args)
         raise TypeError("%r instance is not a function" % (self._T,))
 
+    def _identityhash(self, cache=True):
+        p = normalizeptr(self)
+        try:
+            return p._obj._hash_cache_
+        except AttributeError:
+            result = hash(p._obj)
+            if cache:
+                try:
+                    p._obj._hash_cache_ = result
+                except AttributeError:
+                    pass
+            return result
+
 class _ptr(_abstract_ptr):
     __slots__ = ('_TYPE', 
                  '_weak', '_solid',
@@ -1163,7 +1188,7 @@ class _ptr(_abstract_ptr):
             if parent is None:
                 raise RuntimeError("widening to trash: %r" % self)
             PARENTTYPE = struc._parent_type
-            if getattr(parent, PARENTTYPE._names[0]) is not struc:
+            if getattr(parent, PARENTTYPE._names[0]) != struc:
                 raise InvalidCast(CURTYPE, PTRTYPE) # xxx different exception perhaps?
             struc = parent
             u -= 1
@@ -1171,13 +1196,15 @@ class _ptr(_abstract_ptr):
             raise RuntimeError("widening %r inside %r instead of %r" % (CURTYPE, PARENTTYPE, PTRTYPE.TO))
         return _ptr(PTRTYPE, struc, solid=self._solid)
 
-    def _cast_to_int(self):
-        if not self:
+    def _cast_to_int(self, check=True):
+        obj = self._getobj(check)
+        if not obj:
             return 0       # NULL pointer
-        obj = self._obj
         if isinstance(obj, int):
             return obj     # special case for cast_int_to_ptr() results
-        obj = normalizeptr(self)._obj
+        obj = normalizeptr(self, check)._getobj(check)
+        if isinstance(obj, int):
+            return obj     # special case for cast_int_to_ptr() results put into opaques
         result = intmask(obj._getid())
         # assume that id() returns an addressish value which is
         # not zero and aligned to at least a multiple of 4
@@ -1384,7 +1411,7 @@ def _get_empty_instance_of_struct_variety(flds):
 class _struct(_parentable):
     _kind = "structure"
 
-    __slots__ = ()
+    __slots__ = ('_hash_cache_',)
 
     def __new__(self, TYPE, n=None, initialization=None, parent=None, parentindex=None):
         my_variety = _struct_variety(TYPE._names)
@@ -1696,7 +1723,7 @@ class _opaque(_parentable):
 
     def __eq__(self, other):
         if self.__class__ is not other.__class__:
-            return False
+            return NotImplemented
         if hasattr(self, 'container') and hasattr(other, 'container'):
             obj1 = self.container._normalizedcontainer()
             obj2 = other.container._normalizedcontainer()
@@ -1705,6 +1732,8 @@ class _opaque(_parentable):
             return self is other
 
     def __ne__(self, other):
+        if self.__class__ is not other.__class__:
+            return NotImplemented
         return not (self == other)
 
     def __hash__(self):
@@ -1718,6 +1747,9 @@ class _opaque(_parentable):
         # if we are an opaque containing a normal Struct/GcStruct,
         # unwrap it
         if hasattr(self, 'container'):
+            # an integer, cast to a ptr, cast to an opaque    
+            if type(self.container) is int:
+                return self.container
             return self.container._normalizedcontainer()
         else:
             return _parentable._normalizedcontainer(self)
@@ -1831,6 +1863,33 @@ def runtime_type_info(p):
                                  "        returned: %s,\n"
                                  "should have been: %s" % (p, result2, result))
     return result
+
+def identityhash(p):
+    """Returns the lltype-level hash of the given GcStruct.
+    Also works with most ootype objects.  Not for NULL.
+    See rlib.objectmodel.compute_identity_hash() for more
+    information about the RPython-level meaning of this.
+    """
+    assert p
+    return p._identityhash()
+
+def identityhash_nocache(p):
+    """Version of identityhash() to use from backends that don't care about
+    caching."""
+    assert p
+    return p._identityhash(cache=False)
+
+def init_identity_hash(p, value):
+    """For a prebuilt object p, initialize its hash value to 'value'."""
+    assert isinstance(typeOf(p), Ptr)
+    p = normalizeptr(p)
+    if not p:
+        raise ValueError("cannot change hash(NULL)!")
+    if hasattr(p._obj, '_hash_cache_'):
+        raise ValueError("the hash of %r was already computed" % (p,))
+    if typeOf(p).TO._is_varsize():
+        raise ValueError("init_identity_hash(): not for varsized types")
+    p._obj._hash_cache_ = intmask(value)
 
 def isCompatibleType(TYPE1, TYPE2):
     return TYPE1._is_compatible(TYPE2)

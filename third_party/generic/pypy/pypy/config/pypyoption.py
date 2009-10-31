@@ -18,7 +18,8 @@ default_modules = essential_modules.copy()
 default_modules.update(dict.fromkeys(
     ["_codecs", "gc", "_weakref", "marshal", "errno",
      "math", "_sre", "_pickle_support", "operator",
-     "recparser", "symbol", "_random", "__pypy__"]))
+     "parser", "symbol", "token", "_ast", "_random", "__pypy__",
+     "_testing"]))
 
 
 # --allworkingmodules
@@ -26,7 +27,7 @@ working_modules = default_modules.copy()
 working_modules.update(dict.fromkeys(
     ["_socket", "unicodedata", "mmap", "fcntl",
       "rctime" , "select", "zipimport", "_lsprof",
-     "crypt", "signal", "dyngram", "_rawffi", "termios", "zlib",
+     "crypt", "signal", "_rawffi", "termios", "zlib",
      "struct", "md5", "sha", "bz2", "_minimal_curses", "cStringIO",
      "thread", "itertools", "pyexpat", "_ssl"]
 ))
@@ -101,11 +102,8 @@ def get_module_validator(modname):
 
 pypy_optiondescription = OptionDescription("objspace", "Object Space Options", [
     ChoiceOption("name", "Object Space name",
-                 ["std", "flow", "thunk", "dump", "taint", "reflective"],
+                 ["std", "flow", "thunk", "dump", "taint"],
                  "std",
-                 requires={"reflective":
-                               [("objspace.disable_call_speedhacks", True)]
-                          },
                  cmdline='--objspace -o'),
 
     ChoiceOption("parser", "which parser to use for app-level code",
@@ -119,8 +117,7 @@ pypy_optiondescription = OptionDescription("objspace", "Object Space Options", [
     OptionDescription("opcodes", "opcodes to enable in the interpreter", [
         BoolOption("CALL_LIKELY_BUILTIN", "emit a special bytecode for likely calls to builtin functions",
                    default=False,
-                   requires=[("objspace.std.withmultidict", True),
-                             ("translation.stackless", False)]),
+                   requires=[("translation.stackless", False)]),
         BoolOption("CALL_METHOD", "emit a special bytecode for expr.name()",
                    default=False),
         ]),
@@ -186,8 +183,8 @@ pypy_optiondescription = OptionDescription("objspace", "Object Space Options", [
 
         BoolOption("withsmallint", "use tagged integers",
                    default=False,
-                   requires=[("translation.gc", "boehm"),
-                             ("objspace.std.withprebuiltint", False)]),
+                   requires=[("objspace.std.withprebuiltint", False),
+                             ("translation.taggedpointers", True)]),
 
         BoolOption("withprebuiltint", "prebuild commonly used int objects",
                    default=False),
@@ -224,38 +221,25 @@ pypy_optiondescription = OptionDescription("objspace", "Object Space Options", [
                    default=False,
                    requires=[("objspace.std.withrope", True)]),
 
-        BoolOption("withmultidict",
-                   "use dictionaries optimized for flexibility",
-                   default=False),
-
         BoolOption("withcelldict",
                    "use dictionaries that are optimized for being used as module dicts",
                    default=False,
-                   requires=[("objspace.std.withmultidict", True),
-                             ("objspace.opcodes.CALL_LIKELY_BUILTIN", False),
+                   requires=[("objspace.opcodes.CALL_LIKELY_BUILTIN", False),
                              ("objspace.honor__builtins__", False)]),
 
         BoolOption("withsharingdict",
                    "use dictionaries that share the keys part",
-                   default=False,
-                   requires=[("objspace.std.withmultidict", True)]),
+                   default=False),
 
         BoolOption("withdictmeasurement",
                    "create huge files with masses of information "
                    "about dictionaries",
-                   default=False,
-                   requires=[("objspace.std.withmultidict", True)]),
+                   default=False),
 
         BoolOption("withbucketdict",
                    "use dictionaries with chained hash tables "
                    "(default is open addressing)",
-                   default=False,
-                   requires=[("objspace.std.withmultidict", True)]),
-
-        BoolOption("withsmalldicts",
-                   "handle small dictionaries differently",
-                   default=False,
-                   requires=[("objspace.std.withmultidict", True)]),
+                   default=False),
 
         BoolOption("withrangelist",
                    "enable special range list implementation that does not "
@@ -274,8 +258,7 @@ pypy_optiondescription = OptionDescription("objspace", "Object Space Options", [
                    "track whether an instance attribute shadows a type"
                    " attribute",
                    default=False,
-                   requires=[("objspace.std.withmultidict", True),
-                             ("objspace.std.withtypeversion", True),
+                   requires=[("objspace.std.withtypeversion", True),
                              ("translation.rweakref", True)]),
         BoolOption("withmethodcache",
                    "try to cache method lookups",
@@ -290,28 +273,6 @@ pypy_optiondescription = OptionDescription("objspace", "Object Space Options", [
         IntOption("methodcachesizeexp",
                   " 2 ** methodcachesizeexp is the size of the of the method cache ",
                   default=11),
-        BoolOption("withmultilist",
-                   "use lists optimized for flexibility",
-                   default=False,
-                   requires=[("objspace.std.withrangelist", False),
-                             ("objspace.name", "std"),
-                             ("objspace.std.withtproxy", False)]),
-        BoolOption("withfastslice",
-                   "make list slicing lazy",
-                   default=False,
-                   requires=[("objspace.std.withmultilist", True)]),
-        BoolOption("withchunklist",
-                   "introducing a new nesting level to slow down list operations",
-                   default=False,
-                   requires=[("objspace.std.withmultilist", True)]),
-        BoolOption("withsmartresizablelist",
-                   "only overallocate O(sqrt(n)) elements for lists",
-                   default=False,
-                   requires=[("objspace.std.withmultilist", True)]),
-        BoolOption("withblist",
-                   "good asymptotic performance for very large lists",
-                   default=False,
-                   requires=[("objspace.std.withmultilist", True)]),
         BoolOption("optimized_int_add",
                    "special case the addition of two integers in BINARY_ADD",
                    default=False),
@@ -327,6 +288,9 @@ pypy_optiondescription = OptionDescription("objspace", "Object Space Options", [
         BoolOption("getattributeshortcut",
                    "track types that override __getattribute__",
                    default=False),
+        BoolOption("newshortcut",
+                   "cache and shortcut calling __new__ from builtin types",
+                   default=False),        
 
         BoolOption("logspaceoptypes",
                    "a instrumentation option: before exit, print the types seen by "
@@ -358,8 +322,8 @@ def set_pypy_opt_level(config, level):
     # all the good optimizations for PyPy should be listed here
     if level in ['2', '3']:
         config.objspace.opcodes.suggest(CALL_LIKELY_BUILTIN=True)
+    if level in ['2', '3', 'jit']:
         config.objspace.opcodes.suggest(CALL_METHOD=True)
-        config.objspace.std.suggest(withmultidict=True)
         config.objspace.std.suggest(withshadowtracking=True)
         config.objspace.std.suggest(withrangelist=True)
         config.objspace.std.suggest(withmethodcache=True)
@@ -367,6 +331,7 @@ def set_pypy_opt_level(config, level):
         config.objspace.std.suggest(builtinshortcut=True)
         config.objspace.std.suggest(optimized_list_getitem=True)
         config.objspace.std.suggest(getattributeshortcut=True)
+        config.objspace.std.suggest(newshortcut=True)        
 
     # extra costly optimizations only go in level 3
     if level == '3':
@@ -391,6 +356,12 @@ def set_pypy_opt_level(config, level):
     # some optimizations have different effects depending on the typesystem
     if type_system == 'ootype':
         config.objspace.std.suggest(multimethods="doubledispatch")
+
+    # extra optimizations with the JIT
+    if level == 'jit':
+        if type_system != 'ootype':
+            config.objspace.std.suggest(withsharingdict=True)
+        config.objspace.std.suggest(withcelldict=True)
 
 
 def enable_allworkingmodules(config):

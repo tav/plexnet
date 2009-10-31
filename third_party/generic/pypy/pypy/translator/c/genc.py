@@ -101,6 +101,7 @@ class CBuilder(object):
     c_source_filename = None
     _compiled = False
     modulename = None
+    split = False
     
     def __init__(self, translator, entrypoint, config, gcpolicy=None):
         self.translator = translator
@@ -231,7 +232,8 @@ class CBuilder(object):
             assert not self.config.translation.instrument
             self.eci, cfile, extra = gen_source(db, modulename, targetdir,
                                                 self.eci,
-                                                defines = defines)
+                                                defines = defines,
+                                                split=self.split)
         else:
             pfname = db.get(pf)
             if self.config.translation.instrument:
@@ -428,9 +430,10 @@ class CStandaloneBuilder(CBuilder):
         bk = self.translator.annotator.bookkeeper
         return getfunctionptr(bk.getdesc(self.entrypoint).getuniquegraph())
 
-    def cmdexec(self, args=''):
+    def cmdexec(self, args='', env=None):
         assert self._compiled
-        res = self.translator.platform.execute(self.executable_name, args)
+        res = self.translator.platform.execute(self.executable_name, args,
+                                               env=env)
         if res.returncode != 0:
             raise Exception("Returned %d" % (res.returncode,))
         return res.out
@@ -460,16 +463,16 @@ class CStandaloneBuilder(CBuilder):
             mk.definition('PROFOPT', profopt)
 
         rules = [
-            ('clean', '', 'rm -f $(OBJECTS) $(TARGET) $(GCMAPFILES) *.gc?? ../module_cache/*.gc??'),
-            ('clean_noprof', '', 'rm -f $(OBJECTS) $(TARGET) $(GCMAPFILES)'),
-            ('debug', '', '$(MAKE) CFLAGS="-g -O1 -DRPY_ASSERT" $(TARGET)'),
-            ('debug_exc', '', '$(MAKE) CFLAGS="-g -O1 -DRPY_ASSERT -DDO_LOG_EXC" $(TARGET)'),
-            ('debug_mem', '', '$(MAKE) CFLAGS="-g -O1 -DRPY_ASSERT -DTRIVIAL_MALLOC_DEBUG" $(TARGET)'),
+            ('clean', '', 'rm -f $(OBJECTS) $(TARGET) $(GCMAPFILES) $(ASMFILES) *.gc?? ../module_cache/*.gc??'),
+            ('clean_noprof', '', 'rm -f $(OBJECTS) $(TARGET) $(GCMAPFILES) $(ASMFILES)'),
+            ('debug', '', '$(MAKE) CFLAGS="$(DEBUGFLAGS) -DRPY_ASSERT" $(TARGET)'),
+            ('debug_exc', '', '$(MAKE) CFLAGS="$(DEBUGFLAGS) -DRPY_ASSERT -DDO_LOG_EXC" $(TARGET)'),
+            ('debug_mem', '', '$(MAKE) CFLAGS="$(DEBUGFLAGS) -DRPY_ASSERT -DTRIVIAL_MALLOC_DEBUG" $(TARGET)'),
             ('no_obmalloc', '', '$(MAKE) CFLAGS="-g -O1 -DRPY_ASSERT -DNO_OBMALLOC" $(TARGET)'),
-            ('linuxmemchk', '', '$(MAKE) CFLAGS="-g -O1 -DRPY_ASSERT -DLINUXMEMCHK" $(TARGET)'),
+            ('linuxmemchk', '', '$(MAKE) CFLAGS="$(DEBUGFLAGS) -DRPY_ASSERT -DLINUXMEMCHK" $(TARGET)'),
             ('llsafer', '', '$(MAKE) CFLAGS="-O2 -DRPY_LL_ASSERT" $(TARGET)'),
-            ('lldebug', '', '$(MAKE) CFLAGS="-g -O1 -DRPY_ASSERT -DRPY_LL_ASSERT" $(TARGET)'),
-            ('profile', '', '$(MAKE) CFLAGS="-g -O1 -pg $(CFLAGS)" LDFLAGS="-pg $(LDFLAGS)" $(TARGET)'),
+            ('lldebug', '', '$(MAKE) CFLAGS="$(DEBUGFLAGS) -DRPY_ASSERT -DRPY_LL_ASSERT" $(TARGET)'),
+            ('profile', '', '$(MAKE) CFLAGS="-g -O1 -pg $(CFLAGS) -fno-omit-frame-pointer" LDFLAGS="-pg $(LDFLAGS)" $(TARGET)'),
             ]
         if self.has_profopt():
             rules.append(
@@ -483,15 +486,26 @@ class CStandaloneBuilder(CBuilder):
             mk.rule(*rule)
 
         if self.config.translation.gcrootfinder == 'asmgcc':
-            ofiles = ['%s.s' % (cfile[:-2],) for cfile in mk.cfiles]
+            sfiles = ['%s.s' % (cfile[:-2],) for cfile in mk.cfiles]
+            lblsfiles = ['%s.lbl.s' % (cfile[:-2],) for cfile in mk.cfiles]
             gcmapfiles = ['%s.gcmap' % (cfile[:-2],) for cfile in mk.cfiles]
-            mk.definition('ASMFILES', ofiles)
+            mk.definition('ASMFILES', sfiles)
+            mk.definition('ASMLBLFILES', lblsfiles)
             mk.definition('GCMAPFILES', gcmapfiles)
-            mk.definition('OBJECTS', '$(ASMFILES) gcmaptable.s')
+            mk.definition('DEBUGFLAGS', '-O2 -fomit-frame-pointer -g')
+            mk.definition('OBJECTS', '$(ASMLBLFILES) gcmaptable.s')
             mk.rule('%.s', '%.c', '$(CC) $(CFLAGS) -frandom-seed=$< -o $@ -S $< $(INCLUDEDIRS)')
-            mk.rule('%.gcmap', '%.s', '$(PYPYDIR)/translator/c/gcc/trackgcroot.py -t $< > $@ || (rm -f $@ && exit 1)')
-            mk.rule('gcmaptable.s', '$(GCMAPFILES)', '$(PYPYDIR)/translator/c/gcc/trackgcroot.py $(GCMAPFILES) > $@ || (rm -f $@ && exit 1)')
+            if sys.platform == 'win32':
+                python = sys.executable.replace('\\', '/') + ' '
+            else:
+                python = ""
+            mk.rule('%.lbl.s %.gcmap', '%.s',
+                    python + '$(PYPYDIR)/translator/c/gcc/trackgcroot.py -t $< > $*.gcmap')
+            mk.rule('gcmaptable.s', '$(GCMAPFILES)',
+                    python + '$(PYPYDIR)/translator/c/gcc/trackgcroot.py $(GCMAPFILES) > $@')
 
+        else:
+            mk.definition('DEBUGFLAGS', '-O1 -g')
         mk.write()
         #self.translator.platform,
         #                           ,
@@ -515,7 +529,7 @@ class SourceGenerator:
         self.path = None
         self.namespace = NameManager()
 
-    def set_strategy(self, path):
+    def set_strategy(self, path, split=True):
         all_nodes = list(self.database.globalcontainers())
         # split off non-function nodes. We don't try to optimize these, yet.
         funcnodes = []
@@ -526,7 +540,8 @@ class SourceGenerator:
             else:
                 othernodes.append(node)
         # for now, only split for stand-alone programs.
-        if self.database.standalone:
+        #if self.database.standalone:
+        if split:
             self.one_source_file = False
         self.funcnodes = funcnodes
         self.othernodes = othernodes
@@ -781,7 +796,10 @@ def gen_source_standalone(database, modulename, targetdir, eci,
     for key, value in defines.items():
         print >> fi, '#define %s %s' % (key, value)
 
-    print >> fi, '#define Py_BUILD_CORE  /* for Windows: avoid pulling libs in */'
+    if sys.platform == 'win32':
+        print >> fi, '#define Py_BUILD_CORE /* avoid pulling python libs in */'
+        print >> fi, '#define WIN32_LEAN_AND_MEAN /* winsock/winsock2 mess */'
+
     print >> fi, '#include "pyconfig.h"'
 
     eci.write_c_header(fi)
@@ -817,7 +835,7 @@ def gen_source_standalone(database, modulename, targetdir, eci,
     files, eci = eci.get_module_files()
     return eci, filename, sg.getextrafiles() + list(files)
 
-def gen_source(database, modulename, targetdir, eci, defines={}):
+def gen_source(database, modulename, targetdir, eci, defines={}, split=False):
     assert not database.standalone
     if isinstance(targetdir, str):
         targetdir = py.path.local(targetdir)
@@ -833,6 +851,9 @@ def gen_source(database, modulename, targetdir, eci, defines={}):
     print >> f
     for key, value in defines.items():
         print >> fi, '#define %s %s' % (key, value)
+
+    if sys.platform == 'win32':
+        print >> fi, '#define WIN32_LEAN_AND_MEAN /* winsock/winsock2 mess */'
 
     print >> fi, '#include "pyconfig.h"'
 
@@ -852,7 +873,9 @@ def gen_source(database, modulename, targetdir, eci, defines={}):
     # 2) Implementation of functions and global structures and arrays
     #
     sg = SourceGenerator(database, preimplementationlines)
-    sg.set_strategy(targetdir)
+    sg.set_strategy(targetdir, split)
+    if split:
+        database.prepare_inline_helpers()
     sg.gen_readable_parts_of_source(f)
 
     gen_startupcode(f, database)

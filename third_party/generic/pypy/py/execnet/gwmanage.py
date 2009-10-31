@@ -21,12 +21,8 @@ class GatewayManager:
             if not spec.chdir and not spec.popen:
                 spec.chdir = defaultchdir
             self.specs.append(spec)
-
-    def trace(self, msg):
-        self.notify("trace", "gatewaymanage", msg)
-
-    def notify(self, eventname, *args, **kwargs):
-        py._com.pyplugins.notify(eventname, *args, **kwargs)
+        self.hook = py._com.HookRelay(
+            py.execnet._HookSpecs, py._com.comregistry)
 
     def makegateways(self):
         assert not self.gateways
@@ -34,7 +30,8 @@ class GatewayManager:
             gw = py.execnet.makegateway(spec)
             self.gateways.append(gw)
             gw.id = "[%s]" % len(self.gateways)
-            self.notify("gwmanage_newgateway", gw, gw._rinfo())
+            self.hook.pyexecnet_gwmanage_newgateway(
+                gateway=gw, platinfo=gw._rinfo())
 
     def getgateways(self, remote=True, inplacelocal=True):
         if not self.gateways and self.specs:
@@ -79,16 +76,19 @@ class GatewayManager:
                 rsync.add_target_host(gateway, finished=finished)
                 seen[spec] = gateway
         if seen:
-            self.notify("gwmanage_rsyncstart", source=source, gateways=seen.values())
+            self.hook.pyexecnet_gwmanage_rsyncstart(
+                source=source, 
+                gateways=seen.values(),
+            )
             rsync.send()
-            self.notify("gwmanage_rsyncfinish", source=source, gateways=seen.values())
-        else:
-            self.trace("rsync: nothing to do.")
+            self.hook.pyexecnet_gwmanage_rsyncfinish(
+                source=source, 
+                gateways=seen.values()
+            )
 
     def exit(self):
         while self.gateways:
             gw = self.gateways.pop()
-            self.trace("exiting gateway %s" % gw)
             gw.exit()
 
 class HostRSync(py.execnet.RSync):

@@ -26,17 +26,28 @@ by the genoo.py subclass of the backend
 """
 
 from pypy.rpython.ootypesystem import ootype
+from pypy.rpython.lltypesystem import rffi
 import operator
 
-MAX_CONST_PER_STEP = 100
+MAX_CONST_PER_STEP = 50
 
 PRIMITIVE_TYPES = set([ootype.Void, ootype.Bool, ootype.Char, ootype.UniChar,
                        ootype.Float, ootype.Signed, ootype.Unsigned,
                        ootype.String, ootype.Unicode, ootype.SignedLongLong,
-                       ootype.UnsignedLongLong])
+                       ootype.UnsignedLongLong, rffi.SHORT])
 
 def is_primitive(TYPE):
     return TYPE in PRIMITIVE_TYPES
+
+def get_primitive_constant(TYPE, value):
+    if is_primitive(TYPE):
+        return TYPE, value
+    if TYPE is ootype.Object:
+        obj = value.obj
+        T2 = ootype.typeOf(obj)
+        if obj is not None and is_primitive(T2):
+            return T2, obj
+    return None, None
 
 def push_constant(db, TYPE, value, gen):
     """ General method that pushes the value of the specified constant
@@ -50,9 +61,10 @@ def push_constant(db, TYPE, value, gen):
     """
 
     constgen = db.constant_generator
-    
-    if is_primitive(TYPE):
-        return constgen.push_primitive_constant(gen, TYPE, value)
+
+    TYPE2, value2 = get_primitive_constant(TYPE, value)
+    if TYPE2 is not None:
+        return constgen.push_primitive_constant(gen, TYPE2, value2)
 
     const = constgen.record_const(value)
     if const.is_inline():
@@ -175,6 +187,9 @@ class BaseConstantGenerator(object):
         should be an ootype constant value.  Not generally called
         directly, but it can be if desired. """
         assert not is_primitive(value)
+        if isinstance(value, ootype._object) and value: # leave ootype.NULL as is
+            value = value.obj
+            self.db.cts.lltype_to_cts(value._TYPE) # record const
         if value in self.cache:
             return self.cache[value]
         const = self._create_complex_const(value)
@@ -188,7 +203,7 @@ class BaseConstantGenerator(object):
 
         """ A helper method which creates a Constant wrapper object for
         the given value.  Uses the types defined in the sub-class. """
-        
+
         # Determine if the static type differs from the dynamic type.
         if isinstance(value, ootype._view):
             static_type = value._TYPE
@@ -425,7 +440,8 @@ class AbstractConst(object):
     # Internal helpers
     
     def _record_const_if_complex(self, TYPE, value):
-        if not is_primitive(TYPE):
+        TYPE2, value2 = get_primitive_constant(TYPE, value)
+        if not TYPE2:
             self.db.constant_generator.record_const(value)
 
 
@@ -705,8 +721,7 @@ class DictConst(AbstractConst):
 
         gen.add_comment('Initializing dictionary constant')
 
-        if KEYTYPE is ootype.Void:
-            assert VALUETYPE is ootype.Void
+        if KEYTYPE is ootype.Void and VALUETYPE is ootype.Void:
             return
 
         for key, value in self.value._dict.iteritems():
@@ -733,7 +748,8 @@ class StaticMethodConst(AbstractConst):
     def record_dependencies(self):
         if self.value is ootype.null(self.value._TYPE):
             return
-        self.db.pending_function(self.value.graph)
+        if hasattr(self.value, 'graph'):
+            self.db.pending_function(self.value.graph)
         self.delegate_type = self.db.record_delegate(self.value._TYPE)
 
     def initialize_data(self, constgen, gen):

@@ -4,6 +4,7 @@ from pypy.rpython.lltypesystem.lltype import LowLevelType, Signed, Unsigned, Flo
 from pypy.rpython.lltypesystem.lltype import Bool, Void, UniChar, typeOf, \
         Primitive, isCompatibleType, enforce, saferecursive, SignedLongLong, UnsignedLongLong
 from pypy.rpython.lltypesystem.lltype import frozendict, isCompatibleType
+from pypy.rpython.lltypesystem.lltype import identityhash
 from pypy.rlib.rarithmetic import intmask
 from pypy.rlib import objectmodel
 from pypy.tool.uid import uid
@@ -12,6 +13,20 @@ from pypy.tool.uid import uid
 STATICNESS = True
 
 class OOType(LowLevelType):
+
+    oopspec_name = None
+
+    _classes = {}
+
+    @property
+    def _class(self):
+        try:
+            return self._classes[self]
+        except KeyError:
+            cls = _class(self)
+            self._classes[self] = cls
+            return cls
+
 
     def _is_compatible(TYPE1, TYPE2):
         if TYPE1 == TYPE2:
@@ -43,6 +58,16 @@ class ForwardReference(OOType):
         raise TypeError("%r object is not hashable" % self.__class__.__name__)
 
 
+# warning: the name Object is rebount at the end of file
+class Object(OOType):
+    """
+    A type which everything can be casted to.
+    """
+
+    def _defl(self):
+        return self._null
+
+
 class Class(OOType):
 
     def _defl(self):
@@ -50,7 +75,7 @@ class Class(OOType):
 
     def _example(self):
         return _class(ROOT)
-
+    
 Class = Class()
 
 class Instance(OOType):
@@ -70,12 +95,13 @@ class Instance(OOType):
         self._methods = frozendict()
         self._fields = frozendict()
         self._overridden_defaults = frozendict()
+        self._fields_with_default = []
 
         self._add_fields(fields)
         self._add_methods(methods)
 
         self._null = make_null_instance(self)
-        self._class = _class(self)
+        self.__dict__['_class'] = _class(self)
 
     def __eq__(self, other):
         return self is other
@@ -106,7 +132,22 @@ class Instance(OOType):
         assert isinstance(INSTANCE, Instance)
         self._subclasses.append(INSTANCE)
 
-    def _add_fields(self, fields):
+    def _all_subclasses(self):
+        """
+        Transitive closure on self._subclasses.
+
+        Return a set containing all direct and indirect subclasses,
+        including itself.
+        """
+        res = set()
+        stack = [self]
+        while stack:
+            item = stack.pop()
+            res.add(item)
+            stack += item._subclasses
+        return res
+
+    def _add_fields(self, fields, with_default=False):
         fields = fields.copy()    # mutated below
         for name, defn in fields.iteritems():
             _, meth = self._lookup(name)
@@ -132,6 +173,8 @@ class Instance(OOType):
                     raise TypeError("Expected type %r for default" % (ootype,))
 
         self._fields.update(fields)
+        if with_default:
+            self._fields_with_default.extend(fields.items())
 
     def _override_default_for_fields(self, fields):
         # sanity check
@@ -219,6 +262,11 @@ class Instance(OOType):
             graphs.update(SUBTYPE._lookup_graphs(meth_name))
         return graphs
 
+    def _get_fields_with_default(self):
+        if self._superclass is None:
+            return self._fields_with_default[:]
+        return self._superclass._get_fields_with_default() + self._fields_with_default
+
 
 
 class SpecializableType(OOType):
@@ -238,7 +286,7 @@ class StaticMethod(SpecializableType):
     def __init__(self, args, result):
         self.ARGS = tuple(args)
         self.RESULT = result
-        self._null = _static_meth(self, _callable=None)
+        self._null = _null_static_meth(self)
 
     def _example(self):
         _retval = self.RESULT._example()
@@ -250,6 +298,8 @@ class StaticMethod(SpecializableType):
     def __repr__(self):
         return "<%s(%s, %s)>" % (self.__class__.__name__, list(self.ARGS), self.RESULT)
 
+    __str__ = __repr__
+
     def _specialize(self, generic_types):
         ARGS = tuple([self._specialize_type(ARG, generic_types)
                       for ARG in self.ARGS])
@@ -258,6 +308,8 @@ class StaticMethod(SpecializableType):
 
 
 class Meth(StaticMethod):
+
+    SELFTYPE = None
 
     def __init__(self, args, result):
         StaticMethod.__init__(self, args, result)
@@ -278,11 +330,16 @@ class Record(BuiltinType):
 
     # We try to keep Record as similar to Instance as possible, so backends
     # can treat them polymorphically, if they choose to do so.
-    
+
     def __init__(self, fields, _hints={}):
+        if isinstance(fields, dict):
+            fields = fields.items()    # random order in that case
         self._fields = frozendict()
-        for name, ITEMTYPE in fields.items():
+        fields_in_order = []
+        for name, ITEMTYPE in fields:
             self._fields[name] = ITEMTYPE, ITEMTYPE._defl()
+            fields_in_order.append(name)
+        self._fields_in_order = tuple(fields_in_order)
         self._null = _null_record(self)
         self._hints = frozendict(_hints)
 
@@ -310,22 +367,28 @@ class Record(BuiltinType):
             return self, None
 
     def __str__(self):
-        item_str = ["%s: %s" % (str(name), str(ITEMTYPE))
-                    for name, (ITEMTYPE, _) in self._fields.items()]
+        item_str = ["%s: %s" % (str(name), str(self._fields[name][0]))
+                    for name in self._fields_in_order]
         return '%s(%s)' % (self.__class__.__name__, ", ".join(item_str))
 
 class BuiltinADTType(BuiltinType):
 
     immutable = False # conservative
 
-    def _setup_methods(self, generic_types, can_raise=[]):
+    def _setup_methods(self, generic_types, can_raise=[], pure_meth=[]):
         methods = {}
         for name, meth in self._GENERIC_METHODS.iteritems():
             args = [self._specialize_type(arg, generic_types) for arg in meth.ARGS]
             result = self._specialize_type(meth.RESULT, generic_types)
-            methods[name] = Meth(args, result)
+            METH = Meth(args, result)
+            METH.SELFTYPE = self
+            methods[name] = METH
         self._METHODS = frozendict(methods)
         self._can_raise = tuple(can_raise)
+        if pure_meth == 'ALL':
+            self._pure_meth = tuple(methods.keys())
+        else:
+            self._pure_meth = tuple(pure_meth)
 
     def _lookup(self, meth_name):
         METH = self._METHODS.get(meth_name)
@@ -333,7 +396,10 @@ class BuiltinADTType(BuiltinType):
         if METH is not None:
             cls = self._get_interp_class()
             can_raise = meth_name in self._can_raise
-            meth = _meth(METH, _name=meth_name, _callable=getattr(cls, meth_name), _can_raise=can_raise)
+            pure_meth = meth_name in self._pure_meth
+            meth = _meth(METH, _name=meth_name,
+                         _callable=getattr(cls, meth_name),
+                         _can_raise=can_raise, _pure_meth=pure_meth)
             meth._virtual = False
         return self, meth
 
@@ -343,6 +409,7 @@ class BuiltinADTType(BuiltinType):
 
 class AbstractString(BuiltinADTType):
 
+    oopspec_name = 'str'
     immutable = True
 
     def __init__(self):
@@ -350,6 +417,7 @@ class AbstractString(BuiltinADTType):
 
         generic_types = { self.SELFTYPE_T: self }
         self._GENERIC_METHODS = frozendict({
+            "ll_hash": Meth([], Signed),
             "ll_stritem_nonneg": Meth([Signed], self.CHAR),
             "ll_strlen": Meth([], Signed),
             "ll_strconcat": Meth([self.SELFTYPE_T], self.SELFTYPE_T),
@@ -367,11 +435,11 @@ class AbstractString(BuiltinADTType):
             "ll_upper": Meth([], self.SELFTYPE_T),
             "ll_lower": Meth([], self.SELFTYPE_T),
             "ll_substring": Meth([Signed, Signed], self.SELFTYPE_T), # ll_substring(start, count)
-            "ll_split_chr": Meth([self.CHAR], Array(self.SELFTYPE_T)),
+            "ll_split_chr": Meth([self.CHAR], Array(self.SELFTYPE_T)), # XXX this is not pure!
             "ll_contains": Meth([self.CHAR], Bool),
             "ll_replace_chr_chr": Meth([self.CHAR, self.CHAR], self.SELFTYPE_T),
             })
-        self._setup_methods(generic_types)
+        self._setup_methods(generic_types, pure_meth='ALL')
 
     def _example(self):
         return self._defl()
@@ -386,6 +454,7 @@ class AbstractString(BuiltinADTType):
 class String(AbstractString):
     SELFTYPE_T = object()
     CHAR = Char
+    _name = 'String'
 
     # TODO: should it return _null or ''?
     def _defl(self):
@@ -404,6 +473,7 @@ class String(AbstractString):
 class Unicode(AbstractString):
     SELFTYPE_T = object()
     CHAR = UniChar
+    _name = 'Unicode'
 
     # TODO: should it return _null or ''?
     def _defl(self):
@@ -421,6 +491,8 @@ class Unicode(AbstractString):
 
 # WARNING: the name 'StringBuilder' is rebound at the end of file
 class StringBuilder(BuiltinADTType):
+    oopspec_name = 'stringbuilder'
+
     def __init__(self, STRINGTP, CHARTP):
         self._null = _null_string_builder(self)
         self._GENERIC_METHODS = frozendict({
@@ -465,6 +537,9 @@ class List(BuiltinADTType):
     # placeholder, because we want backends to distinguish that.
     SELFTYPE_T = object()
     ITEMTYPE_T = object()
+    oopspec_name = 'list'
+    oopspec_new = 'new(0)'
+    oopspec_new_argnames = ()
 
     def __init__(self, ITEMTYPE=None):
         self.ITEM = ITEMTYPE
@@ -501,6 +576,7 @@ class List(BuiltinADTType):
     def ll_newlist(self, length):
         from pypy.rpython.ootypesystem import rlist
         return rlist.ll_newlist(self, length)
+    ll_newlist._annenforceargs_ = (None, int)
 
     # NB: We are expecting Lists of the same ITEMTYPE to compare/hash
     # equal. We don't redefine __eq__/__hash__ since the implementations
@@ -514,7 +590,7 @@ class List(BuiltinADTType):
         if not isinstance(other, List):
             return False
         if self.ITEM is None or other.ITEM is None:
-            raise TypeError("Can't compare uninitialized List type.")
+            return False # behave like a ForwardReference, i.e. compare by identity
         return BuiltinADTType.__eq__(self, other)
 
     def __ne__(self, other):
@@ -557,9 +633,13 @@ class Array(BuiltinADTType):
     
     SELFTYPE_T = object()
     ITEMTYPE_T = object()
+    oopspec_name = 'list'
+    oopspec_new = 'new(length)'
+    oopspec_new_argnames = ('length',)
 
-    def __init__(self, ITEMTYPE=None):
+    def __init__(self, ITEMTYPE=None, _hints = {}):
         self.ITEM = ITEMTYPE
+        self._hints = frozendict(_hints)
         self._null = _null_array(self)
         if ITEMTYPE is not None:
             self._init_methods()
@@ -591,7 +671,7 @@ class Array(BuiltinADTType):
         if not isinstance(other, Array):
             return False
         if self.ITEM is None or other.ITEM is None:
-            raise TypeError("Can't compare uninitialized List type.")
+            return False # behave like a ForwardReference, i.e. compare by identity
         return BuiltinADTType.__eq__(self, other)
 
     def __ne__(self, other):
@@ -626,6 +706,7 @@ class Array(BuiltinADTType):
     def ll_newlist(self, length):
         from pypy.rpython.ootypesystem import rlist
         return rlist.ll_newarray(self, length)
+    ll_newlist._annenforceargs_ = (None, int)
 
     def ll_convert_from_array(self, array):
         return array
@@ -635,6 +716,9 @@ class Dict(BuiltinADTType):
     SELFTYPE_T = object()
     KEYTYPE_T = object()
     VALUETYPE_T = object()
+    oopspec_name = 'dict'
+    oopspec_new = 'new()'
+    oopspec_new_argnames = ()
 
     def __init__(self, KEYTYPE=None, VALUETYPE=None):
         self._KEYTYPE = KEYTYPE
@@ -691,7 +775,7 @@ class Dict(BuiltinADTType):
         if not isinstance(other, Dict):
             return False
         if not self._is_initialized() or not other._is_initialized():
-            raise TypeError("Can't compare uninitialized Dict type.")
+            return False # behave like a ForwardReference, i.e. compare by identity
         return BuiltinADTType.__eq__(self, other) 
 
     def __ne__(self, other):
@@ -776,11 +860,70 @@ class DictItemsIterator(BuiltinADTType):
     
 # ____________________________________________________________
 
+class _object(object):
+
+    def __init__(self, obj):
+        self._TYPE = Object
+        assert obj is None or obj, 'Cannot create _object of a null value, use make_object() instead'
+        self.obj = obj
+
+    def __nonzero__(self):
+        return self.obj is not None
+
+    def __eq__(self, other):
+        if not isinstance(other, _object):
+            raise TypeError("comparing an _object with %r" % other)
+        if self.obj is None:
+            return other.obj is None
+        elif other.obj is None:
+            return self.obj is None
+        else:
+            return self.obj.__class__ == other.obj.__class__ and \
+                   self.obj == other.obj
+
+    def __ne__(self, other):
+        return not (self == other)
+
+    def __hash__(self):
+        return hash(self.obj)
+
+    def _identityhash(self):
+        try:
+            return self.obj._identityhash()
+        except AttributeError:
+            return hash(self.obj)
+
+    def _cast_to_object(self):
+        return self
+
+    def _cast_to(self, EXPECTED_TYPE):
+        if self.obj is None:
+            return null(EXPECTED_TYPE)
+        elif EXPECTED_TYPE is Object:
+            return self
+        elif isinstance(EXPECTED_TYPE, Instance):
+            return oodowncast(EXPECTED_TYPE, self.obj)
+        else:
+            T = typeOf(self.obj)
+            if T != EXPECTED_TYPE:
+                raise RuntimeError("Invalid cast: %s --> %s" % (T, EXPECTED_TYPE))
+            return self.obj
+
+
 class _class(object):
     _TYPE = Class
 
     def __init__(self, INSTANCE):
         self._INSTANCE = INSTANCE
+
+    def _cast_to_object(self):
+        return make_object(self)
+
+    def __repr__(self):
+        return '%s(%s)' % (self.__class__.__name__, self._INSTANCE)
+
+    def __nonzero__(self):
+        return self._INSTANCE is not None
 
 nullruntimeclass = _class(None)
 Class._null = nullruntimeclass
@@ -847,10 +990,10 @@ class _instance(object):
         return self
 
     def _identityhash(self):
-        if self:
-            return intmask(id(self))
-        else:
-            return 0   # for all null instances
+        return hash(self)
+
+    def _cast_to_object(self):
+        return make_object(ooupcast(ROOT, self))
 
 
 def _null_mixin(klass):
@@ -913,7 +1056,8 @@ class _view(object):
         return not (self == other)
 
     def __eq__(self, other):
-        assert isinstance(other, (_view, _callable))
+        if not isinstance(other, _view):
+            return False
         a = self._inst
         b = other._inst
         return a.__class__ == b.__class__ and a == b
@@ -964,6 +1108,9 @@ class _view(object):
     def _identityhash(self):
         return self._inst._identityhash()
 
+    def _cast_to_object(self):
+        return make_object(ooupcast(ROOT, self))
+
 if STATICNESS:
     instance_impl = _view
 else:
@@ -988,6 +1135,12 @@ def make_null_instance(INSTANCE):
     if STATICNESS:
         inst = _view(INSTANCE, inst)
     return inst
+
+def make_object(llvalue):
+    if llvalue:
+        return _object(llvalue)
+    else:
+        return NULL
 
 class _callable(object):
 
@@ -1026,6 +1179,9 @@ class _callable(object):
    def __hash__(self):
        return hash(frozendict(self.__dict__))
 
+   def _cast_to_object(self):
+       return make_object(self)
+
 
 class _static_meth(_callable):
    allowed_types = (StaticMethod,)
@@ -1040,6 +1196,17 @@ class _static_meth(_callable):
 
    def __repr__(self):
        return 'sm %s' % self._name
+
+   def _as_ptr(self):
+       return self
+
+class _null_static_meth(_null_mixin(_static_meth), _static_meth):
+
+    def __init__(self, STATICMETHOD):
+        self.__dict__["_TYPE"] = STATICMETHOD
+        self.__dict__["_name"] = "? (null)"
+        self.__dict__["_callable"] = None
+
 
 class _forward_static_meth(_static_meth):
    allowed_types = (StaticMethod, ForwardReference)
@@ -1063,6 +1230,9 @@ class _bound_meth(object):
     def __call__(self, *args):
         callb, checked_args = self.meth._checkargs(args)
         return callb(self.inst, *checked_args)
+
+    def _cast_to_object(self):
+        return make_object(self)
 
 
 class _meth(_callable):
@@ -1185,10 +1355,14 @@ class _builtin_type(object):
         TYPE = object.__getattribute__(self, "_TYPE")
         _, meth = TYPE._lookup(name)
         if meth is not None:
-            return meth._bound(TYPE, self)
+            res = meth._bound(TYPE, self)
+            res._name = name
+            return res
 
         return object.__getattribute__(self, name)
 
+    def _cast_to_object(self):
+        return make_object(self)
 
 class _string(_builtin_type):
 
@@ -1202,6 +1376,9 @@ class _string(_builtin_type):
     def __cmp__(self, other):
         return cmp(self._str, other._str)
 
+    def __repr__(self):
+        return 'ootype._string(value=%r)' % self._str
+
     def make_string(self, value):
         if self._TYPE is String:
             return make_string(value)
@@ -1209,6 +1386,12 @@ class _string(_builtin_type):
             return make_unicode(value)
         else:
             assert False, 'Unknown type %s' % self._TYPE
+
+    def ll_hash(self):
+        # NOT_RPYTHON
+        # hopefully, ll_hash() should not be called on NULL
+        assert self._str is not None
+        return objectmodel._hash_string(self._str)
 
     def ll_stritem_nonneg(self, i):
         # NOT_RPYTHON
@@ -1445,6 +1628,12 @@ class _array(_builtin_type):
         assert index >= 0
         self._array[index] = item
 
+    def _identityhash(self):
+        if self:
+            return intmask(id(self))
+        else:
+            return 0 # for all null arrays
+
 class _null_array(_null_mixin(_array), _array):
 
     def __init__(self, ARRAY):
@@ -1472,8 +1661,9 @@ class _dict(_builtin_type):
         # NOT_RPYTHON
         assert typeOf(key) == self._TYPE._KEYTYPE
         assert typeOf(value) == self._TYPE._VALUETYPE
+        if key not in self._dict:
+            self._stamp += 1
         self._dict[key] = value
-        self._stamp += 1
 
     def ll_remove(self, key):
         # NOT_RPYTHON
@@ -1592,10 +1782,16 @@ class _record(object):
         if self:
             return intmask(id(self))
         else:
-            return 0 # for all null tuples
+            return 0 # for all null records
+
+    def _items_in_order(self):
+        return [self._items[name] for name in self._TYPE._fields_in_order]
+
+    def _ll_hash(self):
+        return objectmodel._ll_hash_tuple(self._items_in_order())
 
     def __hash__(self):
-        key = tuple(self._items.keys()), tuple(self._items.values())
+        key = tuple(self._items_in_order())
         return hash(key)
 
     def __eq__(self, other):
@@ -1603,6 +1799,9 @@ class _record(object):
 
     def __ne__(self, other):
         return not (self == other)
+
+    def _cast_to_object(self):
+        return make_object(self)
 
 class _null_record(_null_mixin(_record), _record):
 
@@ -1629,7 +1828,11 @@ def oonewarray(ARRAY, length):
 def runtimenew(class_):
     assert isinstance(class_, _class)
     assert class_ is not nullruntimeclass
-    return make_instance(class_._INSTANCE)
+    TYPE = class_._INSTANCE
+    if isinstance(TYPE, Record):
+        return _record(TYPE)
+    else:
+        return make_instance(TYPE)
 
 def static_meth(FUNCTION, name,  **attrs):
     return _static_meth(FUNCTION, _name=name, **attrs)
@@ -1664,8 +1867,8 @@ def subclassof(class1, class2):
     assert class2 is not nullruntimeclass
     return isSubclass(class1._INSTANCE, class2._INSTANCE)
 
-def addFields(INSTANCE, fields):
-    INSTANCE._add_fields(fields)
+def addFields(INSTANCE, fields, with_default=False):
+    INSTANCE._add_fields(fields, with_default)
 
 def addMethods(INSTANCE, methods):
     INSTANCE._add_methods(methods)
@@ -1673,9 +1876,9 @@ def addMethods(INSTANCE, methods):
 def overrideDefaultForFields(INSTANCE, fields):
     INSTANCE._override_default_for_fields(fields)
 
-def runtimeClass(INSTANCE):
-    assert isinstance(INSTANCE, Instance)
-    return INSTANCE._class
+def runtimeClass(TYPE):
+    assert isinstance(TYPE, OOType)
+    return TYPE._class
 
 def isSubclass(C1, C2):
     c = C1
@@ -1699,14 +1902,14 @@ def ooupcast(INSTANCE, instance):
 def oodowncast(INSTANCE, instance):
     return instance._downcast(INSTANCE)
 
-def ooidentityhash(inst):
-    assert isinstance(typeOf(inst), (Instance, Record))
-    return inst._identityhash()
+def cast_to_object(whatever):
+    TYPE = typeOf(whatever)
+    assert isinstance(TYPE, OOType)
+    return whatever._cast_to_object()
 
-def oohash(inst):
-    assert typeOf(inst) is String or typeOf(inst) is Unicode
-    # for now only strings and unicode are supported
-    return hash(inst._str)
+def cast_from_object(EXPECTED_TYPE, obj):
+    assert typeOf(obj) is Object
+    return obj._cast_to(EXPECTED_TYPE)
 
 def oostring(obj, base):
     """
@@ -1766,6 +1969,25 @@ def ooweakref_create(obj):
     ref = new(WeakReference)
     ref.ll_set(obj)
     return ref
+
+def build_unbound_method_wrapper(meth):
+    METH = typeOf(meth)
+    methname = meth._name
+    funcname = '%s_wrapper' % methname
+    nb_args = len(METH.ARGS)
+    arglist = ', '.join('a%d' % i for i in range(nb_args))
+    ns = {'methname': methname}
+    code = py.code.Source("""
+    def %s(self, %s):
+        m = getattr(self, methname)
+        return m(%s)
+    """ % (funcname, arglist, arglist))
+    exec code.compile() in ns
+    return ns[funcname]
+
+Object = Object()
+NULL = _object(None)
+Object._null = NULL
 
 ROOT = Instance('Root', None, _is_root=True)
 String = String()

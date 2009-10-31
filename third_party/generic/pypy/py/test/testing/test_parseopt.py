@@ -1,13 +1,11 @@
 import py
 from py.__.test import parseopt 
 
-pytest_plugins = 'pytest_iocapture'
-
 class TestParser:
-    def test_init(self, stdcapture):
+    def test_init(self, capsys):
         parser = parseopt.Parser(usage="xyz")
         py.test.raises(SystemExit, 'parser.parse(["-h"])')
-        out, err = stdcapture.reset()
+        out, err = capsys.readouterr()
         assert out.find("xyz") != -1
 
     def test_group_add_and_get(self):
@@ -18,7 +16,15 @@ class TestParser:
         py.test.raises(ValueError, parser.addgroup, "hello")
         group2 = parser.getgroup("hello")
         assert group2 is group
-        py.test.raises(ValueError, parser.getgroup, 'something')
+
+    def test_getgroup_addsgroup(self):
+        parser = parseopt.Parser()
+        group = parser.getgroup("hello", description="desc")
+        assert group.name == "hello"
+        assert group.description == "desc"
+        group2 = parser.getgroup("hello")
+        assert group2 is group
+
 
     def test_group_addoption(self):
         group = parseopt.OptionGroup("hello")

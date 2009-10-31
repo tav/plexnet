@@ -536,6 +536,10 @@ class SomeLLADTMeth(SomeObject):
     def can_be_none(self):
         return False
 
+class SomeOOObject(SomeObject):
+    def __init__(self):
+        self.ootype = ootype.Object
+
 class SomeOOClass(SomeObject):
     def __init__(self, ootype):
         self.ootype = ootype
@@ -575,6 +579,8 @@ def annotation_to_lltype(s_val, info=None):
         return s_val.method
     if isinstance(s_val, SomeOOClass):
         return ootype.Class
+    if isinstance(s_val, SomeOOObject):
+        return s_val.ootype
     if isinstance(s_val, SomeInteriorPtr):
         p = s_val.ll_ptrtype
         if 0 in p.offsets:
@@ -612,6 +618,8 @@ def lltype_to_annotation(T):
             return SomeOOStaticMeth(T)
         elif T == ootype.Class:
             return SomeOOClass(ootype.ROOT)
+        elif T == ootype.Object:
+            return SomeOOObject()
         elif isinstance(T, lltype.InteriorPtr):
             return SomeInteriorPtr(T)
         else:
@@ -624,15 +632,6 @@ def ll_to_annotation(v):
         # i think we can only get here in the case of void-returning
         # functions
         return s_None
-    if isinstance(v, MethodType):
-        ll_ptrtype = lltype.typeOf(v.im_self)
-        assert isinstance(ll_ptrtype, (lltype.Ptr, lltype.InteriorPtr))
-        return SomeLLADTMeth(ll_ptrtype, v.im_func)
-    if isinstance(v, FunctionType):
-        # this case should only be for staticmethod instances used in
-        # adtmeths: the getattr() result is then a plain FunctionType object.
-        from pypy.annotation.bookkeeper import getbookkeeper
-        return getbookkeeper().immutablevalue(v)
     if isinstance(v, lltype._interior_ptr):
         ob = v._parent
         if ob is None:

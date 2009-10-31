@@ -1,33 +1,30 @@
 """
-pytes plugin for easing testing of pytest runs themselves. 
+funcargs and support code for testing py.test's own functionality. 
 """
 
 import py
-from py.__.test import event
+import sys, os
+import inspect
 from py.__.test.config import Config as pytestConfig
+import hookspec
+import subprocess
 
-class PytesterPlugin:
-    def pytest_funcarg__linecomp(self, pyfuncitem):
-        return LineComp()
+pytest_plugins = '_pytest'
 
-    def pytest_funcarg__LineMatcher(self, pyfuncitem):
-        return LineMatcher
+def pytest_funcarg__linecomp(request):
+    return LineComp()
 
-    def pytest_funcarg__testdir(self, pyfuncitem):
-        tmptestdir = TmpTestdir(pyfuncitem)
-        pyfuncitem.addfinalizer(tmptestdir.finalize)
-        return tmptestdir
- 
-    def pytest_funcarg__EventRecorder(self, pyfuncitem):
-        return EventRecorder
+def pytest_funcarg__LineMatcher(request):
+    return LineMatcher
 
-    def pytest_funcarg__eventrecorder(self, pyfuncitem):
-        evrec = EventRecorder(py._com.pyplugins)
-        pyfuncitem.addfinalizer(lambda: evrec.pyplugins.unregister(evrec))
-        return evrec
+def pytest_funcarg__testdir(request):
+    tmptestdir = TmpTestdir(request)
+    return tmptestdir
 
-def test_generic(plugintester):
-    plugintester.apicheck(PytesterPlugin)
+def pytest_funcarg__reportrecorder(request):
+    reprec = ReportRecorder(py._com.comregistry)
+    request.addfinalizer(lambda: reprec.comregistry.unregister(reprec))
+    return reprec
 
 class RunResult:
     def __init__(self, ret, outlines, errlines):
@@ -38,11 +35,12 @@ class RunResult:
         self.stderr = LineMatcher(errlines)
 
 class TmpTestdir:
-    def __init__(self, pyfuncitem):
-        self.pyfuncitem = pyfuncitem
+    def __init__(self, request):
+        self.request = request
+        self._pytest = request.getfuncargvalue("_pytest")
         # XXX remove duplication with tmpdir plugin 
-        basetmp = pyfuncitem.config.ensuretemp("testdir")
-        name = pyfuncitem.name
+        basetmp = request.config.ensuretemp("testdir")
+        name = request.function.__name__
         for i in range(100):
             try:
                 tmpdir = basetmp.mkdir(name + str(i))
@@ -56,11 +54,16 @@ class TmpTestdir:
         self.plugins = []
         self._syspathremove = []
         self.chdir() # always chdir
+        assert hasattr(self, '_olddir')
+        self.request.addfinalizer(self.finalize)
 
-    def Config(self, pyplugins=None, topdir=None):
+    def __repr__(self):
+        return "<TmpTestdir %r>" % (self.tmpdir,)
+
+    def Config(self, comregistry=None, topdir=None):
         if topdir is None:
             topdir = self.tmpdir.dirpath()
-        return pytestConfig(pyplugins, topdir=topdir)
+        return pytestConfig(comregistry, topdir=topdir)
 
     def finalize(self):
         for p in self._syspathremove:
@@ -68,8 +71,25 @@ class TmpTestdir:
         if hasattr(self, '_olddir'):
             self._olddir.chdir()
 
+    def getreportrecorder(self, obj):
+        if isinstance(obj, py._com.Registry):
+            registry = obj
+        elif hasattr(obj, 'comregistry'):
+            registry = obj.comregistry
+        elif hasattr(obj, 'pluginmanager'):
+            registry = obj.pluginmanager.comregistry
+        elif hasattr(obj, 'config'):
+            registry = obj.config.pluginmanager.comregistry
+        else:
+            raise ValueError("obj %r provides no comregistry" %(obj,))
+        assert isinstance(registry, py._com.Registry)
+        reprec = ReportRecorder(registry)
+        reprec.hookrecorder = self._pytest.gethookrecorder(hookspec, registry)
+        reprec.hook = reprec.hookrecorder.hook
+        return reprec
+
     def chdir(self):
-        old = self.testdir.chdir()
+        old = self.tmpdir.chdir()
         if not hasattr(self, '_olddir'):
             self._olddir = old 
 
@@ -77,7 +97,7 @@ class TmpTestdir:
         items = kwargs.items()
         if args:
             source = "\n".join(map(str, args))
-            basename = self.pyfuncitem.name 
+            basename = self.request.function.__name__
             items.insert(0, (basename, source))
         ret = None
         for name, value in items:
@@ -109,9 +129,11 @@ class TmpTestdir:
             
     def mkdir(self, name):
         return self.tmpdir.mkdir(name)
-    
-    def chdir(self):
-        return self.tmpdir.chdir()
+
+    def mkpydir(self, name):
+        p = self.mkdir(name)
+        p.ensure("__init__.py")
+        return p
 
     def genitems(self, colitems):
         return list(self.session.genitems(colitems))
@@ -120,40 +142,54 @@ class TmpTestdir:
         #config = self.parseconfig(*args)
         config = self.parseconfig(*args)
         session = config.initsession()
-        rec = EventRecorder(config.bus)
+        rec = self.getreportrecorder(config)
         colitems = [config.getfsnode(arg) for arg in config.args]
         items = list(session.genitems(colitems))
         return items, rec 
 
-    def runitem(self, source, **runnerargs):
+    def runitem(self, source):
         # used from runner functional tests 
         item = self.getitem(source)
         # the test class where we are called from wants to provide the runner 
-        testclassinstance = self.pyfuncitem.obj.im_self
+        testclassinstance = self.request.function.im_self
         runner = testclassinstance.getrunner()
-        return runner(item, **runnerargs)
+        return runner(item)
 
     def inline_runsource(self, source, *cmdlineargs):
         p = self.makepyfile(source)
         l = list(cmdlineargs) + [p]
         return self.inline_run(*l)
 
+    def inline_runsource1(self, *args):
+        args = list(args)
+        source = args.pop()
+        p = self.makepyfile(source)
+        l = list(args) + [p]
+        reprec = self.inline_run(*l)
+        reports = reprec.getreports("pytest_runtest_logreport")
+        assert len(reports) == 1, reports 
+        return reports[0]
+
     def inline_run(self, *args):
         config = self.parseconfig(*args)
-        config.pytestplugins.do_configure(config)
+        config.pluginmanager.do_configure(config)
         session = config.initsession()
-        sorter = EventRecorder(config.bus)
+        reprec = self.getreportrecorder(config)
         session.main()
-        config.pytestplugins.do_unconfigure(config)
-        return sorter
+        config.pluginmanager.do_unconfigure(config)
+        return reprec 
 
     def config_preparse(self):
         config = self.Config()
         for plugin in self.plugins:
             if isinstance(plugin, str):
-                config.pytestplugins.import_plugin(plugin)
+                config.pluginmanager.import_plugin(plugin)
             else:
-                config.pytestplugins.register(plugin)
+                if isinstance(plugin, dict):
+                    plugin = PseudoPlugin(plugin) 
+                if not config.pluginmanager.isregistered(plugin):
+                    config.pluginmanager.register(plugin)
+        #print "config.pluginmanager.impname2plugin", config.pluginmanager.impname2plugin
         return config
 
     def parseconfig(self, *args):
@@ -166,14 +202,17 @@ class TmpTestdir:
 
     def parseconfigure(self, *args):
         config = self.parseconfig(*args)
-        config.pytestplugins.do_configure(config)
+        config.pluginmanager.do_configure(config)
         return config
 
     def getitem(self,  source, funcname="test_func"):
         modcol = self.getmodulecol(source)
-        item = modcol.join(funcname) 
-        assert item is not None, "%r item not found in module:\n%s" %(funcname, source)
-        return item 
+        moditems = modcol.collect()
+        for item in modcol.collect():
+            if item.name == funcname:
+                return item 
+        else:
+            assert 0, "%r item not found in module:\n%s" %(funcname, source)
 
     def getitems(self,  source):
         modcol = self.getmodulecol(source)
@@ -187,12 +226,18 @@ class TmpTestdir:
         return self.config.getfsnode(path)
 
     def getmodulecol(self,  source, configargs=(), withinit=False):
-        kw = {self.pyfuncitem.name: py.code.Source(source).strip()}
+        kw = {self.request.function.__name__: py.code.Source(source).strip()}
         path = self.makepyfile(**kw)
         if withinit:
             self.makepyfile(__init__ = "#")
         self.config = self.parseconfig(path, *configargs)
         self.session = self.config.initsession()
+        #self.config.pluginmanager.do_configure(config=self.config)
+        # XXX 
+        self.config.pluginmanager.import_plugin("runner") 
+        plugin = self.config.pluginmanager.getplugin("runner") 
+        plugin.pytest_configure(config=self.config)
+
         return self.config.getfsnode(path)
 
     def prepare(self):
@@ -209,6 +254,11 @@ class TmpTestdir:
     def popen(self, cmdargs, stdout, stderr, **kw):
         if not hasattr(py.std, 'subprocess'):
             py.test.skip("no subprocess module")
+        env = os.environ.copy()
+        env['PYTHONPATH'] = ":".join(filter(None, [
+            str(os.getcwd()), env.get('PYTHONPATH', '')]))
+        kw['env'] = env
+        #print "env", env
         return py.std.subprocess.Popen(cmdargs, stdout=stdout, stderr=stderr, **kw)
 
     def run(self, *cmdargs):
@@ -225,8 +275,13 @@ class TmpTestdir:
         p1 = py.path.local("stdout")
         p2 = py.path.local("stderr")
         print "running", cmdargs, "curdir=", py.path.local()
-        popen = self.popen(cmdargs, stdout=p1.open("w"), stderr=p2.open("w"))
+        f1 = p1.open("w")
+        f2 = p2.open("w")
+        popen = self.popen(cmdargs, stdout=f1, stderr=f2, 
+            close_fds=(sys.platform != "win32"))
         ret = popen.wait()
+        f1.close()
+        f2.close()
         out, err = p1.readlines(cr=0), p2.readlines(cr=0)
         if err:
             for line in err: 
@@ -237,10 +292,17 @@ class TmpTestdir:
         return RunResult(ret, out, err)
 
     def runpybin(self, scriptname, *args):
+        fullargs = self._getpybinargs(scriptname) + args
+        return self.run(*fullargs)
+
+    def _getpybinargs(self, scriptname):
         bindir = py.path.local(py.__file__).dirpath("bin")
         script = bindir.join(scriptname)
         assert script.check()
-        return self.run(py.std.sys.executable, script, *args)
+        return py.std.sys.executable, script
+
+    def runpython(self, script):
+        return self.run(py.std.sys.executable, script)
 
     def runpytest(self, *args):
         p = py.path.local.make_numbered_dir(prefix="runpytest-", 
@@ -248,76 +310,72 @@ class TmpTestdir:
         args = ('--basetemp=%s' % p, ) + args 
         return self.runpybin("py.test", *args)
 
-class Event:
-    def __init__(self, name, args, kwargs):
-        self.name = name
-        self.args = args
-        self.kwargs = kwargs
-    def __repr__(self):
-        return "<Event %r %r>" %(self.name, self.args)
+    def spawn_pytest(self, string, expect_timeout=10.0):
+        pexpect = py.test.importorskip("pexpect", "2.3")
+        basetemp = self.tmpdir.mkdir("pexpect")
+        invoke = "%s %s" % self._getpybinargs("py.test")
+        cmd = "%s --basetemp=%s %s" % (invoke, basetemp, string)
+        child = pexpect.spawn(cmd, logfile=basetemp.join("spawn.out").open("w"))
+        child.timeout = expect_timeout
+        return child
 
-class EventRecorder(object):
-    def __init__(self, pyplugins, debug=False): # True):
-        self.events = []
-        self.pyplugins = pyplugins
-        self.debug = debug
-        pyplugins.register(self)
+class PseudoPlugin:
+    def __init__(self, vars):
+        self.__dict__.update(vars) 
 
-    def pyevent(self, name, *args, **kwargs):
-        if name == "plugin_registered" and args == (self,):
-            return
-        if self.debug:
-            print "[event: %s]: %s **%s" %(name, ", ".join(map(str, args)), kwargs,)
-        self.events.append(Event(name, args, kwargs))
+class ReportRecorder(object):
+    def __init__(self, comregistry):
+        self.comregistry = comregistry
+        comregistry.register(self)
 
-    def popevent(self, name):
-        for i, event in py.builtin.enumerate(self.events):
-            if event.name == name:
-                del self.events[i]
-                return event
-        raise KeyError("popevent: %r not found in %r"  %(name, self.events))
+    def getcall(self, name):
+        return self.hookrecorder.getcall(name)
 
-    def get(self, cls):
+    def popcall(self, name):
+        return self.hookrecorder.popcall(name)
+
+    def getcalls(self, names):
+        """ return list of ParsedCall instances matching the given eventname. """
+        return self.hookrecorder.getcalls(names)
+
+    # functionality for test reports 
+
+    def getreports(self, names="pytest_runtest_logreport pytest_collectreport"):
+        return [x.report for x in self.getcalls(names)]
+
+    def matchreport(self, inamepart="", names="pytest_runtest_logreport pytest_collectreport"):
+        """ return a testreport whose dotted import path matches """
         l = []
-        for event in self.events:
-            value = event.args[0]
-            if isinstance(value, cls):
-                l.append(value)
-        return l 
+        for rep in self.getreports(names=names):
+            colitem = rep.getnode()
+            if not inamepart or inamepart in colitem.listnames():
+                l.append(rep)
+        if not l:
+            raise ValueError("could not find test report matching %r: no test reports at all!" %
+                (inamepart,))
+        if len(l) > 1:
+            raise ValueError("found more than one testreport matching %r: %s" %(
+                             inamepart, l))
+        return l[0]
 
-    def getnamed(self, *names):
-        l = []
-        for event in self.events:
-            if event.name in names:
-                l.append(event.args[0])
-        return l 
-
-    def getfirstnamed(self, name):
-        for event in self.events:
-            if event.name == name:
-                return event.args[0]
-
-    def getfailures(self, names='itemtestreport collectionreport'):
-        l = []
-        for ev in self.getnamed(*names.split()):
-            if ev.failed:
-                l.append(ev)
-        return l
+    def getfailures(self, names='pytest_runtest_logreport pytest_collectreport'):
+        return [rep for rep in self.getreports(names) if rep.failed]
 
     def getfailedcollections(self):
-        return self.getfailures('collectionreport')
+        return self.getfailures('pytest_collectreport')
 
     def listoutcomes(self):
         passed = []
         skipped = []
         failed = []
-        for ev in self.getnamed('itemtestreport'): # , 'collectionreport'):
-            if ev.passed: 
-                passed.append(ev) 
-            elif ev.skipped: 
-                skipped.append(ev) 
-            elif ev.failed:
-                failed.append(ev) 
+        for rep in self.getreports("pytest_runtest_logreport"):
+            if rep.passed: 
+                if rep.when == "call": 
+                    passed.append(rep) 
+            elif rep.skipped: 
+                skipped.append(rep) 
+            elif rep.failed:
+                failed.append(rep) 
         return passed, skipped, failed 
 
     def countoutcomes(self):
@@ -329,53 +387,47 @@ class EventRecorder(object):
         assert skipped == len(realskipped)
         assert failed == len(realfailed)
 
-    def getreport(self, inamepart): 
-        """ return a testreport whose dotted import path matches """
-        __tracebackhide__ = True
-        l = []
-        for rep in self.get(event.ItemTestReport):
-            if inamepart in rep.colitem.listnames():
-                l.append(rep)
-        if not l:
-            raise ValueError("could not find test report matching %r: no test reports at all!" %
-                (inamepart,))
-        if len(l) > 1:
-            raise ValueError("found more than one testreport matching %r: %s" %(
-                             inamepart, l))
-        return l[0]
-
     def clear(self):
-        self.events[:] = []
+        self.hookrecorder.calls[:] = []
 
     def unregister(self):
-        self.pyplugins.unregister(self)
+        self.comregistry.unregister(self)
+        self.hookrecorder.finish_recording()
 
-def test_eventrecorder():
-    bus = py._com.PyPlugins()
-    recorder = EventRecorder(bus)
-    bus.notify("anonymous", event.NOP())
-    assert recorder.events 
+def test_reportrecorder(testdir):
+    registry = py._com.Registry()
+    recorder = testdir.getreportrecorder(registry)
     assert not recorder.getfailures()
-    rep = event.ItemTestReport(None, None)
-    rep.passed = False
-    rep.failed = True
-    bus.notify("itemtestreport", rep)
+    item = testdir.getitem("def test_func(): pass")
+    class rep:
+        excinfo = None
+        passed = False
+        failed = True 
+        skipped = False
+        when = "call" 
+
+    recorder.hook.pytest_runtest_logreport(report=rep)
     failures = recorder.getfailures()
     assert failures == [rep]
-    failures = recorder.get(event.ItemTestReport)
-    assert failures == [rep]
-    failures = recorder.getnamed("itemtestreport")
+    failures = recorder.getfailures()
     assert failures == [rep]
 
-    rep = event.ItemTestReport(None, None)
+    class rep:
+        excinfo = None
+        passed = False
+        failed = False
+        skipped = True
+        when = "call" 
     rep.passed = False
     rep.skipped = True
-    bus.notify("itemtestreport", rep)
+    recorder.hook.pytest_runtest_logreport(report=rep)
 
-    rep = event.CollectionReport(None, None)
+    modcol = testdir.getmodulecol("")
+    rep = modcol.config.hook.pytest_make_collect_report(collector=modcol)
     rep.passed = False
     rep.failed = True
-    bus.notify("itemtestreport", rep)
+    rep.skipped = False
+    recorder.hook.pytest_collectreport(report=rep)
 
     passed, skipped, failed = recorder.listoutcomes()
     assert not passed and skipped and failed
@@ -383,15 +435,13 @@ def test_eventrecorder():
     numpassed, numskipped, numfailed = recorder.countoutcomes()
     assert numpassed == 0
     assert numskipped == 1
-    assert numfailed == 2
+    assert numfailed == 1
+    assert len(recorder.getfailedcollections()) == 1
 
     recorder.unregister()
     recorder.clear() 
-    assert not recorder.events
-    assert not recorder.getfailures()
-    bus.notify("itemtestreport", rep)
-    assert not recorder.events 
-    assert not recorder.getfailures()
+    recorder.hook.pytest_runtest_logreport(report=rep)
+    py.test.raises(ValueError, "recorder.getfailures()")
 
 class LineComp:
     def __init__(self):
@@ -449,4 +499,20 @@ class LineMatcher:
         extralines.extend(lines1)
         return extralines 
 
+def test_parseconfig(testdir):
+    config1 = testdir.parseconfig()
+    config2 = testdir.parseconfig()
+    assert config2 != config1
+    assert config1 != py.test.config
+
+def test_testdir_runs_with_plugin(testdir):
+    testdir.makepyfile("""
+        pytest_plugins = "pytest_pytester" 
+        def test_hello(testdir):
+            assert 1
+    """)
+    result = testdir.runpytest()
+    assert result.stdout.fnmatch_lines([
+        "*1 passed*"
+    ])
 

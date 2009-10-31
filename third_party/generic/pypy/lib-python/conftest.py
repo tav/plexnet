@@ -27,18 +27,16 @@ rsyncdirs = ['.', '../pypy']
 # Interfacing/Integrating with py.test's collection process 
 #
 
-class LibPythonPlugin:
-    def pytest_addoption(self, parser):
-        group = parser.addgroup("complicance testing options") 
-        group.addoption('-T', '--timeout', action="store", type="string", 
-           default="1000", dest="timeout", 
-           help="fail a test module after the given timeout. "
-                "specify in seconds or 'NUMmp' aka Mega-Pystones")
-        group.addoption('--pypy', action="store", type="string",
-           dest="pypy",  help="use given pypy executable to run lib-python tests. "
-                              "This will run the tests directly (i.e. not through py.py)")
+def pytest_addoption(parser):
+    group = parser.addgroup("complicance testing options") 
+    group.addoption('-T', '--timeout', action="store", type="string", 
+       default="1000", dest="timeout", 
+       help="fail a test module after the given timeout. "
+            "specify in seconds or 'NUMmp' aka Mega-Pystones")
+    group.addoption('--pypy', action="store", type="string",
+       dest="pypy",  help="use given pypy executable to run lib-python tests. "
+                          "This will run the tests directly (i.e. not through py.py)")
    
-ConftestPlugin = LibPythonPlugin
 option = py.test.config.option 
 
 def gettimeout(): 
@@ -131,7 +129,7 @@ testmap = [
     RegrTest('test__locale.py', skip=skip_win32),
     RegrTest('test_aepack.py', skip=True),
     RegrTest('test_al.py', skip=True),
-    RegrTest('test_ast.py', skip="unsupported module _ast"),
+    RegrTest('test_ast.py', core=True),
     RegrTest('test_anydbm.py'),
     RegrTest('test_applesingle.py', skip=True),
     RegrTest('test_array.py', core=True, usemodules='struct'),
@@ -231,7 +229,7 @@ testmap = [
     RegrTest('test_filecmp.py', core=True),
     RegrTest('test_fileinput.py', core=True),
     RegrTest('test_fnmatch.py', core=True),
-    RegrTest('test_fork1.py'),
+    RegrTest('test_fork1.py', usemodules="thread"),
     RegrTest('test_format.py', core=True),
     RegrTest('test_fpformat.py', core=True),
     RegrTest('test_frozen.py', skip="unsupported extension module"),
@@ -346,7 +344,7 @@ testmap = [
 
     RegrTest('test_pyclbr.py'),
     RegrTest('test_pyexpat.py'),
-    RegrTest('test_queue.py'),
+    RegrTest('test_queue.py', usemodules='thread'),
     RegrTest('test_quopri.py'),
     RegrTest('test_random.py'),
     RegrTest('test_re.py', core=True),
@@ -465,7 +463,7 @@ testmap = [
     RegrTest('test_code.py'),
     RegrTest('test_coding.py'),
     RegrTest('test_complex_args.py'),
-    RegrTest('test_contextlib.py'),
+    RegrTest('test_contextlib.py', usemodules="thread"),
     # we skip test ctypes, since we adapted it massively in order
     # to test what we want to support. There are real failures,
     # but it's about missing features that we don't want to support
@@ -481,13 +479,13 @@ testmap = [
     RegrTest('test_pep352.py'),
     RegrTest('test_platform.py'),
     RegrTest('test_runpy.py'),
-    RegrTest('test_sqlite.py'),
+    RegrTest('test_sqlite.py', usemodules="thread"),
     RegrTest('test_startfile.py', skip="bogus test"),
     RegrTest('test_structmembers.py', skip="depends on _testcapi"),
-    RegrTest('test_urllib2_localnet.py'),
+    RegrTest('test_urllib2_localnet.py', usemodules="thread"),
     RegrTest('test_uuid.py'),
-    RegrTest('test_wait3.py'),
-    RegrTest('test_wait4.py'),
+    RegrTest('test_wait3.py', usemodules="thread"),
+    RegrTest('test_wait4.py', usemodules="thread"),
     RegrTest('test_with.py'),
     RegrTest('test_wsgiref.py'),
     RegrTest('test_xdrlib.py'),
@@ -575,10 +573,6 @@ class ReallyRunFileExternal(py.test.collect.Item):
         regr_script = pypydir.join('tool', 'pytest', 
                                    'run-script', 'regrverbose.py')
         
-        pypy_options = []
-        pypy_options.extend(
-            ['--withmod-%s' % mod for mod in regrtest.usemodules])
-        sopt = " ".join(pypy_options) 
         # we use the regrverbose script to run the test, but don't get
         # confused: it still doesn't set verbose to True by default if
         # regrtest.outputpath() is true, because output tests get confused
@@ -597,7 +591,16 @@ class ReallyRunFileExternal(py.test.collect.Item):
             if not execpath.check():
                 execpath = py.path.local.sysfind(option.pypy)
             if not execpath:
-                raise LookupError("could not find executable %r" %(option.pypy,))
+                raise LookupError("could not find executable %r" %
+                                  (option.pypy,))
+
+            # check modules
+            info = py.process.cmdexec("%s --info" % execpath)
+            for mod in regrtest.usemodules:
+                if "objspace.usemodules.%s: False" % mod in info:
+                    py.test.skip("%s module not included in %s" % (mod,
+                                                                   execpath))
+                    
             cmd = "%s %s %s %s" %(
                 execpath, 
                 regrrun, regrrun_verbosity, fspath.purebasename)
@@ -607,6 +610,11 @@ class ReallyRunFileExternal(py.test.collect.Item):
                 python, watchdog_script, TIMEOUT,
                 cmd)
         else:
+            pypy_options = []
+            pypy_options.extend(
+                ['--withmod-%s' % mod for mod in regrtest.usemodules])
+            sopt = " ".join(pypy_options) 
+
             cmd = "%s %s %d %s %s %s %s %s" %(
                 python, alarm_script, TIMEOUT, 
                 pypy_script, sopt, 
@@ -635,9 +643,9 @@ class ReallyRunFileExternal(py.test.collect.Item):
         if exit_status:
             raise self.ExternalFailure(test_stdout, test_stderr)
 
-    def repr_failure(self, excinfo, outerr):
+    def repr_failure(self, excinfo):
         if not excinfo.errisinstance(self.ExternalFailure):
-            return super(ReallyRunFileExternal, self).repr_failure(excinfo, outerr)
+            return super(ReallyRunFileExternal, self).repr_failure(excinfo)
         out, err = excinfo.value.args
         return out + err
 

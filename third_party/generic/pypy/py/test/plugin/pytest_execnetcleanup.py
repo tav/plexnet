@@ -1,53 +1,54 @@
+"""
+cleanup execnet gateways during test function runs.
+"""
 import py
 
-class ExecnetcleanupPlugin:
+pytest_plugins = "xfail"
+
+def pytest_configure(config):
+    config.pluginmanager.register(Execnetcleanup())
+
+class Execnetcleanup:
     _gateways = None
-    _debug = None
+    def __init__(self, debug=False):
+        self._debug = debug 
 
-    def pytest_configure(self, config):
-        self._debug = config.option.debug
-
-    def trace(self, msg, *args):
-        if self._debug:
-            print "[execnetcleanup %0x] %s %s" %(id(self), msg, args)
-        
-    def pyevent_gateway_init(self, gateway):
-        self.trace("init", gateway)
+    def pyexecnet_gateway_init(self, gateway):
         if self._gateways is not None:
             self._gateways.append(gateway)
         
-    def pyevent_gateway_exit(self, gateway):
-        self.trace("exit", gateway)
+    def pyexecnet_gateway_exit(self, gateway):
         if self._gateways is not None:
             self._gateways.remove(gateway)
 
-    def pyevent_testrunstart(self, event):
-        self.trace("testrunstart", event)
+    def pytest_sessionstart(self, session):
         self._gateways = []
 
-    def pyevent_testrunfinish(self, event):
-        self.trace("testrunfinish", event)
+    def pytest_sessionfinish(self, session, exitstatus):
         l = []
         for gw in self._gateways:
             gw.exit()
             l.append(gw)
         #for gw in l:
         #    gw.join()
-   
-def test_generic(plugintester):
-    plugintester.apicheck(ExecnetcleanupPlugin)
-
-@py.test.mark.xfail("clarify plugin registration/unregistration")
+        
+    def pytest_pyfunc_call(self, __multicall__, pyfuncitem):
+        if self._gateways is not None:
+            gateways = self._gateways[:]
+            res = __multicall__.execute()
+            while len(self._gateways) > len(gateways):
+                self._gateways[-1].exit()
+            return res
+  
 def test_execnetplugin(testdir):
-    p = ExecnetcleanupPlugin()
-    testdir.plugins.append(p)
-    testdir.inline_runsource("""
+    reprec = testdir.inline_runsource("""
         import py
         import sys
         def test_hello():
             sys._gw = py.execnet.PopenGateway()
+        def test_world():
+            assert hasattr(sys, '_gw')
+            py.test.raises(KeyError, "sys._gw.exit()") # already closed 
+            
     """, "-s", "--debug")
-    assert not p._gateways 
-    assert py.std.sys._gw
-    py.test.raises(KeyError, "py.std.sys._gw.exit()") # already closed 
-    
+    reprec.assertoutcome(passed=2)

@@ -281,13 +281,19 @@ class __extend__(pairtype(SomeInteger, SomeInteger)):
     and_.can_only_throw = []
 
     def lshift((int1, int2)):
-        return SomeInteger(knowntype=int1.knowntype)
-
-    lshift_ovf = _clone(lshift, [ValueError, OverflowError])
+        if isinstance(int1, SomeBool):
+            return SomeInteger()
+        else:
+            return SomeInteger(knowntype=int1.knowntype)
+    lshift.can_only_throw = []
+    lshift_ovf = _clone(lshift, [OverflowError])
 
     def rshift((int1, int2)):
-        return SomeInteger(nonneg=int1.nonneg, knowntype=int1.knowntype)
-    rshift.can_only_throw = [ValueError]
+        if isinstance(int1, SomeBool):
+            return SomeInteger(nonneg=True)
+        else:
+            return SomeInteger(nonneg=int1.nonneg, knowntype=int1.knowntype)
+    rshift.can_only_throw = []
 
     def pow((int1, int2), obj3):
         knowntype = rarithmetic.compute_restype(int1.knowntype, int2.knowntype)
@@ -361,16 +367,6 @@ class __extend__(pairtype(SomeInteger, SomeInteger)):
     def gt(intint): return intint._compare_helper('gt', operator.gt)
     def ge(intint): return intint._compare_helper('ge', operator.ge)
 
-class __extend__(pairtype(SomeBool, SomeInteger)):
-    def lshift((int1, int2)):
-        return SomeInteger()
-
-    lshift.can_only_throw = [ValueError]
-    lshift_ovf = _clone(lshift, [ValueError, OverflowError])
-
-    def rshift((int1, int2)):
-        return SomeInteger(nonneg=True)
-    rshift.can_only_throw = [ValueError]
 
 class __extend__(pairtype(SomeBool, SomeBool)):
 
@@ -828,6 +824,7 @@ class __extend__(pairtype(SomeExternalObject, SomeExternalObject)):
 # ____________________________________________________________
 # annotation of low-level types
 from pypy.annotation.model import SomePtr, SomeOOInstance, SomeOOClass
+from pypy.annotation.model import SomeOOObject
 from pypy.annotation.model import ll_to_annotation, annotation_to_lltype
 from pypy.rpython.ootypesystem import ootype
 
@@ -884,10 +881,14 @@ class __extend__(pairtype(SomeOOClass, SomeOOClass)):
             common = r2.ootype
         elif r2.ootype is None:
             common = r1.ootype
-        else:
+        elif r1.ootype == r2.ootype:
+            common = r1.ootype
+        elif isinstance(r1.ootype, ootype.Instance) and isinstance(r2.ootype, ootype.Instance):
             common = ootype.commonBaseclass(r1.ootype, r2.ootype)
             assert common is not None, ('Mixing of incompatible classes %r, %r'
                                         % (r1.ootype, r2.ootype))
+        else:
+            common = ootype.Object
         return SomeOOClass(common)
 
 class __extend__(pairtype(SomeOOInstance, SomeObject)):
@@ -898,6 +899,10 @@ class __extend__(pairtype(SomeObject, SomeOOInstance)):
     def union((obj, r2)):
         return pair(r2, obj).union()
 
+class __extend__(pairtype(SomeOOObject, SomeOOObject)):
+    def union((r1, r2)):
+        assert r1.ootype is ootype.Object and r2.ootype is ootype.Object
+        return SomeOOObject()
 
 #_________________________________________
 # weakrefs

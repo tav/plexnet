@@ -84,12 +84,17 @@ class LLOp(object):
         return op_impl
     fold = roproperty(get_fold_impl)
 
-    def is_pure(self, *ARGTYPES):
+    def is_pure(self, args_v):
         return (self.canfold or                # canfold => pure operation
                 self is llop.debug_assert or   # debug_assert is pure enough
                                                # reading from immutable
                 (self in (llop.getfield, llop.getarrayitem) and
-                 ARGTYPES[0].TO._hints.get('immutable')))
+                 args_v[0].concretetype.TO._hints.get('immutable')) or
+                (self is llop.getfield and     # reading from immutable_field
+                 'immutable_fields' in args_v[0].concretetype.TO._hints and
+                 args_v[1].value in args_v[0].concretetype.TO
+                                           ._hints['immutable_fields'].fields))
+        # XXX: what about ootype immutable arrays?
 
     def __repr__(self):
         return '<LLOp %s>' % (getattr(self, 'opname', '?'),)
@@ -100,6 +105,28 @@ class _LLOP(object):
         return True
 llop = _LLOP()
 
+class VoidMarker(object):
+    # marker wrapper for void arguments to llops
+    def __init__(self, value):
+        self.value = value
+    def _freeze_(self):
+        return True
+
+def void(value):
+    return VoidMarker(value)
+
+class Entry(ExtRegistryEntry):
+    _about_ = void
+
+    def compute_result_annotation(self, s_value):
+        assert s_value.is_constant()
+        from pypy.annotation.bookkeeper import getbookkeeper
+        bk = getbookkeeper()
+        return bk.immutablevalue(VoidMarker(s_value.const))
+
+    def specialize_call(self, hop):
+        from pypy.rpython.lltypesystem import lltype
+        return hop.inputconst(lltype.Void, None)
 
 def enum_ops_without_sideeffects(raising_is_ok=False):
     """Enumerate operations that have no side-effects
@@ -127,8 +154,16 @@ class Entry(ExtRegistryEntry):
         return lltype_to_annotation(RESULTTYPE.const)
 
     def specialize_call(self, hop):
+        from pypy.rpython.lltypesystem import lltype
         op = self.instance    # the LLOp object that was called
-        args_v = [hop.inputarg(r, i+1) for i, r in enumerate(hop.args_r[1:])]
+        args_v = []
+        for i, s_arg in enumerate(hop.args_s[1:]):
+            if s_arg.is_constant() and isinstance(s_arg.const, VoidMarker):
+                v_arg = hop.inputconst(lltype.Void, s_arg.const.value)
+            else:
+                v_arg = hop.inputarg(hop.args_r[i+1], i+1)
+            args_v.append(v_arg)
+
         if op.canraise:
             hop.exception_is_here()
         else:
@@ -189,9 +224,7 @@ LL_OPERATIONS = {
     'int_and':              LLOp(canfold=True),
     'int_or':               LLOp(canfold=True),
     'int_lshift':           LLOp(canfold=True),
-    'int_lshift_val':       LLOp(canraise=(ValueError,), tryfold=True),
     'int_rshift':           LLOp(canfold=True),
-    'int_rshift_val':       LLOp(canraise=(ValueError,), tryfold=True),
     'int_xor':              LLOp(canfold=True),
 
     'int_add_ovf':          LLOp(canraise=(OverflowError,), tryfold=True),
@@ -199,6 +232,7 @@ LL_OPERATIONS = {
               # ^^^ more efficient version when 2nd arg is nonneg
     'int_sub_ovf':          LLOp(canraise=(OverflowError,), tryfold=True),
     'int_mul_ovf':          LLOp(canraise=(OverflowError,), tryfold=True),
+    # the following operations overflow in one case: (-sys.maxint-1) // (-1)
     'int_floordiv_ovf':     LLOp(canraise=(OverflowError,), tryfold=True),
     'int_floordiv_ovf_zer': LLOp(canraise=(OverflowError, ZeroDivisionError),
                                                             tryfold=True),
@@ -206,8 +240,6 @@ LL_OPERATIONS = {
     'int_mod_ovf_zer':      LLOp(canraise=(OverflowError, ZeroDivisionError),
                                                             tryfold=True),
     'int_lshift_ovf':       LLOp(canraise=(OverflowError,), tryfold=True),
-    'int_lshift_ovf_val':   LLOp(canraise=(OverflowError, ValueError,),
-                                                            tryfold=True),
 
     'uint_is_true':         LLOp(canfold=True),
     'uint_invert':          LLOp(canfold=True),
@@ -228,9 +260,7 @@ LL_OPERATIONS = {
     'uint_and':             LLOp(canfold=True),
     'uint_or':              LLOp(canfold=True),
     'uint_lshift':          LLOp(canfold=True),
-    'uint_lshift_val':      LLOp(canraise=(ValueError,), tryfold=True),
     'uint_rshift':          LLOp(canfold=True),
-    'uint_rshift_val':      LLOp(canraise=(ValueError,), tryfold=True),
     'uint_xor':             LLOp(canfold=True),
 
     'float_is_true':        LLOp(canfold=True),
@@ -273,9 +303,7 @@ LL_OPERATIONS = {
     'llong_and':            LLOp(canfold=True),
     'llong_or':             LLOp(canfold=True),
     'llong_lshift':         LLOp(canfold=True),
-    'llong_lshift_val':     LLOp(canraise=(ValueError,), tryfold=True),
     'llong_rshift':         LLOp(canfold=True),
-    'llong_rshift_val':     LLOp(canraise=(ValueError,), tryfold=True),
     'llong_xor':            LLOp(canfold=True),
 
     'ullong_is_true':       LLOp(canfold=True),
@@ -297,9 +325,7 @@ LL_OPERATIONS = {
     'ullong_and':           LLOp(canfold=True),
     'ullong_or':            LLOp(canfold=True),
     'ullong_lshift':        LLOp(canfold=True),
-    'ullong_lshift_val':    LLOp(canraise=(ValueError,), tryfold=True),
     'ullong_rshift':        LLOp(canfold=True),
-    'ullong_rshift_val':    LLOp(canraise=(ValueError,), tryfold=True),
     'ullong_xor':           LLOp(canfold=True),
 
     'cast_primitive':       LLOp(canfold=True),
@@ -387,16 +413,25 @@ LL_OPERATIONS = {
     'adr_call':             LLOp(canraise=(Exception,)),
     'cast_ptr_to_adr':      LLOp(sideeffects=False),
     'cast_adr_to_ptr':      LLOp(canfold=True),
-    'cast_adr_to_int':      LLOp(canfold=True),
+    'cast_adr_to_int':      LLOp(sideeffects=False),
     'cast_int_to_adr':      LLOp(canfold=True),   # not implemented in llinterp
+
+    'get_group_member':     LLOp(canfold=True),
+    'get_next_group_member':LLOp(canfold=True),
+    'is_group_member_nonzero':LLOp(canfold=True),
+    'extract_ushort':       LLOp(canfold=True),
+    'combine_ushort':       LLOp(canfold=True),
+    'gc_gettypeptr_group':  LLOp(canfold=True),
 
     # __________ used by the JIT ________
 
-    'call_boehm_gc_alloc':  LLOp(canraise=(MemoryError,)),
     'jit_marker':           LLOp(),
     'promote_virtualizable':LLOp(canrun=True),
     'get_exception_addr':   LLOp(),
     'get_exc_value_addr':   LLOp(),
+    'do_malloc_fixedsize_clear': LLOp(canunwindgc=True),
+    'do_malloc_varsize_clear': LLOp(canunwindgc=True),
+    'get_write_barrier_failing_case': LLOp(sideeffects=False),
 
     # __________ GC operations __________
 
@@ -409,12 +444,29 @@ LL_OPERATIONS = {
     'gc_push_alive_pyobj':  LLOp(),
     'gc_pop_alive_pyobj':   LLOp(),
     'gc_reload_possibly_moved': LLOp(),
+    # see rlib/objectmodel for gc_identityhash and gc_id
+    'gc_identityhash':      LLOp(canraise=(MemoryError,), sideeffects=False,
+                                 canunwindgc=True),
     'gc_id':                LLOp(canraise=(MemoryError,), sideeffects=False),
+                                 # ^^^ but canunwindgc=False, as it is
+                                 # allocating non-GC structures only
+    'gc_obtain_free_space': LLOp(),
     'gc_set_max_heap_size': LLOp(),
     'gc_can_move'         : LLOp(sideeffects=False),
     'gc_thread_prepare'   : LLOp(canraise=(MemoryError,)),
+                                 # ^^^ but canunwindgc=False, as it is
+                                 # allocating non-GC structures only
     'gc_thread_run'       : LLOp(),
     'gc_thread_die'       : LLOp(),
+    'gc_assume_young_pointers': LLOp(),
+
+    # ------- JIT & GC interaction, only for some GCs ----------
+    
+    'gc_adr_of_nursery_free' : LLOp(),
+    # ^^^ returns an address of nursery free pointer, for later modifications
+    'gc_adr_of_nursery_top' : LLOp(),
+    # ^^^ returns an address of pointer, since it can change at runtime
+    
     # experimental operations in support of thread cloning, only
     # implemented by the Mark&Sweep GC
     'gc_x_swap_pool':       LLOp(canraise=(MemoryError,), canunwindgc=True),
@@ -422,13 +474,10 @@ LL_OPERATIONS = {
                                  canunwindgc=True),
     'gc_x_size_header':     LLOp(),
 
-    # for llvm.gcroot() support.  can change at any time
-    'llvm_frameaddress':    LLOp(sideeffects=False),
-    'llvm_gcmapstart':      LLOp(sideeffects=False),
-    'llvm_gcmapend':        LLOp(sideeffects=False),
-    'llvm_gccallshapes':    LLOp(sideeffects=False),
-    'llvm_store_gcroot':    LLOp(),
-    'llvm_load_gcroot':     LLOp(),
+    # for asmgcroot support to get the address of various static structures
+    # see translator/c/src/mem.h for the valid indices
+    'gc_asmgcroot_static':  LLOp(sideeffects=False),
+    'gc_stack_bottom':      LLOp(canrun=True),
 
     # NOTE NOTE NOTE! don't forget *** canunwindgc=True *** for anything that
     # can go through a stack unwind, in particular anything that mallocs!
@@ -464,7 +513,6 @@ LL_OPERATIONS = {
     'keepalive':            LLOp(),
     'same_as':              LLOp(canfold=True),
     'hint':                 LLOp(),
-    'is_early_constant':    LLOp(sideeffects=False),
     'check_no_more_arg':    LLOp(canraise=(Exception,)),
     'check_self_nonzero':   LLOp(canraise=(Exception,)),
     'decode_arg':           LLOp(canraise=(Exception,)),
@@ -485,15 +533,17 @@ LL_OPERATIONS = {
     'instrument_count':     LLOp(),
 
     # __________ ootype operations __________
-    'new':                  LLOp(oo=True, canraise=(Exception,)),
-    'runtimenew':           LLOp(oo=True, canraise=(Exception,)),
-    'oonewcustomdict':      LLOp(oo=True, canraise=(Exception,)),
-    'oonewarray':           LLOp(oo=True, canraise=(Exception,)),
+    'new':                  LLOp(oo=True, canraise=(MemoryError,)),
+    'runtimenew':           LLOp(oo=True, canraise=(MemoryError,)),
+    'oonewcustomdict':      LLOp(oo=True, canraise=(MemoryError,)),
+    'oonewarray':           LLOp(oo=True, canraise=(MemoryError,)),
     'oosetfield':           LLOp(oo=True),
-    'oogetfield':           LLOp(oo=True, sideeffects=False),
+    'oogetfield':           LLOp(oo=True, sideeffects=False, canrun=True),
     'oosend':               LLOp(oo=True, canraise=(Exception,)),
     'ooupcast':             LLOp(oo=True, canfold=True),
     'oodowncast':           LLOp(oo=True, canfold=True),
+    'cast_to_object':       LLOp(oo=True, canfold=True),
+    'cast_from_object':     LLOp(oo=True, canfold=True),
     'oononnull':            LLOp(oo=True, canfold=True),
     'ooisnot':              LLOp(oo=True, canfold=True),
     'ooisnull':             LLOp(oo=True, canfold=True),
@@ -501,11 +551,9 @@ LL_OPERATIONS = {
     'instanceof':           LLOp(oo=True, canfold=True),
     'classof':              LLOp(oo=True, canfold=True),
     'subclassof':           LLOp(oo=True, canfold=True),
-    'ooidentityhash':       LLOp(oo=True, sideeffects=False),  # not an id()!
     'oostring':             LLOp(oo=True, sideeffects=False),
     'ooparse_int':          LLOp(oo=True, canraise=(ValueError,)),
     'ooparse_float':        LLOp(oo=True, canraise=(ValueError,)),
-    'oohash':               LLOp(oo=True, sideeffects=False),
     'oounicode':            LLOp(oo=True, canraise=(UnicodeDecodeError,)),
 
     # _____ read frame var support ___

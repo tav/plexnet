@@ -2,6 +2,7 @@ from pypy.interpreter.error import OperationError
 from pypy.interpreter import function, pycode, pyframe
 from pypy.interpreter.baseobjspace import Wrappable
 from pypy.interpreter.mixedmodule import MixedModule
+from pypy.rlib import jit
 from pypy.tool.uid import uid
 
 class Cell(Wrappable):
@@ -82,9 +83,9 @@ class __extend__(pyframe.PyFrame):
 
     cells = None
 
-    def initialize_frame_scopes(self, closure):
-        super_initialize_frame_scopes(self, closure)
-        code = self.pycode
+    @jit.unroll_safe
+    def initialize_frame_scopes(self, closure, code):
+        super_initialize_frame_scopes(self, closure, code)
         ncellvars = len(code.co_cellvars)
         nfreevars = len(code.co_freevars)
         if not nfreevars:
@@ -150,6 +151,7 @@ class __extend__(pyframe.PyFrame):
             else:
                 cell.set(w_value)
 
+    @jit.unroll_safe
     def init_cells(self):
         if self.cells is None:
             return
@@ -196,11 +198,7 @@ class __extend__(pyframe.PyFrame):
     def STORE_DEREF(f, varindex, *ignored):
         # nested scopes: access a variable through its cell object
         w_newvalue = f.popvalue()
-        #try:
         cell = f.cells[varindex]
-        #except IndexError:
-        #    import pdb; pdb.set_trace()
-        #    raise
         cell.set(w_newvalue)
 
     def MAKE_CLOSURE(f, numdefaults, *ignored):

@@ -1,165 +1,109 @@
 
 import py
 import os
-from py._com import PyPlugins, MultiCall
+from py.__._com import Registry, MultiCall, HookRelay, varnames
 
-pytest_plugins = "xfail"
-
+def test_varnames():
+    def f(x):
+        pass
+    class A:
+        def f(self, y):
+            pass
+    assert varnames(f) == ("x",)
+    assert varnames(A.f) == ('y',)
+    assert varnames(A().f) == ('y',)
+    
 class TestMultiCall:
     def test_uses_copy_of_methods(self):
         l = [lambda: 42]
-        mc = MultiCall(l)
+        mc = MultiCall(l, {})
+        repr(mc)
         l[:] = []
         res = mc.execute()
         return res == 42
 
     def test_call_passing(self):
         class P1:
-            def m(self, __call__, x):
-                assert __call__.currentmethod == self.m 
-                assert len(__call__.results) == 1
-                assert not __call__.methods
+            def m(self, __multicall__, x):
+                assert len(__multicall__.results) == 1
+                assert not __multicall__.methods
                 return 17
 
         class P2:
-            def m(self, __call__, x):
-                assert __call__.currentmethod == self.m 
-                assert __call__.args
-                assert __call__.results == []
-                assert __call__.methods
+            def m(self, __multicall__, x):
+                assert __multicall__.results == []
+                assert __multicall__.methods
                 return 23 
                
         p1 = P1() 
         p2 = P2() 
-        multicall = MultiCall([p1.m, p2.m], 23)
+        multicall = MultiCall([p1.m, p2.m], {'x': 23})
+        assert "23" in repr(multicall)
         reslist = multicall.execute()
         assert len(reslist) == 2
         # ensure reversed order 
         assert reslist == [23, 17]
 
-    def test_optionalcallarg(self):
-        class P1:
-            def m(self, x):
-                return x
-        call = MultiCall([P1().m], 23)
-        assert call.execute() == [23]
-        assert call.execute(firstresult=True) == 23
- 
+    def test_keyword_args(self):
+        def f(x): 
+            return x + 1
+        class A:
+            def f(self, x, y):
+                return x + y
+        multicall = MultiCall([f, A().f], dict(x=23, y=24))
+        assert "'x': 23" in repr(multicall)
+        assert "'y': 24" in repr(multicall)
+        reslist = multicall.execute()
+        assert reslist == [24+23, 24]
+        assert "2 results" in repr(multicall)
+
+    def test_keywords_call_error(self):
+        multicall = MultiCall([lambda x: x], {})
+        py.test.raises(TypeError, "multicall.execute()")
+
     def test_call_subexecute(self):
-        def m(__call__):
-            subresult = __call__.execute(firstresult=True)
+        def m(__multicall__):
+            subresult = __multicall__.execute()
             return subresult + 1
 
         def n():
             return 1
 
-        call = MultiCall([n, m])
-        res = call.execute(firstresult=True)
+        call = MultiCall([n, m], {}, firstresult=True)
+        res = call.execute()
         assert res == 2
 
-    def test_call_exclude_other_results(self):
-        def m(__call__):
-            __call__.exclude_other_results()
-            return 10
-
-        def n():
+    def test_call_none_is_no_result(self):
+        def m1():
             return 1
+        def m2():
+            return None
+        res = MultiCall([m1, m2], {}, firstresult=True).execute()
+        assert res == 1
+        res = MultiCall([m1, m2], {}).execute()
+        assert res == [1]
 
-        call = MultiCall([n, n, m, n])
-        res = call.execute()
-        assert res == [10]
-        # doesn't really make sense for firstresult-mode - because
-        # we might not have had a chance to run at all. 
-        #res = call.execute(firstresult=True)
-        #assert res == 10
-                
-
-class TestPyPlugins:
-    def test_MultiCall(self):
-        plugins = PyPlugins()
-        assert hasattr(plugins, "MultiCall")
+class TestRegistry:
 
     def test_register(self):
-        plugins = PyPlugins()
+        registry = Registry()
         class MyPlugin:
             pass
         my = MyPlugin()
-        plugins.register(my)
-        assert plugins.getplugins() == [my]
+        registry.register(my)
+        assert list(registry) == [my]
         my2 = MyPlugin()
-        plugins.register(my2)
-        assert plugins.getplugins() == [my, my2]
+        registry.register(my2)
+        assert list(registry) == [my, my2]
 
-        assert plugins.isregistered(my)
-        assert plugins.isregistered(my2)
-        plugins.unregister(my)
-        assert not plugins.isregistered(my)
-        assert plugins.getplugins() == [my2]
-
-    def test_onregister(self):
-        plugins = PyPlugins()
-        l = []
-        class MyApi:
-            def pyevent_plugin_registered(self, plugin):
-                l.append(plugin)
-            def pyevent_plugin_unregistered(self, plugin):
-                l.remove(plugin)
-        myapi = MyApi()
-        plugins.register(myapi)
-        assert len(l) == 1
-        assert l[0] is myapi 
-        plugins.unregister(myapi)
-        assert not l
-
-    def test_call_methods(self):
-        plugins = PyPlugins()
-        class api1:
-            def m(self, __call__, x):
-                return x
-        class api2:
-            def m(self, __call__, x, y=33):
-                return y 
-        plugins.register(api1())
-        plugins.register(api2())
-        res = plugins.call_firstresult("m", x=5)
-        assert plugins.call_firstresult("notexist") is None
-
-        assert res == 33
-        reslist = plugins.call_each("m", x=5)
-        assert len(reslist) == 2
-        assert 5 in reslist
-        assert 33 in reslist
-        assert plugins.call_each("notexist") == []
-
-        assert plugins.call_plugin(api1(), 'm', x=12) == 12
-        assert plugins.call_plugin(api2(), 't') is None
-
-    def test_call_none_is_no_result(self):
-        plugins = PyPlugins()
-        class api1:
-            def m(self):
-                return None
-        class api2:
-            def m(self, __call__):
-                return 41
-        plugins.register(api1())
-        plugins.register(api1())
-        plugins.register(api2())
-        assert plugins.call_firstresult('m') == 41
-        assert plugins.call_each('m') == [41]
-
-    def test_call_noneasresult(self):
-        plugins = PyPlugins()
-        class api1:
-            def m(self, __call__):
-                return __call__.NONEASRESULT
-        plugins.register(api1())
-        plugins.register(api1())
-        assert plugins.call_firstresult('m') is None
-        assert plugins.call_each('m') == [None, None]
+        assert registry.isregistered(my)
+        assert registry.isregistered(my2)
+        registry.unregister(my)
+        assert not registry.isregistered(my)
+        assert list(registry) == [my2]
 
     def test_listattr(self):
-        plugins = PyPlugins()
+        plugins = Registry()
         class api1:
             x = 41
         class api2:
@@ -174,77 +118,77 @@ class TestPyPlugins:
         l = list(plugins.listattr('x', reverse=True))
         assert l == [43, 42, 41]
 
-    def test_notify_anonymous_ordered(self):
-        plugins = PyPlugins()
-        l = []
-        class api1:
-            def pyevent_hello(self): 
-                l.append("hellospecific")
-        class api2:
-            def pyevent(self, name, *args): 
-                if name == "hello":
-                    l.append(name + "anonymous") 
-        plugins.register(api1())
-        plugins.register(api2())
-        plugins.notify('hello')
-        assert l == ["hellospecific", "helloanonymous"]
-
-    def test_consider_env(self, monkeypatch):
-        plugins = PyPlugins()
-        monkeypatch.setitem(os.environ, 'PYLIB', "unknownconsider_env")
-        py.test.raises(ImportError, "plugins.consider_env()")
-
-    def test_consider_module(self):
-        plugins = PyPlugins()
-        mod = py.std.new.module("temp")
-        mod.pylib = ["xxx nomod"]
-        excinfo = py.test.raises(ImportError, "plugins.consider_module(mod)")
-        mod.pylib = "os"
-        class Events(list):
-            def pyevent_importingmodule(self, mod):
-                self.append(mod)
-        l = Events()
-        plugins.register(l)
-        plugins.consider_module(mod)
-        assert len(l) == 1
-        assert l[0] == (mod.pylib)
+        class api4: 
+            x = 44
+        l = list(plugins.listattr('x', extra=(api4,)))
+        assert l == range(41, 45)
+        assert len(list(plugins)) == 3  # otherwise extra added
 
 def test_api_and_defaults():
-    assert isinstance(py._com.pyplugins, PyPlugins)
+    assert isinstance(py._com.comregistry, Registry)
 
-def test_subprocess_env(testdir, monkeypatch):
-    plugins = PyPlugins()
-    old = py.path.local(py.__file__).dirpath().dirpath().chdir()
-    try:
-        monkeypatch.setitem(os.environ, "PYLIB", 'unknownconsider')
-        excinfo = py.test.raises(py.process.cmdexec.Error, """
-            py.process.cmdexec('%s -c "import py"')
-        """ % py.std.sys.executable)
-        assert str(excinfo.value).find("ImportError") != -1
-        assert str(excinfo.value).find("unknownconsider") != -1
-    finally:
-        old.chdir()
+class TestHookRelay:
+    def test_happypath(self):
+        registry = Registry()
+        class Api:
+            def hello(self, arg):
+                pass
 
-class TestPyPluginsEvents:
-    def test_pyevent_named_dispatch(self):
-        plugins = PyPlugins()
-        l = []
-        class A:
-            def pyevent_name(self, x): 
-                l.append(x)
-        plugins.register(A())
-        plugins.notify("name", 13)
-        assert l == [13]
+        mcm = HookRelay(hookspecs=Api, registry=registry)
+        assert hasattr(mcm, 'hello')
+        assert repr(mcm.hello).find("hello") != -1
+        class Plugin:
+            def hello(self, arg):
+                return arg + 1
+        registry.register(Plugin())
+        l = mcm.hello(arg=3)
+        assert l == [4]
+        assert not hasattr(mcm, 'world')
 
-    def test_pyevent_anonymous_dispatch(self):
-        plugins = PyPlugins()
-        l = []
-        class A:
-            def pyevent(self, name, *args, **kwargs): 
-                if name == "name":
-                    l.extend([args, kwargs])
+    def test_only_kwargs(self):
+        registry = Registry()
+        class Api:
+            def hello(self, arg):
+                pass
+        mcm = HookRelay(hookspecs=Api, registry=registry)
+        py.test.raises(TypeError, "mcm.hello(3)")
 
-        plugins.register(A())
-        plugins.notify("name", 13, x=15)
-        assert l == [(13, ), {'x':15}]
+    def test_firstresult_definition(self):
+        registry = Registry()
+        class Api:
+            def hello(self, arg): pass
+            hello.firstresult = True
 
+        mcm = HookRelay(hookspecs=Api, registry=registry)
+        class Plugin:
+            def hello(self, arg):
+                return arg + 1
+        registry.register(Plugin())
+        res = mcm.hello(arg=3)
+        assert res == 4
+
+    def test_default_plugins(self):
+        class Api: pass 
+        mcm = HookRelay(hookspecs=Api, registry=py._com.comregistry)
+        assert mcm._registry == py._com.comregistry
+
+    def test_hooks_extra_plugins(self):
+        registry = Registry()
+        class Api:
+            def hello(self, arg):
+                pass
+        hookrelay = HookRelay(hookspecs=Api, registry=registry)
+        hook_hello = hookrelay.hello
+        class Plugin:
+            def hello(self, arg):
+                return arg + 1
+        registry.register(Plugin())
+        class Plugin2:
+            def hello(self, arg):
+                return arg + 2
+        newhook = hookrelay._makecall("hello", extralookup=Plugin2())
+        l = newhook(arg=3)
+        assert l == [5, 4]
+        l2 = hook_hello(arg=3)
+        assert l2 == [4]
+        

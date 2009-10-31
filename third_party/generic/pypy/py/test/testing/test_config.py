@@ -42,7 +42,7 @@ class TestConfigCmdlineParsing:
 
     def test_parser_addoption_default_conftest(self, testdir, monkeypatch):
         import os
-        testdir.makeconftest("pytest_option_verbose=True")
+        testdir.makeconftest("option_verbose=True")
         config = testdir.parseconfig()
         assert config.option.verbose 
 
@@ -55,13 +55,9 @@ class TestConfigCmdlineParsing:
                        type="int", dest="gdest", help="g value."), 
                 )
         """)
-        old = testdir.chdir()
-        try: 
-            py.test.raises(ValueError, """
-                py.test.config._reparse(['-g', '17'])
-            """)
-        finally: 
-            old.chdir() 
+        py.test.raises(ValueError, """
+            py.test.config._reparse(['-g', '17'])
+        """)
 
     def test_parsing_again_fails(self, tmpdir):
         config = py.test.config._reparse([tmpdir])
@@ -95,6 +91,7 @@ class TestConfigTmpdir:
         assert config2.basetemp != config3.basetemp
 
 class TestConfigAPI: 
+
     def test_config_getvalue_honours_conftest(self, testdir):
         testdir.makepyfile(conftest="x=1")
         testdir.mkdir("sub").join("conftest.py").write("x=2 ; y = 3")
@@ -141,8 +138,7 @@ class TestConfigAPI:
         assert pl[1] == somepath
 
     def test_setsessionclass_and_initsession(self, testdir):
-        from py.__.test.config import Config 
-        config = Config()
+        config = testdir.Config()
         class Session1: 
             def __init__(self, config):
                 self.config = config 
@@ -151,7 +147,6 @@ class TestConfigAPI:
         assert isinstance(session, Session1)
         assert session.config is config
         py.test.raises(ValueError, "config.setsessionclass(Session1)")
-
 
 
 class TestConfigApi_getcolitems:
@@ -217,7 +212,6 @@ class TestConfigApi_getcolitems:
         for col in col.listchain():
             assert col.config is config 
 
-
 class TestOptionEffects:
     def test_boxed_option_default(self, testdir):
         tmpdir = testdir.tmpdir.ensure("subdir", dir=1)
@@ -231,29 +225,6 @@ class TestOptionEffects:
     def test_is_not_boxed_by_default(self, testdir):
         config = py.test.config._reparse([testdir.tmpdir])
         assert not config.option.boxed
-
-    def test_config_iocapturing(self, testdir):
-        config = testdir.parseconfig(testdir.tmpdir)
-        assert config.getvalue("iocapture")
-        tmpdir = testdir.tmpdir.ensure("sub-with-conftest", dir=1)
-        tmpdir.join("conftest.py").write(py.code.Source("""
-            pytest_option_iocapture = "no"
-        """))
-        config = py.test.config._reparse([tmpdir])
-        assert config.getvalue("iocapture") == "no"
-        capture = config._getcapture()
-        assert isinstance(capture, py.io.StdCapture)
-        assert not capture._out
-        assert not capture._err
-        assert not capture._in
-        assert isinstance(capture, py.io.StdCapture)
-        for opt, cls in (("sys", py.io.StdCapture),  
-                         ("fd", py.io.StdCaptureFD), 
-                        ):
-            config.option.iocapture = opt
-            capture = config._getcapture()
-            assert isinstance(capture, cls) 
-
 
 class TestConfig_gettopdir:
     def test_gettopdir(self, testdir):
@@ -278,8 +249,8 @@ class TestConfig_gettopdir:
 
 def test_options_on_small_file_do_not_blow_up(testdir):
     def runfiletest(opts):
-        sorter = testdir.inline_run(*opts)
-        passed, skipped, failed = sorter.countoutcomes()
+        reprec = testdir.inline_run(*opts)
+        passed, skipped, failed = reprec.countoutcomes()
         assert failed == 2 
         assert skipped == passed == 0
     path = testdir.makepyfile("""
@@ -292,11 +263,11 @@ def test_options_on_small_file_do_not_blow_up(testdir):
                  ['--traceconfig'], ['-v'], ['-v', '-v']):
         runfiletest(opts + [path])
 
-def test_default_bus():
-    assert py.test.config.bus is py._com.pyplugins
+def test_default_registry():
+    assert py.test.config.pluginmanager.comregistry is py._com.comregistry
    
-@py.test.mark.todo("test for deprecation")
 def test_ensuretemp():
+    # XXX test for deprecation
     d1 = py.test.ensuretemp('hello') 
     d2 = py.test.ensuretemp('hello') 
     assert d1 == d2

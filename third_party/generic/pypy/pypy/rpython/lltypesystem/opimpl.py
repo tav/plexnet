@@ -142,7 +142,12 @@ def op_getinteriorfield(obj, *offsets):
     # we can constant-fold this if the innermost structure from which we
     # read the final field is immutable.
     T = lltype.typeOf(innermostcontainer).TO
-    if not T._hints.get('immutable'):
+    if T._hints.get('immutable'):
+        pass
+    elif ('immutable_fields' in T._hints and
+          offsets[-1] in T._hints['immutable_fields'].fields):
+        pass
+    else:
         raise TypeError("cannot fold getinteriorfield on mutable struct")
     assert not isinstance(ob, lltype._interior_ptr)
     return ob
@@ -171,9 +176,32 @@ def op_bool_not(b):
     return not b
 
 def op_int_add(x, y):
-    assert isinstance(x, (int, llmemory.AddressOffset))
+    if not isinstance(x, (int, llmemory.AddressOffset)):
+        from pypy.rpython.lltypesystem import llgroup
+        assert isinstance(x, llgroup.CombinedSymbolic)
     assert isinstance(y, (int, llmemory.AddressOffset))
     return intmask(x + y)
+
+def op_int_sub(x, y):
+    if not isinstance(x, int):
+        from pypy.rpython.lltypesystem import llgroup
+        assert isinstance(x, llgroup.CombinedSymbolic)
+    assert isinstance(y, int)
+    return intmask(x - y)
+
+def op_int_and(x, y):
+    if not isinstance(x, int):
+        from pypy.rpython.lltypesystem import llgroup
+        assert isinstance(x, llgroup.CombinedSymbolic)
+    assert isinstance(y, int)
+    return x & y
+
+def op_int_or(x, y):
+    if not isinstance(x, int):
+        from pypy.rpython.lltypesystem import llgroup
+        assert isinstance(x, llgroup.CombinedSymbolic)
+    assert isinstance(y, int)
+    return x | y
 
 def op_int_mul(x, y):
     assert isinstance(x, (int, llmemory.AddressOffset))
@@ -301,10 +329,6 @@ def op_cast_adr_to_ptr(TYPE, adr):
     return llmemory.cast_adr_to_ptr(adr, TYPE)
 op_cast_adr_to_ptr.need_result_type = True
 
-def op_cast_adr_to_int(adr):
-    checkadr(adr)
-    return llmemory.cast_adr_to_int(adr)
-
 def op_cast_int_to_adr(int):
     return llmemory.cast_int_to_adr(int)
 
@@ -371,7 +395,13 @@ def op_adr_delta(addr1, addr2):
 
 def op_getfield(p, name):
     checkptr(p)
-    if not lltype.typeOf(p).TO._hints.get('immutable'):
+    TYPE = lltype.typeOf(p).TO
+    if TYPE._hints.get('immutable'):
+        pass
+    elif ('immutable_fields' in TYPE._hints and
+          name in TYPE._hints['immutable_fields'].fields):
+        pass
+    else:
         raise TypeError("cannot fold getfield on mutable struct")
     return getattr(p, name)
 
@@ -386,8 +416,55 @@ def op_debug_print(*args):
         print arg,
     print
 
-def op_promote_virtualizable(object, fieldname):
+def op_gc_stack_bottom():
+    pass       # marker for trackgcroot.py
+
+def op_promote_virtualizable(object, fieldname, flags):
     pass # XXX should do something
+
+def op_get_group_member(TYPE, grpptr, memberoffset):
+    from pypy.rpython.lltypesystem import llgroup
+    assert isinstance(memberoffset, llgroup.GroupMemberOffset)
+    member = memberoffset._get_group_member(grpptr)
+    return lltype.cast_pointer(TYPE, member)
+op_get_group_member.need_result_type = True
+
+def op_get_next_group_member(TYPE, grpptr, memberoffset, skipoffset):
+    from pypy.rpython.lltypesystem import llgroup
+    assert isinstance(memberoffset, llgroup.GroupMemberOffset)
+    member = memberoffset._get_next_group_member(grpptr, skipoffset)
+    return lltype.cast_pointer(TYPE, member)
+op_get_next_group_member.need_result_type = True
+
+def op_is_group_member_nonzero(memberoffset):
+    from pypy.rpython.lltypesystem import llgroup
+    if isinstance(memberoffset, llgroup.GroupMemberOffset):
+        return memberoffset.index != 0
+    else:
+        assert isinstance(memberoffset, int)
+        return memberoffset != 0
+
+def op_extract_ushort(combinedoffset):
+    from pypy.rpython.lltypesystem import llgroup
+    assert isinstance(combinedoffset, llgroup.CombinedSymbolic)
+    return combinedoffset.lowpart
+
+def op_combine_ushort(ushort, rest):
+    from pypy.rpython.lltypesystem import llgroup
+    return llgroup.CombinedSymbolic(ushort, rest)
+
+def op_gc_gettypeptr_group(TYPE, obj, grpptr, skipoffset, vtableinfo):
+    HDR            = vtableinfo[0]
+    size_gc_header = vtableinfo[1]
+    fieldname      = vtableinfo[2]
+    objaddr = llmemory.cast_ptr_to_adr(obj)
+    hdraddr = objaddr - size_gc_header
+    hdr = llmemory.cast_adr_to_ptr(hdraddr, lltype.Ptr(HDR))
+    typeid = getattr(hdr, fieldname)
+    if lltype.typeOf(typeid) == lltype.Signed:
+        typeid = op_extract_ushort(typeid)
+    return op_get_next_group_member(TYPE, grpptr, typeid, skipoffset)
+op_gc_gettypeptr_group.need_result_type = True
 
 # ____________________________________________________________
 

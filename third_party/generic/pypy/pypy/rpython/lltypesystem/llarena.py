@@ -94,6 +94,8 @@ class Arena(object):
         return addr2
 
     def setobject(self, objaddr, offset, bytes):
+        assert bytes > 0, ("llarena does not support GcStructs with no field"
+                           " or empty arrays")
         assert offset not in self.objectptrs
         self.objectptrs[offset] = objaddr.ptr
         self.objectsizes[offset] = bytes
@@ -238,12 +240,15 @@ class RoundedUpForAllocation(llmemory.AddressOffset):
     """A size that is rounded up in order to preserve alignment of objects
     following it.  For arenas containing heterogenous objects.
     """
-    def __init__(self, basesize):
+    def __init__(self, basesize, minsize):
         assert isinstance(basesize, llmemory.AddressOffset)
+        assert isinstance(minsize, llmemory.AddressOffset) or minsize == 0
         self.basesize = basesize
+        self.minsize = minsize
 
     def __repr__(self):
-        return '< RoundedUpForAllocation %r >' % (self.basesize,)
+        return '< RoundedUpForAllocation %r %r >' % (self.basesize,
+                                                     self.minsize)
 
     def known_nonneg(self):
         return self.basesize.known_nonneg()
@@ -280,8 +285,12 @@ def arena_free(arena_addr):
 
 def arena_reset(arena_addr, size, zero):
     """Free all objects in the arena, which can then be reused.
-    The arena is filled with zeroes if 'zero' is True.  This can also
-    be used on a subrange of the arena."""
+    This can also be used on a subrange of the arena.
+    The value of 'zero' is:
+      * 0: don't fill the area with zeroes
+      * 1: clear, optimized for a very large area of memory
+      * 2: clear, optimized for a small or medium area of memory
+    """
     arena_addr = _getfakearenaaddress(arena_addr)
     arena_addr.arena.reset(zero, arena_addr.offset, size)
 
@@ -297,10 +306,14 @@ def arena_reserve(addr, size, check_alignment=True):
                          % (addr.offset,))
     addr.arena.allocate_object(addr.offset, size)
 
-def round_up_for_allocation(size):
+def round_up_for_allocation(size, minsize=0):
     """Round up the size in order to preserve alignment of objects
-    following an object.  For arenas containing heterogenous objects."""
-    return RoundedUpForAllocation(size)
+    following an object.  For arenas containing heterogenous objects.
+    If minsize is specified, it gives a minimum on the resulting size."""
+    return _round_up_for_allocation(size, minsize)
+
+def _round_up_for_allocation(size, minsize):    # internal
+    return RoundedUpForAllocation(size, minsize)
 
 def arena_new_view(ptr):
     """Return a fresh memory view on an arena
@@ -318,7 +331,49 @@ from pypy.rpython.lltypesystem import rffi, lltype
 from pypy.rpython.extfunc import register_external
 from pypy.rlib.objectmodel import CDefinedIntSymbolic
 
-if os.name == 'posix':
+if sys.platform == 'linux2':
+    # This only works with linux's madvise(), which is really not a memory
+    # usage hint but a real command.  It guarantees that after MADV_DONTNEED
+    # the pages are cleared again.
+    from pypy.rpython.tool import rffi_platform
+    MADV_DONTNEED = rffi_platform.getconstantinteger('MADV_DONTNEED',
+                                                     '#include <sys/mman.h>')
+    linux_madvise = rffi.llexternal('madvise',
+                                    [llmemory.Address, rffi.SIZE_T, rffi.INT],
+                                    rffi.INT,
+                                    sandboxsafe=True, _nowrapper=True)
+    linux_getpagesize = rffi.llexternal('getpagesize', [], rffi.INT,
+                                        sandboxsafe=True, _nowrapper=True)
+
+    class LinuxPageSize:
+        def __init__(self):
+            self.pagesize = 0
+        _freeze_ = __init__
+    linuxpagesize = LinuxPageSize()
+
+    def clear_large_memory_chunk(baseaddr, size):
+        pagesize = linuxpagesize.pagesize
+        if pagesize == 0:
+            pagesize = rffi.cast(lltype.Signed, linux_getpagesize())
+            linuxpagesize.pagesize = pagesize
+        if size > 2 * pagesize:
+            lowbits = rffi.cast(lltype.Signed, baseaddr) & (pagesize - 1)
+            if lowbits:     # clear the initial misaligned part, if any
+                partpage = pagesize - lowbits
+                llmemory.raw_memclear(baseaddr, partpage)
+                baseaddr += partpage
+                size -= partpage
+            length = size & -pagesize
+            madv_length = rffi.cast(rffi.SIZE_T, length)
+            madv_flags = rffi.cast(rffi.INT, MADV_DONTNEED)
+            err = linux_madvise(baseaddr, madv_length, madv_flags)
+            if rffi.cast(lltype.Signed, err) == 0:
+                baseaddr += length     # madvise() worked
+                size -= length
+        if size > 0:    # clear the final misaligned part, if any
+            llmemory.raw_memclear(baseaddr, size)
+
+elif os.name == 'posix':
     READ_MAX = (sys.maxint//4) + 1    # upper bound on reads to avoid surprises
     raw_os_open = rffi.llexternal('open',
                                   [rffi.CCHARP, rffi.INT, rffi.MODE_T],
@@ -335,7 +390,7 @@ if os.name == 'posix':
     _dev_zero = rffi.str2charp('/dev/zero')   # prebuilt
 
     def clear_large_memory_chunk(baseaddr, size):
-        # on Linux at least, reading from /dev/zero is the fastest way
+        # on some Unixy platforms, reading from /dev/zero is the fastest way
         # to clear arenas, because the kernel knows that it doesn't
         # need to even allocate the pages before they are used.
 
@@ -360,6 +415,10 @@ if os.name == 'posix':
 
 else:
     # XXX any better implementation on Windows?
+    # Should use VirtualAlloc() to reserve the range of pages,
+    # and commit some pages gradually with support from the GC.
+    # Or it might be enough to decommit the pages and recommit
+    # them immediately.
     clear_large_memory_chunk = llmemory.raw_memclear
 
 
@@ -383,8 +442,11 @@ register_external(arena_free, [llmemory.Address], None, 'll_arena.arena_free',
 
 def llimpl_arena_reset(arena_addr, size, zero):
     if zero:
-        clear_large_memory_chunk(arena_addr, size)
-register_external(arena_reset, [llmemory.Address, int, bool], None,
+        if zero == 1:
+            clear_large_memory_chunk(arena_addr, size)
+        else:
+            llmemory.raw_memclear(arena_addr, size)
+register_external(arena_reset, [llmemory.Address, int, int], None,
                   'll_arena.arena_reset',
                   llimpl=llimpl_arena_reset,
                   llfakeimpl=arena_reset,
@@ -399,10 +461,11 @@ register_external(arena_reserve, [llmemory.Address, int], None,
                   sandboxsafe=True)
 
 llimpl_round_up_for_allocation = rffi.llexternal('ROUND_UP_FOR_ALLOCATION',
-                                                 [lltype.Signed], lltype.Signed,
+                                                [lltype.Signed, lltype.Signed],
+                                                 lltype.Signed,
                                                  sandboxsafe=True,
                                                  _nowrapper=True)
-register_external(round_up_for_allocation, [int], int,
+register_external(_round_up_for_allocation, [int, int], int,
                   'll_arena.round_up_for_allocation',
                   llimpl=llimpl_round_up_for_allocation,
                   llfakeimpl=round_up_for_allocation,

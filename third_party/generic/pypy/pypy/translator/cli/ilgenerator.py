@@ -1,5 +1,6 @@
 from pypy.rpython.lltypesystem.lltype import Signed, Unsigned, Void, Bool, Float
 from pypy.rpython.lltypesystem.lltype import SignedLongLong, UnsignedLongLong
+from pypy.rpython.lltypesystem import rffi
 from pypy.rlib.objectmodel import CDefinedIntSymbolic
 from pypy.rlib.rarithmetic import isnan, isinf
 from pypy.rpython.ootypesystem import ootype
@@ -232,8 +233,11 @@ class IlasmGenerator(object):
         elif type_ in (SignedLongLong, UnsignedLongLong):
             self.opcode('ldc.i8', str(v))
 
-    def store_local (self, v):
+    def store_local(self, v):
         self.opcode('stloc', repr(v.name))
+
+    def store_arg(self, v):
+        self.opcode('starg', repr(v.name))
 
     def store_static_constant(self, cts_type, CONST_NAMESPACE, CONST_CLASS, name):
         self.opcode('stsfld', '%s %s.%s::%s' % (cts_type, CONST_NAMESPACE, CONST_CLASS, name))
@@ -396,14 +400,17 @@ class CLIBaseGenerator(Generator):
             ilasm.opcode('ldc.i4', ord(value))
         elif TYPE is ootype.Float:
             if isinf(value):
-                ilasm.opcode('ldc.r8', '(00 00 00 00 00 00 f0 7f)')
+                if value < 0.0:
+                    ilasm.opcode('ldc.r8', '(00 00 00 00 00 00 f0 ff)')
+                else:    
+                    ilasm.opcode('ldc.r8', '(00 00 00 00 00 00 f0 7f)')
             elif isnan(value):
                 ilasm.opcode('ldc.r8', '(00 00 00 00 00 00 f8 ff)')
             else:
                 ilasm.opcode('ldc.r8', repr(value))
         elif isinstance(value, CDefinedIntSymbolic):
             ilasm.opcode('ldc.i4', DEFINED_INT_SYMBOLICS[value.expr])
-        elif TYPE in (ootype.Signed, ootype.Unsigned):
+        elif TYPE in (ootype.Signed, ootype.Unsigned, rffi.SHORT):
             ilasm.opcode('ldc.i4', str(value))
         elif TYPE in (ootype.SignedLongLong, ootype.UnsignedLongLong):
             ilasm.opcode('ldc.i8', str(value))
@@ -420,6 +427,9 @@ class CLIBaseGenerator(Generator):
 
     def dup(self, TYPE):
         self.ilasm.opcode('dup')
+
+    def push_null(self, TYPE):
+        self.ilasm.opcode('ldnull')
 
     def oonewarray(self, TYPE, length):
         if TYPE.ITEM is ootype.Void:

@@ -6,6 +6,7 @@ from pypy.translator.tool.cbuild import ExternalCompilationInfo
 
 class CLibraryBuilder(CBuilder):
     standalone = False
+    split = True
 
     def __init__(self, *args, **kwds):
         self.functions = kwds.pop('functions')
@@ -31,7 +32,7 @@ class CLibraryBuilder(CBuilder):
                                                         standalone=False,
                                                         outputfilename=oname)
 
-    def get_entry_point(self):
+    def get_entry_point(self, isolated=False):
         return self.so_name
 
 class DLLDef(object):

@@ -6,6 +6,7 @@ from pypy.interpreter.typedef import no_hash_descr
 from pypy.interpreter.baseobjspace import SpaceCache
 from pypy.objspace.std.model import StdObjSpaceMultiMethod
 from pypy.objspace.std.multimethod import FailedToImplement
+from pypy.rlib import jit
 from pypy.tool.sourcetools import compile2
 
 __all__ = ['StdTypeDef', 'newmethod', 'gateway',
@@ -27,6 +28,7 @@ class StdTypeDef(TypeDef):
         "NOT_RPYTHON: initialization-time only."
         self.local_multimethods += hack_out_multimethods(namespace)
 
+@jit.unroll_safe
 def issubtypedef(a, b):
     from pypy.objspace.std.objecttype import object_typedef
     if b is object_typedef:
@@ -110,6 +112,13 @@ def hack_out_multimethods(ns):
             result.append(value)
     return result
 
+def is_relevant_for_slice(target_type, typedef):
+    targettypedef = getattr(target_type, 'typedef', None)
+    if targettypedef == typedef:
+        return True
+    method = getattr(target_type, "is_implementation_for", lambda t: False)
+    return method(typedef)
+
 def sliced_typeorders(typeorder, multimethod, typedef, i, local=False):
     """NOT_RPYTHON"""
     list_of_typeorders = [typeorder] * multimethod.arity
@@ -122,8 +131,7 @@ def sliced_typeorders(typeorder, multimethod, typedef, i, local=False):
             if issubtypedef(thistypedef, typedef):
                 lst = []
                 for target_type, conversion in order:
-                    targettypedef = getattr(target_type, 'typedef', None)
-                    if targettypedef == typedef:
+                    if is_relevant_for_slice(target_type, typedef):
                         lst.append((target_type, conversion))
                 sliced_typeorder[type] = lst
         list_of_typeorders[i] = sliced_typeorder

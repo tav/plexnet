@@ -87,14 +87,15 @@ class BasePosix(Platform):
             ('INCLUDEDIRS', self._includedirs(rel_includedirs)),
             ('CFLAGS', self.cflags + list(eci.compile_extra)),
             ('LDFLAGS', self.link_flags + list(eci.link_extra)),
-            ('CC', self.cc)
+            ('CC', self.cc),
+            ('CC_LINK', eci.use_cpp_linker and 'g++' or '$(CC)'),
             ]
         for args in definitions:
             m.definition(*args)
 
         rules = [
             ('all', '$(DEFAULT_TARGET)', []),
-            ('$(TARGET)', '$(OBJECTS)', '$(CC) $(LDFLAGS) -o $@ $(OBJECTS) $(LIBDIRS) $(LIBS)'),
+            ('$(TARGET)', '$(OBJECTS)', '$(CC_LINK) $(LDFLAGS) -o $@ $(OBJECTS) $(LIBDIRS) $(LIBS)'),
             ('%.o', '%.c', '$(CC) $(CFLAGS) -o $@ -c $< $(INCLUDEDIRS)'),
             ]
 
@@ -120,6 +121,7 @@ class Definition(object):
     def write(self, f):
         def write_list(prefix, lst):
             for i, fn in enumerate(lst):
+                fn = fn.replace('\\', '\\\\')
                 print >> f, prefix, fn,
                 if i < len(lst)-1:
                     print >> f, '\\'
@@ -128,7 +130,7 @@ class Definition(object):
                 prefix = ' ' * len(prefix)
         name, value = self.name, self.value
         if isinstance(value, str):
-            f.write('%s = %s\n' % (name, value))
+            f.write('%s = %s\n' % (name, value.replace('\\', '\\\\')))
         else:
             write_list('%s =' % (name,), value)
         if value:
@@ -170,7 +172,8 @@ class GnuMakefile(object):
         if fpath.dirpath() == self.makefile_dir:
             return fpath.basename
         elif fpath.dirpath().dirpath() == self.makefile_dir.dirpath():
-            return '../' + fpath.relto(self.makefile_dir.dirpath())
+            path = '../' + fpath.relto(self.makefile_dir.dirpath())
+            return path.replace('\\', '/')
         else:
             return str(fpath)
 

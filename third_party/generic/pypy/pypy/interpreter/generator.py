@@ -2,6 +2,7 @@ from pypy.interpreter.error import OperationError
 from pypy.interpreter.baseobjspace import Wrappable
 from pypy.interpreter.gateway import NoneNotWrapped
 from pypy.rlib.rarithmetic import intmask
+from pypy.interpreter.pyopcode import LoopBlock
 
 
 class GeneratorIterator(Wrappable):
@@ -63,7 +64,7 @@ return next yielded value or raise StopIteration."""
             else:
                 return w_result     # YIELDed
         finally:
-            self.frame.f_back = None
+            self.frame.f_back_some = None
             self.running = False
 
     def descr_throw(self, w_type, w_val=None, w_tb=None):
@@ -122,8 +123,15 @@ return next yielded value or raise StopIteration."""
         applevel __del__, which is called at a safe point after the
         interp-level __del__ enqueued the object for destruction
         """
-        self.descr_close()
+        # Only bother raising an exception if the frame is still not
+        # finished and finally or except blocks are present.
+        if not self.frame.frame_finished_execution:
+            block = self.frame.lastblock
+            while block is not None:
+                if not isinstance(block, LoopBlock):
+                    self.descr_close()
+                    return
+                block = block.previous
 
     def __del__(self):
-        if not self.frame.frame_finished_execution:
-            self._enqueue_for_destruction(self.space)
+        self._enqueue_for_destruction(self.space)

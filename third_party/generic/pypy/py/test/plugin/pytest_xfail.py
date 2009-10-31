@@ -1,69 +1,79 @@
 """
-for marking and reporting "expected to fail" tests. 
-    @py.test.mark.xfail("needs refactoring")
+mark python test functions as expected-to-fail and report them separately. 
+
+usage
+------------
+
+Use the generic mark decorator to mark your test functions as 
+'expected to fail':: 
+
+    @py.test.mark.xfail
     def test_hello():
         ...
-        assert 0
+
+This test will be executed but no traceback will be reported 
+when it fails. Instead terminal reporting will list it in the 
+"expected to fail" section or "unexpectedly passing" section.  
+
 """
+
 import py
 
-class XfailPlugin(object):
-    """ mark and report specially about "expected to fail" tests. """
+def pytest_runtest_makereport(__multicall__, item, call):
+    if call.when != "call":
+        return
+    if hasattr(item, 'obj') and hasattr(item.obj, 'func_dict'):
+        if 'xfail' in item.obj.func_dict:
+            res = __multicall__.execute()
+            if call.excinfo:
+                res.skipped = True
+                res.failed = res.passed = False
+            else:
+                res.skipped = res.passed = False
+                res.failed = True
+            return res 
 
-    def pytest_item_makereport(self, __call__, item, excinfo, when, outerr):
-        if hasattr(item, 'obj') and hasattr(item.obj, 'func_dict'):
-            if 'xfail' in item.obj.func_dict:
-                res = __call__.execute(firstresult=True)
-                if excinfo:
-                    res.skipped = True
-                    res.failed = res.passed = False
-                else:
-                    res.skipped = res.passed = False
-                    res.failed = True
-                return res 
+def pytest_report_teststatus(report):
+    if 'xfail' in report.keywords: 
+        if report.skipped:
+            return "xfailed", "x", "xfail"
+        elif report.failed:
+            return "xpassed", "P", "xpass" 
 
-    def pytest_report_teststatus(self, event):
-        """ return shortletter and verbose word. """
-        if 'xfail' in event.keywords: 
-            if event.skipped:
-                return "xfailed", "x", "xfail"
-            elif event.failed:
-                return "xpassed", "P", "xpass" 
+# called by the terminalreporter instance/plugin
+def pytest_terminal_summary(terminalreporter):
+    tr = terminalreporter
+    xfailed = tr.stats.get("xfailed")
+    if xfailed:
+        tr.write_sep("_", "expected failures")
+        for rep in xfailed:
+            entry = rep.longrepr.reprcrash 
+            modpath = rep.item.getmodpath(includemodule=True)
+            pos = "%s %s:%d: " %(modpath, entry.path, entry.lineno)
+            reason = rep.longrepr.reprcrash.message
+            i = reason.find("\n")
+            if i != -1:
+                reason = reason[:i]
+            tr._tw.line("%s %s" %(pos, reason))
 
-    # a hook implemented called by the terminalreporter instance/plugin
-    def pytest_terminal_summary(self, terminalreporter):
-        tr = terminalreporter
-        xfailed = tr.stats.get("xfailed")
-        if xfailed:
-            tr.write_sep("_", "expected failures")
-            for event in xfailed:
-                entry = event.longrepr.reprcrash 
-                key = entry.path, entry.lineno, entry.message
-                reason = event.longrepr.reprcrash.message
-                modpath = event.colitem.getmodpath(includemodule=True)
-                #tr._tw.line("%s %s:%d: %s" %(modpath, entry.path, entry.lineno, entry.message))
-                tr._tw.line("%s %s:%d: " %(modpath, entry.path, entry.lineno))
+    xpassed = terminalreporter.stats.get("xpassed")
+    if xpassed:
+        tr.write_sep("_", "UNEXPECTEDLY PASSING TESTS")
+        for rep in xpassed:
+            fspath, lineno, modpath = rep.item.reportinfo()
+            pos = "%s %s:%d: unexpectedly passing" %(modpath, fspath, lineno)
+            tr._tw.line(pos)
 
-        xpassed = terminalreporter.stats.get("xpassed")
-        if xpassed:
-            tr.write_sep("_", "UNEXPECTEDLY PASSING TESTS")
-            for event in xpassed:
-                tr._tw.line("%s: xpassed" %(event.colitem,))
 
-# ===============================================================================
+# =============================================================================
 #
 # plugin tests 
 #
-# ===============================================================================
+# =============================================================================
 
-def test_generic(plugintester):
-    plugintester.apicheck(XfailPlugin) 
-               
-def test_xfail(plugintester, linecomp):
-    testdir = plugintester.testdir()
+def test_xfail(testdir):
     p = testdir.makepyfile(test_one="""
         import py
-        pytest_plugins="pytest_xfail",
         @py.test.mark.xfail
         def test_this():
             assert 0
@@ -75,8 +85,9 @@ def test_xfail(plugintester, linecomp):
     result = testdir.runpytest(p)
     extra = result.stdout.fnmatch_lines([
         "*expected failures*",
-        "*test_one.test_this*test_one.py:5*",
+        "*test_one.test_this*test_one.py:4*",
         "*UNEXPECTEDLY PASSING*",
         "*test_that*",
     ])
     assert result.ret == 1
+

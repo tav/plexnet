@@ -49,7 +49,7 @@ SERIALIZE = False
 # Different generators implementing different techniques for loading
 # constants (Static fields, singleton fields, etc)
 
-class CLIBaseConstGenerator(BaseConstantGenerator):
+class CLIConstantGenerator(BaseConstantGenerator):
     """
     Base of all CLI constant generators.  It implements the oosupport
     constant generator in terms of the CLI interface.
@@ -66,7 +66,19 @@ class CLIBaseConstGenerator(BaseConstantGenerator):
         return gen
 
     def _end_gen_constants(self, gen, numsteps):
-        assert gen.ilasm is self.ilasm
+
+        self.ilasm.begin_function('.cctor', [], 'void', False, 'static',
+                                  'specialname', 'rtspecialname', 'default')
+        self.ilasm.stderr('CONST: initialization starts', DEBUG_CONST_INIT)
+        for i in range(numsteps):
+            self.ilasm.stderr('CONST: step %d of %d' % (i, numsteps),
+                              DEBUG_CONST_INIT)
+            step_name = 'step%d' % i
+            self.ilasm.call('void %s::%s()' % (CONST_CLASS, step_name))
+        self.ilasm.stderr('CONST: initialization completed', DEBUG_CONST_INIT)
+        self.ilasm.ret()
+        self.ilasm.end_function()
+        
         self.end_class()
 
     def begin_class(self):
@@ -90,21 +102,11 @@ class CLIBaseConstGenerator(BaseConstantGenerator):
         return BaseConstantGenerator._get_key_for_const(self, value)
 
     def _create_complex_const(self, value):
-        from pypy.translator.cli.dotnet import _fieldinfo
-
-        if isinstance(value, _fieldinfo):
-            uniq = self.db.unique()
-            return CLIFieldInfoConst(self.db, value.llvalue, uniq)
-        elif isinstance(value, ootype._view) and isinstance(value._inst, ootype._record):
+        if isinstance(value, ootype._view) and isinstance(value._inst, ootype._record):
             self.db.cts.lltype_to_cts(value._inst._TYPE) # record the type of the record
             return self.record_const(value._inst)
         else:
             return BaseConstantGenerator._create_complex_const(self, value)
-
-class FieldConstGenerator(CLIBaseConstGenerator):
-    pass
-
-class StaticFieldConstGenerator(FieldConstGenerator):
 
     # _________________________________________________________________
     # OOSupport interface
@@ -132,144 +134,8 @@ class StaticFieldConstGenerator(FieldConstGenerator):
         gen.ilasm.ret()
         gen.ilasm.end_function()
 
-    def _end_gen_constants(self, gen, numsteps):
 
-        self.ilasm.begin_function('.cctor', [], 'void', False, 'static',
-                                  'specialname', 'rtspecialname', 'default')
-        self.ilasm.stderr('CONST: initialization starts', DEBUG_CONST_INIT)
-        for i in range(numsteps):
-            self.ilasm.stderr('CONST: step %d of %d' % (i, numsteps),
-                              DEBUG_CONST_INIT)
-            step_name = 'step%d' % i
-            self.ilasm.call('void %s::%s()' % (CONST_CLASS, step_name))
-        self.ilasm.stderr('CONST: initialization completed', DEBUG_CONST_INIT)
-        self.ilasm.ret()
-        self.ilasm.end_function()
 
-        super(StaticFieldConstGenerator, self)._end_gen_constants(
-            gen, numsteps)
-
-class InstanceFieldConstGenerator(FieldConstGenerator):
-    
-    # _________________________________________________________________
-    # OOSupport interface
-    
-    def push_constant(self, gen, const):
-        # load the singleton instance
-        gen.ilasm.opcode('ldsfld class %s %s::Singleton' % (CONST_CLASS, CONST_CLASS))
-        gen.ilasm.opcode('ldfld %s %s::%s' % (const.get_type(), CONST_CLASS, const.name))
-
-    def _push_constant_during_init(self, gen, const):
-        # during initialization, we load the 'this' pointer from our
-        # argument rather than the singleton argument
-        gen.ilasm.opcode('ldarg.0')
-        gen.ilasm.opcode('ldfld %s %s::%s' % (const.get_type(), CONST_CLASS, const.name))
-
-    def _pre_store_constant(self, gen, const):
-        gen.ilasm.opcode('ldarg.0')
-        
-    def _store_constant(self, gen, const):
-        gen.ilasm.set_field((const.get_type(), CONST_CLASS, const.name))
-
-    # _________________________________________________________________
-    # CLI interface
-
-    def _declare_const(self, gen, all_constants):
-        gen.ilasm.field(const.name, const.get_type(), static=False)
-    
-    def _declare_step(self, gen, stepnum):
-        gen.ilasm.begin_function('step%d' % stepnum, [], 'void', False)
-
-    def _close_step(self, gen, stepnum):
-        gen.ilasm.ret()
-        gen.ilasm.end_function()
-
-    def _end_gen_constants(self, gen, numsteps):
-
-        ilasm = gen.ilasm
-
-        ilasm.begin_function('.ctor', [], 'void', False, 'specialname', 'rtspecialname', 'instance')
-        ilasm.opcode('ldarg.0')
-        ilasm.call('instance void object::.ctor()')
-
-        ilasm.opcode('ldarg.0')
-        ilasm.opcode('stsfld class %s %s::Singleton' % (CONST_CLASS, CONST_CLASS))
-        
-        for i in range(numsteps):
-            step_name = 'step%d' % i
-            ilasm.opcode('ldarg.0')
-            ilasm.call('instance void %s::%s()' % (CONST_CLASS, step_name))
-        ilasm.ret()
-        ilasm.end_function()
-
-        # declare&init the Singleton containing the constants
-        ilasm.field('Singleton', 'class %s' % CONST_CLASS, static=True)
-        ilasm.begin_function('.cctor', [], 'void', False, 'static', 'specialname', 'rtspecialname', 'default')
-        if SERIALIZE:
-            self._serialize_ctor()
-        else:
-            self._plain_ctor()
-        ilasm.end_function()
-
-        super(StaticFieldConstGenerator, self)._end_gen_constants(gen, numsteps)
-
-    def _plain_ctor(self):
-        self.ilasm.new('instance void class %s::.ctor()' % CONST_CLASS)
-        self.ilasm.pop()
-        self.ilasm.ret()
-
-    def _serialize_ctor(self):
-        self.ilasm.opcode('ldstr "constants.dat"')
-        self.ilasm.call('object [pypylib]pypy.runtime.Utils::Deserialize(string)')
-        self.ilasm.opcode('dup')
-        self.ilasm.opcode('brfalse initialize')
-        self.ilasm.stderr('Constants deserialized successfully')        
-        self.ilasm.opcode('stsfld class %s %s::Singleton' % (CONST_CLASS, CONST_CLASS))
-        self.ilasm.ret()
-        self.ilasm.label('initialize')
-        self.ilasm.pop()
-        self.ilasm.stderr('Cannot deserialize constants... initialize them!')
-        self.ilasm.new('instance void class %s::.ctor()' % CONST_CLASS)
-        self.ilasm.opcode('ldstr "constants.dat"')
-        self.ilasm.call('void [pypylib]pypy.runtime.Utils::Serialize(object, string)')
-        self.ilasm.ret()
-
-class LazyConstGenerator(StaticFieldConstGenerator):
-    def push_constant(self, ilasm, const):
-        getter_name = '%s::%s' % (CONST_CLASS, 'get_%s' % const.name)
-        ilasm.call('%s %s()' % (const.get_type(), getter_name))
-
-    def _create_pointers(self, gen, all_constants):
-        # overload to do nothing since we handle everything in lazy fashion
-        pass
-
-    def _initialize_data(self, gen, all_constants):
-        # overload to do nothing since we handle everything in lazy fashion
-        pass
-
-    def _declare_const(self, gen, const):
-        # Declare the field
-        super(LazyConstGenerator, self)._declare_const(gen, const)
-
-        # Create the method for accessing the field
-        getter_name = 'get_%s' % const.name
-        type_ = const.get_type()
-        self.ilasm.begin_function(getter_name, [], type_, False, 'static')
-        self.ilasm.load_static_constant(type_, CONST_NAMESPACE, CONST_CLASS, const.name)
-        # if it's already initialized, just return it
-        self.ilasm.opcode('dup')
-        self.ilasm.opcode('brfalse', 'initialize')
-        self.ilasm.opcode('ret')
-        # else, initialize!
-        self.ilasm.label('initialize')
-        self.ilasm.opcode('pop') # discard the null value we know is on the stack
-        const.instantiate(ilasm)
-        self.ilasm.opcode('dup') # two dups because const.init pops the value at the end
-        self.ilasm.opcode('dup')
-        self.ilasm.store_static_constant(type_, CONST_NAMESPACE, CONST_CLASS, const.name)
-        const.init(ilasm)
-        self.ilasm.opcode('ret')
-        self.ilasm.end_function()
 
 # ______________________________________________________________________
 # Mixins
@@ -353,8 +219,8 @@ class CLIClassConst(CLIBaseConstMixin, ClassConst):
                 FUNC = self.value._FUNC
                 classname = self.db.record_delegate(FUNC)
             else:
-                INSTANCE = self.value._INSTANCE
-                classname = self.db.class_name(INSTANCE)
+                TYPE = self.value._INSTANCE
+                classname = self.db.class_or_record_name(TYPE)
             gen.ilasm.opcode('ldtoken', classname)
             gen.ilasm.call('class [mscorlib]System.Type class [mscorlib]System.Type::GetTypeFromHandle(valuetype [mscorlib]System.RuntimeTypeHandle)')
             return
@@ -422,7 +288,7 @@ class CLICustomDictConst(CLIDictMixin, CustomDictConst):
 class CLIStaticMethodConst(CLIBaseConstMixin, StaticMethodConst):
     def create_pointer(self, gen):
         assert not self.is_null()
-        signature = self.cts.graph_to_signature(self.value.graph)
+        signature = self.cts.static_meth_to_signature(self.value)
         gen.ilasm.opcode('ldnull')
         gen.ilasm.opcode('ldftn', signature)
         gen.ilasm.new('instance void class %s::.ctor(object, native int)' % self.delegate_type)
@@ -446,26 +312,3 @@ class CLIWeakRefConst(CLIBaseConstMixin, WeakRefConst):
             gen.ilasm.call_method('void %s::ll_set(object)' % self.get_type(), True)
             return True
     
-
-class CLIFieldInfoConst(AbstractConst):
-    def __init__(self, db, llvalue, count):
-        AbstractConst.__init__(self, db, llvalue, count)
-        self.name = 'FieldInfo__%d' % count
-    
-    def create_pointer(self, generator):
-        constgen = generator.db.constant_generator
-        const = constgen.record_const(self.value)
-        generator.ilasm.opcode('ldtoken', CONST_CLASS)
-        generator.ilasm.call('class [mscorlib]System.Type class [mscorlib]System.Type::GetTypeFromHandle(valuetype [mscorlib]System.RuntimeTypeHandle)')
-        generator.ilasm.opcode('ldstr', '"%s"' % const.name)
-        generator.ilasm.call_method('class [mscorlib]System.Reflection.FieldInfo class [mscorlib]System.Type::GetField(string)', virtual=True)
-
-    def get_type(self):
-        from pypy.translator.cli.cts import CliClassType
-        return CliClassType('mscorlib', 'System.Reflection.FieldInfo')
-
-    def initialize_data(self, constgen, gen):
-        pass
-
-    def record_dependencies(self):
-        self.db.constant_generator.record_const(self.value)

@@ -3,10 +3,22 @@ from pypy.objspace.std.objspace import registerimplementation, register_all
 from pypy.rlib.objectmodel import r_dict
 from pypy.rlib.rarithmetic import intmask, r_uint
 from pypy.interpreter import gateway
+from pypy.interpreter.argument import Signature
 from pypy.objspace.std.settype import set_typedef as settypedef
 from pypy.objspace.std.frozensettype import frozenset_typedef as frozensettypedef
 
 class W_BaseSetObject(W_Object):
+    typedef = None
+
+    # make sure that Base is used for Set and Frozenset in multimethod
+    # declarations
+    @classmethod
+    def is_implementation_for(cls, typedef): 
+        if typedef is frozensettypedef or typedef is settypedef:
+            assert cls is W_BaseSetObject
+            return True
+        return False
+
 
     def __init__(w_self, space, setdata=None):
         if setdata is None:
@@ -47,6 +59,7 @@ class W_FrozensetObject(W_BaseSetObject):
         W_BaseSetObject.__init__(w_self, space, setdata)
         w_self.hash = -1
 
+registerimplementation(W_BaseSetObject)
 registerimplementation(W_SetObject)
 registerimplementation(W_FrozensetObject)
 
@@ -98,14 +111,7 @@ def next__SetIterObject(space, w_setiter):
 def make_setdata_from_w_iterable(space, w_iterable=None):
     data = r_dict(space.eq_w, space.hash_w)
     if w_iterable is not None:
-        w_iterator = space.iter(w_iterable)
-        while True:
-            try: 
-                w_item = space.next(w_iterator)
-            except OperationError, e:
-                if not e.match(space, space.w_StopIteration):
-                    raise
-                break
+        for w_item in space.viewiterable(w_iterable):
             data[w_item] = None
     return data
 
@@ -210,13 +216,11 @@ def _issubset_dict(ldict, rdict):
 
 #end helper functions
 
-def set_update__Set_Set(space, w_left, w_other):
+def set_update__Set_BaseSet(space, w_left, w_other):
     # optimization only (the general case works too)
     ld, rd = w_left.setdata, w_other.setdata
     new_ld, rd = _union_dict(ld, rd, True)
     return space.w_None
-
-set_update__Set_Frozenset = set_update__Set_Set
 
 def set_update__Set_ANY(space, w_left, w_other):
     """Update a set with the union of itself and another."""
@@ -225,7 +229,7 @@ def set_update__Set_ANY(space, w_left, w_other):
     return space.w_None
 
 def inplace_or__Set_Set(space, w_left, w_other):
-    set_update__Set_Set(space, w_left, w_other)
+    set_update__Set_BaseSet(space, w_left, w_other)
     return w_left
 
 inplace_or__Set_Frozenset = inplace_or__Set_Set
@@ -314,6 +318,22 @@ def eq__Set_ANY(space, w_left, w_other):
     return space.w_False
 
 eq__Frozenset_ANY = eq__Set_ANY
+
+def ne__Set_Set(space, w_left, w_other):
+    return space.wrap(not _is_eq(w_left.setdata, w_other.setdata))
+
+ne__Set_Frozenset = ne__Set_Set
+ne__Frozenset_Frozenset = ne__Set_Set
+ne__Frozenset_Set = ne__Set_Set
+
+def ne__Set_settypedef(space, w_left, w_other):
+    rd = make_setdata_from_w_iterable(space, w_other)
+    return space.wrap(_is_eq(w_left.setdata, rd))
+
+ne__Set_frozensettypedef = ne__Set_settypedef
+ne__Frozenset_settypedef = ne__Set_settypedef
+ne__Frozenset_frozensettypedef = ne__Set_settypedef
+
 
 def ne__Set_ANY(space, w_left, w_other):
     # more workarounds
@@ -599,16 +619,20 @@ cmp__Set_frozensettypedef = cmp__Set_settypedef
 cmp__Frozenset_settypedef = cmp__Set_settypedef
 cmp__Frozenset_frozensettypedef = cmp__Set_settypedef
 
+init_signature = Signature(['some_iterable'], None, None)
+init_defaults = [None]
 def init__Set(space, w_set, __args__):
-    w_iterable, = __args__.parse('set',
-                            (['some_iterable'], None, None),
-                            [space.newtuple([])])
+    w_iterable, = __args__.parse_obj(
+            None, 'set',
+            init_signature,
+            init_defaults)
     _initialize_set(space, w_set, w_iterable)
 
 def init__Frozenset(space, w_set, __args__):
-    w_iterable, = __args__.parse('set',
-                            (['some_iterable'], None, None),
-                            [space.newtuple([])])
+    w_iterable, = __args__.parse_obj(
+            None, 'set',
+            init_signature,
+            init_defaults)
     if w_set.hash == -1:
         _initialize_set(space, w_set, w_iterable)
         hash__Frozenset(space, w_set)

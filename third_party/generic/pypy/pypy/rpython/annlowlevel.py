@@ -42,7 +42,7 @@ class LowLevelAnnotatorPolicy(AnnotatorPolicy):
         pol.rtyper = rtyper
 
     def lowlevelspecialize(funcdesc, args_s, key_for_args):
-        args_s, key1, ignored, builder = flatten_star_args(funcdesc, args_s)
+        args_s, key1, builder = flatten_star_args(funcdesc, args_s)
         key = []
         new_args_s = []
         for i, s_obj in enumerate(args_s):
@@ -360,7 +360,11 @@ def llhelper(F, f):
     #       prebuilt_g()
 
     # the next line is the implementation for the purpose of direct running
-    return lltype.functionptr(F.TO, f.func_name, _callable=f)
+    if isinstance(F, ootype.OOType):
+        return ootype.static_meth(F, f.func_name, _callable=f)
+    else:
+        return lltype.functionptr(F.TO, f.func_name, _callable=f)
+
 
 class LLHelperEntry(extregistry.ExtRegistryEntry):
     _about_ = llhelper
@@ -369,11 +373,18 @@ class LLHelperEntry(extregistry.ExtRegistryEntry):
         assert s_F.is_constant()
         assert s_callable.is_constant()
         F = s_F.const
-        args_s = [annmodel.lltype_to_annotation(T) for T in F.TO.ARGS]
+        if isinstance(F, ootype.OOType):
+            FUNC = F
+            resultcls = annmodel.SomeOOStaticMeth
+        else:
+            FUNC = F.TO
+            resultcls = annmodel.SomePtr
+        
+        args_s = [annmodel.lltype_to_annotation(T) for T in FUNC.ARGS]
         key = (llhelper, s_callable.const)
         s_res = self.bookkeeper.emulate_pbc_call(key, s_callable, args_s)
-        assert annmodel.lltype_to_annotation(F.TO.RESULT).contains(s_res)
-        return annmodel.SomePtr(F)
+        assert annmodel.lltype_to_annotation(FUNC.RESULT).contains(s_res)
+        return resultcls(F)
 
     def specialize_call(self, hop):
         hop.exception_cannot_occur()
@@ -411,7 +422,6 @@ def make_string_entries(strtype):
 
     def llstr(s):
         from pypy.rpython.lltypesystem.rstr import mallocstr, mallocunicode
-        # XXX not sure what to do with ootypesystem
         if strtype is str:
             ll_s = mallocstr(len(s))
         else:
@@ -419,6 +429,12 @@ def make_string_entries(strtype):
         for i, c in enumerate(s):
             ll_s.chars[i] = c
         return ll_s
+
+    def oostr(s):
+        if strtype is str:
+            return ootype.make_string(s)
+        else:
+            return ootype.make_unicode(s)
 
     class LLStrEntry(extregistry.ExtRegistryEntry):
         _about_ = llstr
@@ -437,10 +453,21 @@ def make_string_entries(strtype):
             return hop.genop('same_as', [v_ll_str],
                              resulttype = hop.r_result.lowleveltype)
 
-    return hlstr, llstr
+    class OOStrEntry(extregistry.ExtRegistryEntry):
+        _about_ = oostr
 
-hlstr,     llstr     = make_string_entries(str)
-hlunicode, llunicode = make_string_entries(unicode)
+        def compute_result_annotation(self, s_str):
+            if strtype is str:
+                return annmodel.lltype_to_annotation(ootype.String)
+            else:
+                return annmodel.lltype_to_annotation(ootype.Unicode)
+
+        specialize_call = LLStrEntry.specialize_call.im_func
+
+    return hlstr, llstr, oostr
+
+hlstr,     llstr,     oostr     = make_string_entries(str)
+hlunicode, llunicode, oounicode = make_string_entries(unicode)
 
 # ____________________________________________________________
 
@@ -451,28 +478,51 @@ def cast_instance_to_base_ptr(instance):
     return cast_object_to_ptr(base_ptr_lltype(), instance)
 cast_instance_to_base_ptr._annspecialcase_ = 'specialize:argtype(0)'
 
+def cast_instance_to_base_obj(instance):
+    return cast_object_to_ptr(base_obj_ootype(), instance)
+cast_instance_to_base_obj._annspecialcase_ = 'specialize:argtype(0)'
+
 def base_ptr_lltype():
     from pypy.rpython.lltypesystem.rclass import OBJECTPTR
     return OBJECTPTR
+
+def base_obj_ootype():
+    from pypy.rpython.ootypesystem.rclass import OBJECT
+    return OBJECT
 
 class CastObjectToPtrEntry(extregistry.ExtRegistryEntry):
     _about_ = cast_object_to_ptr
 
     def compute_result_annotation(self, s_PTR, s_object):
         assert s_PTR.is_constant()
-        assert isinstance(s_PTR.const, lltype.Ptr)
-        return annmodel.SomePtr(s_PTR.const)
+        if isinstance(s_PTR.const, lltype.Ptr):
+            return annmodel.SomePtr(s_PTR.const)
+        elif isinstance(s_PTR.const, ootype.Instance):
+            return annmodel.SomeOOInstance(s_PTR.const)
+        else:
+            assert False
 
     def specialize_call(self, hop):
         from pypy.rpython import rpbc
         PTR = hop.r_result.lowleveltype
+        if isinstance(PTR, lltype.Ptr):
+            T = lltype.Ptr
+            opname = 'cast_pointer'
+            null = lltype.nullptr(PTR.TO)
+        elif isinstance(PTR, ootype.Instance):
+            T = ootype.Instance
+            opname = 'ooupcast'
+            null = ootype.null(PTR)
+        else:
+            assert False
+
         if isinstance(hop.args_r[1], rpbc.NoneFrozenPBCRepr):
-            return hop.inputconst(PTR, lltype.nullptr(PTR.TO))
+            return hop.inputconst(PTR, null)
         v_arg = hop.inputarg(hop.args_r[1], arg=1)
-        assert isinstance(v_arg.concretetype, lltype.Ptr)
+        assert isinstance(v_arg.concretetype, T)
         hop.exception_cannot_occur()
-        return hop.genop('cast_pointer', [v_arg],
-                         resulttype = PTR)
+        return hop.genop(opname, [v_arg], resulttype = PTR)
+
 
 # ____________________________________________________________
 
@@ -488,13 +538,20 @@ class CastBasePtrToInstanceEntry(extregistry.ExtRegistryEntry):
         return annmodel.SomeInstance(classdef, can_be_None=True)
 
     def specialize_call(self, hop):
+        # XXX: check if there is any test to port from oo-jit/
         v_arg = hop.inputarg(hop.args_r[1], arg=1)
-        assert isinstance(v_arg.concretetype, lltype.Ptr)
+        if isinstance(v_arg.concretetype, lltype.Ptr):
+            opname = 'cast_pointer'
+        elif isinstance(v_arg.concretetype, ootype.Instance):
+            opname = 'oodowncast'
+        else:
+            assert False
         hop.exception_cannot_occur()
-        return hop.genop('cast_pointer', [v_arg],
+        return hop.genop(opname, [v_arg],
                          resulttype = hop.r_result.lowleveltype)
 
 # ____________________________________________________________
+
 
 def placeholder_sigarg(s):
     if s == "self":

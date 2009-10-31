@@ -5,7 +5,8 @@ Common types, functions from core win32 libraries, such as kernel32
 from pypy.rpython.tool import rffi_platform
 from pypy.translator.tool.cbuild import ExternalCompilationInfo
 from pypy.rpython.lltypesystem import lltype, rffi
-import os
+from pypy.rlib.rarithmetic import intmask
+import os, sys
 
 # This module can be imported on any platform,
 # but most symbols are not usable...
@@ -55,7 +56,8 @@ class CConfig:
             "MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT)")
 
         for name in """FORMAT_MESSAGE_ALLOCATE_BUFFER FORMAT_MESSAGE_FROM_SYSTEM
-              """.split():
+                       MAX_PATH
+                    """.split():
             locals()[name] = rffi_platform.ConstantInteger(name)
 
 
@@ -94,28 +96,41 @@ if WIN32:
 
     # A bit like strerror...
     def FormatError(code):
+        return llimpl_FormatError(code)
+
+    def llimpl_FormatError(code):
         "Return a message corresponding to the given Windows error code."
         buf = lltype.malloc(rffi.VOIDPP.TO, 1, flavor='raw')
 
-        msglen = FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER |
-                               FORMAT_MESSAGE_FROM_SYSTEM,
-                               None,
-                               code,
-                               DEFAULT_LANGUAGE,
-                               rffi.cast(rffi.VOIDP, buf),
-                               0, None)
+        try:
+            msglen = FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER |
+                                   FORMAT_MESSAGE_FROM_SYSTEM,
+                                   None,
+                                   code,
+                                   DEFAULT_LANGUAGE,
+                                   rffi.cast(rffi.VOIDP, buf),
+                                   0, None)
 
-        # FormatMessage always appends a \n.
-        msglen -= 1
-        
-        result = ''.join([buf[0][i] for i in range(msglen)])
-        LocalFree(buf[0])
+            if msglen <= 2 or msglen > sys.maxint:
+                return fake_FormatError(code)
+
+            # FormatMessage always appends \r\n.
+            buflen = intmask(msglen - 2)
+            assert buflen > 0
+
+            result = rffi.charpsize2str(buf[0], buflen)
+            LocalFree(buf[0])
+        finally:
+            lltype.free(buf, flavor='raw')
+
         return result
 
-    def lastWindowsError(context=None):
+    def fake_FormatError(code):
+        return 'Windows Error %d' % (code,)
+
+    def lastWindowsError(context="Windows Error"):
         code = GetLastError()
-        message = FormatError(code)
-        return WindowsError(code, message)
+        return WindowsError(code, context)
 
     def FAILED(hr):
         return rffi.cast(HRESULT, hr) < 0
@@ -125,7 +140,7 @@ if WIN32:
                                      DWORD)
 
     def GetModuleFileName(module):
-        size = 255 # MAX_PATH
+        size = MAX_PATH
         buf = lltype.malloc(rffi.CCHARP.TO, size, flavor='raw')
         try:
             res = _GetModuleFileName(module, buf, size)

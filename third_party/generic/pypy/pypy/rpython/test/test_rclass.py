@@ -266,6 +266,25 @@ class BaseTestRclass(BaseRtypingTest):
         res = self.interpret(f, [])
         assert res == 246
 
+    def test_method_specialized_with_subclass(self):
+        class A:
+            def meth(self, n):
+                return -1
+            meth._annspecialcase_ = 'specialize:arg(1)'
+
+        class B(A):
+            pass
+        
+        def f():
+            a = A()
+            b = B()
+            a.meth(1) # the self of this variant is annotated with A
+            b.meth(2) # the self of this variant is annotated with B
+            return 42
+        
+        res = self.interpret(f, [])
+        assert res == 42
+
     def test_issubclass_type(self):
         class Abstract:
             pass
@@ -406,27 +425,32 @@ class BaseTestRclass(BaseRtypingTest):
 
     def test_hash_preservation(self):
         from pypy.rlib.objectmodel import current_object_addr_as_int
+        from pypy.rlib.objectmodel import compute_identity_hash
         class C:
             pass
         class D(C):
             pass
         c = C()
         d = D()
+        h_c = compute_identity_hash(c)
+        h_d = compute_identity_hash(d)
+        #
         def f():
             d2 = D()
-            return hash(d2), current_object_addr_as_int(d2), hash(c), hash(d)
+            return (compute_identity_hash(d2),
+                    current_object_addr_as_int(d2),
+                    compute_identity_hash(c),
+                    compute_identity_hash(d))
 
         res = self.interpret(f, [])
         # xxx this is too precise, checking the exact implementation
-        if isinstance(self, OORtypeMixin):
-            assert res.item0 == res.item1
-        else:
-            assert res.item0 == ~res.item1
+        assert res.item0 == res.item1
         # the following property is essential on top of the lltypesystem
-        # otherwise prebuilt dictionaries are broken.  It's not that
-        # relevant on top of the ootypesystem though.
-        assert res.item2 == hash(c)
-        assert res.item3 == hash(d)
+        # otherwise prebuilt dictionaries are broken.  It's wrong on
+        # top of the ootypesystem though.
+        if type(self) is TestLLtype:
+            assert res.item2 == h_c
+            assert res.item3 == h_d
 
     def test_circular_hash_initialization(self):
         class B:
@@ -661,8 +685,83 @@ class BaseTestRclass(BaseRtypingTest):
             return a.revealconst(1) + b.revealconst(2) + a.revealconst(3)
         assert self.interpret(fn, []) == 3 + 8 + 9
 
+    def test_hash_of_none(self):
+        from pypy.rlib.objectmodel import compute_hash
+        class A:
+            pass
+        def fn(x):
+            if x:
+                obj = A()
+            else:
+                obj = None
+            return compute_hash(obj)
+        res = self.interpret(fn, [0])
+        assert res == 0
 
-class TestLltype(BaseTestRclass, LLRtypeMixin):
+    def test_hash_of_only_none(self):
+        from pypy.rlib.objectmodel import compute_hash
+        def fn():
+            obj = None
+            return compute_hash(obj)
+        res = self.interpret(fn, [])
+        assert res == 0
+
+
+    def test_immutable(self):
+        class I(object):
+            _immutable_ = True
+            
+            def __init__(self, v):
+                self.v = v
+
+        i = I(3)
+        def f():
+            return i.v
+
+        t, typer, graph = self.gengraph(f, [], backendopt=True)
+        assert summary(graph) == {}
+
+    def test_immutable_fields(self):
+        from pypy.jit.metainterp.typesystem import deref
+        class A(object):
+            _immutable_fields_ = ["x", "y[*]"]
+
+            def __init__(self, x, y):
+                self.x = x
+                self.y = y
+
+        def f():
+            return A(3, [])
+        t, typer, graph = self.gengraph(f, [])
+        A_TYPE = deref(graph.getreturnvar().concretetype)
+        accessor = A_TYPE._hints["immutable_fields"]
+        assert accessor.fields == {"inst_x" : "", "inst_y" : "[*]"} or \
+               accessor.fields == {"ox" : "", "oy" : "[*]"} # for ootype
+
+    def test_immutable_inheritance(self):
+        class I(object):
+            def __init__(self, v):
+                self.v = v
+        
+        class J(I):
+            _immutable_ = True
+            def __init__(self, v, w):
+                self.w = w
+                I.__init__(self, v)
+
+        j = J(3, 4)
+        def f():
+            j.v = j.v * 1 # make the annotator think it is mutated
+            j.w = j.w * 1 # make the annotator think it is mutated
+            return j.v + j.w
+
+        t, typer, graph = self.gengraph(f, [], backendopt=True)
+        f_summary = summary(graph)
+        assert f_summary == {"setfield": 2} or \
+               f_summary == {"oosetfield": 2} # for ootype
+
+
+class TestLLtype(BaseTestRclass, LLRtypeMixin):
 
     def test__del__(self):
         class A(object):
@@ -727,40 +826,6 @@ class TestLltype(BaseTestRclass, LLRtypeMixin):
         assert typeOf(destrptra).TO.ARGS[0] != typeOf(destrptrb).TO.ARGS[0]
         assert destrptra is not None
         assert destrptrb is not None
-
-    def test_immutable(self):
-        class I(object):
-            _immutable_ = True
-            
-            def __init__(self, v):
-                self.v = v
-
-        i = I(3)
-        def f():
-            return i.v
-
-        t, typer, graph = self.gengraph(f, [], backendopt=True)
-        assert summary(graph) == {}
-
-    def test_immutable_inheritance(self):
-        class I(object):
-            def __init__(self, v):
-                self.v = v
-        
-        class J(I):
-            _immutable_ = True
-            def __init__(self, v, w):
-                self.w = w
-                I.__init__(self, v)
-
-        j = J(3, 4)
-        def f():
-            j.v = j.v * 1 # make the annotator think it is mutated
-            j.w = j.w * 1 # make the annotator think it is mutated
-            return j.v + j.w
-
-        t, typer, graph = self.gengraph(f, [], backendopt=True)
-        assert summary(graph) == {"setfield": 2}
         
     def test_instance_repr(self):
         from pypy.rlib.objectmodel import current_object_addr_as_int
@@ -780,6 +845,38 @@ class TestLltype(BaseTestRclass, LLRtypeMixin):
         from pypy.rlib.rarithmetic import r_uint
         expected = hex(r_uint(xid)).lower().replace('l', '')
         assert expected in xstr
+
+    def test_hash_via_type(self):
+        from pypy.annotation import model as annmodel
+        from pypy.rpython import extregistry
+        from pypy.rpython.annlowlevel import cast_object_to_ptr
+        from pypy.rlib.objectmodel import compute_identity_hash
+
+        class Z(object):
+            pass
+
+        def my_gethash(z):
+            not_implemented
+
+        def ll_my_gethash(ptr):
+            return identityhash(ptr)    # from lltype
+
+        class MyGetHashEntry(extregistry.ExtRegistryEntry):
+            _about_ = my_gethash
+            def compute_result_annotation(self, s_instance):
+                return annmodel.SomeInteger()
+            def specialize_call(self, hop):
+                [v_instance] = hop.inputargs(*hop.args_r)
+                return hop.gendirectcall(ll_my_gethash, v_instance)
+
+        def f(n):
+            z = Z()
+            got = my_gethash(z)
+            expected = compute_identity_hash(z)
+            return got - expected
+
+        res = self.interpret(f, [5])
+        assert res == 0
 
 
 class TestOOtype(BaseTestRclass, OORtypeMixin):
@@ -838,3 +935,65 @@ class TestOOtype(BaseTestRclass, OORtypeMixin):
         assert destra == destrc
         assert destrb is not None
         assert destra is not None
+
+    def test_cast_object_instance(self):
+        A = ootype.Instance("Foo", ootype.ROOT)
+
+        def fn_instance():
+            a = ootype.new(A)
+            obj = ootype.cast_to_object(a)
+            a2 = ootype.cast_from_object(A, obj)
+            a3 = ootype.cast_from_object(ootype.ROOT, obj)
+            assert a is a2
+            assert a is a3
+        self.interpret(fn_instance, [])
+
+    def test_cast_object_record(self):
+        B = ootype.Record({'x': ootype.Signed}) 
+
+        def fn_record():
+            b = ootype.new(B)
+            b.x = 42
+            obj = ootype.cast_to_object(b)
+            b2 = ootype.cast_from_object(B, obj)
+            assert b2.x == 42
+            assert b is b2
+        self.interpret(fn_record, [])
+
+    def test_cast_object_null(self):
+        A = ootype.Instance("Foo", ootype.ROOT)
+        B = ootype.Record({'x': ootype.Signed}) 
+
+        def fn_null():
+            a = ootype.null(A)
+            b = ootype.null(B)
+            obj1 = ootype.cast_to_object(a)
+            obj2 = ootype.cast_to_object(b)
+            assert obj1 == obj2
+            assert ootype.cast_from_object(A, obj1) == a
+            assert ootype.cast_from_object(B, obj2) == b
+        self.interpret(fn_null, [])
+
+    def test_cast_object_is_true(self):
+        A = ootype.Instance("Foo", ootype.ROOT)
+        def fn_is_true(flag):
+            if flag:
+                a = ootype.new(A)
+            else:
+                a = ootype.null(A)
+            obj = ootype.cast_to_object(a)
+            return bool(obj)
+        assert self.interpret(fn_is_true, [True]) is True
+        assert self.interpret(fn_is_true, [False]) is False
+
+    def test_cast_object_mix_null(self):
+        A = ootype.Instance("Foo", ootype.ROOT)
+        def fn_mix_null(flag):
+            a = ootype.new(A)
+            obj = ootype.cast_to_object(a)
+            if flag:
+                return obj
+            else:
+                return ootype.NULL
+        res = self.interpret(fn_mix_null, [False])
+        assert res is ootype.NULL

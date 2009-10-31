@@ -4,7 +4,7 @@ from pypy.rpython.lltypesystem.llmemory import NULL, raw_malloc_usage
 from pypy.rpython.memory.support import DEFAULT_CHUNK_SIZE
 from pypy.rpython.memory.support import get_address_stack, get_address_deque
 from pypy.rpython.memory.support import AddressDict
-from pypy.rpython.lltypesystem import lltype, llmemory, llarena
+from pypy.rpython.lltypesystem import lltype, llmemory, llarena, rffi
 from pypy.rlib.objectmodel import free_non_gc_object
 from pypy.rlib.debug import ll_assert
 from pypy.rpython.lltypesystem.lloperation import llop
@@ -13,29 +13,35 @@ from pypy.rpython.memory.gc.base import MovingGCBase
 
 import sys, os, time
 
-TYPEID_MASK = 0xffff
 first_gcflag = 1 << 16
 GCFLAG_FORWARDED = first_gcflag
 # GCFLAG_EXTERNAL is set on objects not living in the semispace:
 # either immortal objects or (for HybridGC) externally raw_malloc'ed
 GCFLAG_EXTERNAL = first_gcflag << 1
 GCFLAG_FINALIZATION_ORDERING = first_gcflag << 2
+GCFLAG_HASHTAKEN = first_gcflag << 3      # someone already asked for the hash
+GCFLAG_HASHFIELD = first_gcflag << 4      # we have an extra hash field
 
 memoryError = MemoryError()
+
 
 class SemiSpaceGC(MovingGCBase):
     _alloc_flavor_ = "raw"
     inline_simple_malloc = True
     inline_simple_malloc_varsize = True
     malloc_zero_filled = True
-    first_unused_gcflag = first_gcflag << 3
-    total_collection_time = 0.0
-    total_collection_count = 0
+    first_unused_gcflag = first_gcflag << 5
 
-    HDR = lltype.Struct('header', ('tid', lltype.Signed))
+    HDR = lltype.Struct('header', ('tid', lltype.Signed))   # XXX or rffi.INT?
+    typeid_is_in_field = 'tid'
+    withhash_flag_is_in_field = 'tid', GCFLAG_HASHFIELD
+    # ^^^ all prebuilt objects have GCFLAG_HASHTAKEN, but only some have
+    #     GCFLAG_HASHFIELD (and then they are one word longer).
     FORWARDSTUB = lltype.GcStruct('forwarding_stub',
                                   ('forw', llmemory.Address))
     FORWARDSTUBPTR = lltype.Ptr(FORWARDSTUB)
+
+    object_minimal_size = llmemory.sizeof(FORWARDSTUB)
 
     # the following values override the default arguments of __init__ when
     # translating to a real backend.
@@ -43,12 +49,18 @@ class SemiSpaceGC(MovingGCBase):
 
     def __init__(self, config, chunk_size=DEFAULT_CHUNK_SIZE, space_size=4096,
                  max_space_size=sys.maxint//2+1):
+        self.param_space_size = space_size
+        self.param_max_space_size = max_space_size
         MovingGCBase.__init__(self, config, chunk_size)
-        self.space_size = space_size
-        self.max_space_size = max_space_size
-        self.red_zone = 0
 
     def setup(self):
+        self.total_collection_time = 0.0
+        self.total_collection_count = 0
+
+        self.space_size = self.param_space_size
+        self.max_space_size = self.param_max_space_size
+        self.red_zone = 0
+
         if self.config.gcconfig.debugprint:
             self.program_start_time = time.time()
         self.tospace = llarena.arena_malloc(self.space_size, True)
@@ -61,10 +73,15 @@ class SemiSpaceGC(MovingGCBase):
         self.objects_with_finalizers = self.AddressDeque()
         self.objects_with_weakrefs = self.AddressStack()
 
+    def _teardown(self):
+        llop.debug_print(lltype.Void, "Teardown")
+        llarena.arena_free(self.fromspace)
+        llarena.arena_free(self.tospace)
+
     # This class only defines the malloc_{fixed,var}size_clear() methods
     # because the spaces are filled with zeroes in advance.
 
-    def malloc_fixedsize_clear(self, typeid, size, can_collect,
+    def malloc_fixedsize_clear(self, typeid16, size, can_collect,
                                has_finalizer=False, contains_weakptr=False):
         size_gc_header = self.gcheaderbuilder.size_gc_header
         totalsize = size_gc_header + size
@@ -74,7 +91,7 @@ class SemiSpaceGC(MovingGCBase):
                 raise memoryError
             result = self.obtain_free_space(totalsize)
         llarena.arena_reserve(result, totalsize)
-        self.init_gc_object(result, typeid)
+        self.init_gc_object(result, typeid16)
         self.free = result + totalsize
         if has_finalizer:
             self.objects_with_finalizers.append(result + size_gc_header)
@@ -82,9 +99,8 @@ class SemiSpaceGC(MovingGCBase):
             self.objects_with_weakrefs.append(result + size_gc_header)
         return llmemory.cast_adr_to_ptr(result+size_gc_header, llmemory.GCREF)
 
-    def malloc_varsize_clear(self, typeid, length, size, itemsize,
-                             offset_to_length, can_collect,
-                             has_finalizer=False):
+    def malloc_varsize_clear(self, typeid16, length, size, itemsize,
+                             offset_to_length, can_collect):
         size_gc_header = self.gcheaderbuilder.size_gc_header
         nonvarsize = size_gc_header + size
         try:
@@ -98,11 +114,9 @@ class SemiSpaceGC(MovingGCBase):
                 raise memoryError
             result = self.obtain_free_space(totalsize)
         llarena.arena_reserve(result, totalsize)
-        self.init_gc_object(result, typeid)
+        self.init_gc_object(result, typeid16)
         (result + size_gc_header + offset_to_length).signed[0] = length
         self.free = result + llarena.round_up_for_allocation(totalsize)
-        if has_finalizer:
-            self.objects_with_finalizers.append(result + size_gc_header)
         return llmemory.cast_adr_to_ptr(result+size_gc_header, llmemory.GCREF)
 
     def obtain_free_space(self, needed):
@@ -191,7 +205,7 @@ class SemiSpaceGC(MovingGCBase):
         while self.max_space_size > size:
             self.max_space_size >>= 1
 
-    def collect(self):
+    def collect(self, gen=0):
         self.debug_check_consistency()
         self.semispace_collect()
         # the indirection is required by the fact that collect() is referred
@@ -212,6 +226,11 @@ class SemiSpaceGC(MovingGCBase):
             start_time = 0 # Help the flow space
             start_usage = 0 # Help the flow space
         #llop.debug_print(lltype.Void, 'semispace_collect', int(size_changing))
+
+        # Switch the spaces.  We copy everything over to the empty space
+        # (self.fromspace at the beginning of the collection), and clear the old
+        # one (self.tospace at the beginning).  Their purposes will be reversed
+        # for the next collection.
         tospace = self.fromspace
         fromspace = self.tospace
         self.fromspace = fromspace
@@ -292,11 +311,18 @@ class SemiSpaceGC(MovingGCBase):
             if free_after_collection < self.space_size // 5:
                 self.red_zone += 1
 
+    def get_size_incl_hash(self, obj):
+        size = self.get_size(obj)
+        hdr = self.header(obj)
+        if hdr.tid & GCFLAG_HASHFIELD:
+            size += llmemory.sizeof(lltype.Signed)
+        return size
+
     def scan_copied(self, scan):
         while scan < self.free:
             curr = scan + self.size_gc_header()
             self.trace_and_copy(curr)
-            scan += self.size_gc_header() + self.get_size(curr)
+            scan += self.size_gc_header() + self.get_size_incl_hash(curr)
         return scan
 
     def collect_roots(self):
@@ -323,21 +349,37 @@ class SemiSpaceGC(MovingGCBase):
             self.set_forwarding_address(obj, newobj, objsize)
             return newobj
 
-    def make_a_copy(self, obj, objsize):
+    def _make_a_copy_with_tid(self, obj, objsize, tid):
         totalsize = self.size_gc_header() + objsize
         newaddr = self.free
-        self.free += totalsize
         llarena.arena_reserve(newaddr, totalsize)
         raw_memcopy(obj - self.size_gc_header(), newaddr, totalsize)
+        #
+        # check if we need to write a hash value at the end of the new obj
+        if tid & (GCFLAG_HASHTAKEN|GCFLAG_HASHFIELD):
+            if tid & GCFLAG_HASHFIELD:
+                hash = (obj + objsize).signed[0]
+            else:
+                hash = llmemory.cast_adr_to_int(obj)
+                tid |= GCFLAG_HASHFIELD
+            (newaddr + totalsize).signed[0] = hash
+            totalsize += llmemory.sizeof(lltype.Signed)
+        #
+        self.free += totalsize
+        newhdr = llmemory.cast_adr_to_ptr(newaddr, lltype.Ptr(self.HDR))
+        newhdr.tid = tid
         newobj = newaddr + self.size_gc_header()
         return newobj
+
+    def make_a_copy(self, obj, objsize):
+        tid = self.header(obj).tid
+        return self._make_a_copy_with_tid(obj, objsize, tid)
 
     def trace_and_copy(self, obj):
         self.trace(obj, self._trace_copy, None)
 
     def _trace_copy(self, pointer, ignored):
-        if pointer.address[0] != NULL:
-            pointer.address[0] = self.copy(pointer.address[0])
+        pointer.address[0] = self.copy(pointer.address[0])
 
     def surviving(self, obj):
         # To use during a collection.  Check if the object is currently
@@ -383,6 +425,9 @@ class SemiSpaceGC(MovingGCBase):
         stub = llmemory.cast_adr_to_ptr(obj, self.FORWARDSTUBPTR)
         stub.forw = newobj
 
+    def combine(self, typeid16, flags):
+        return llop.combine_ushort(lltype.Signed, typeid16, flags)
+
     def get_type_id(self, addr):
         tid = self.header(addr).tid
         ll_assert(tid & (GCFLAG_FORWARDED|GCFLAG_EXTERNAL) != GCFLAG_FORWARDED,
@@ -391,15 +436,16 @@ class SemiSpaceGC(MovingGCBase):
         # Although calling get_type_id() on a forwarded object works by itself,
         # we catch it as an error because it's likely that what is then
         # done with the typeid is bogus.
-        return tid & TYPEID_MASK
+        return llop.extract_ushort(rffi.USHORT, tid)
 
-    def init_gc_object(self, addr, typeid, flags=0):
+    def init_gc_object(self, addr, typeid16, flags=0):
         hdr = llmemory.cast_adr_to_ptr(addr, lltype.Ptr(self.HDR))
-        hdr.tid = typeid | flags
+        hdr.tid = self.combine(typeid16, flags)
 
-    def init_gc_object_immortal(self, addr, typeid, flags=0):
+    def init_gc_object_immortal(self, addr, typeid16, flags=0):
         hdr = llmemory.cast_adr_to_ptr(addr, lltype.Ptr(self.HDR))
-        hdr.tid = typeid | flags | GCFLAG_EXTERNAL | GCFLAG_FORWARDED
+        flags |= GCFLAG_EXTERNAL | GCFLAG_FORWARDED | GCFLAG_HASHTAKEN
+        hdr.tid = self.combine(typeid16, flags)
         # immortal objects always have GCFLAG_FORWARDED set;
         # see get_forwarding_address().
 
@@ -456,8 +502,7 @@ class SemiSpaceGC(MovingGCBase):
         return scan
 
     def _append_if_nonnull(pointer, stack):
-        if pointer.address[0] != NULL:
-            stack.append(pointer.address[0])
+        stack.append(pointer.address[0])
     _append_if_nonnull = staticmethod(_append_if_nonnull)
 
     def _finalization_state(self, obj):
@@ -561,3 +606,33 @@ class SemiSpaceGC(MovingGCBase):
 
     STATISTICS_NUMBERS = 0
 
+    def identityhash(self, gcobj):
+        # The following code should run at most twice.
+        while 1:
+            obj = llmemory.cast_ptr_to_adr(gcobj)
+            hdr = self.header(obj)
+            #
+            if hdr.tid & GCFLAG_HASHFIELD:  # the hash is in a field at the end
+                obj += self.get_size(obj)
+                return obj.signed[0]
+            #
+            if not (hdr.tid & GCFLAG_HASHTAKEN):
+                # It's the first time we ask for a hash, and it's not an
+                # external object.  Shrink the top of space by the extra
+                # hash word that will be needed after a collect.
+                shrunk_top = self.top_of_space - llmemory.sizeof(lltype.Signed)
+                if shrunk_top < self.free:
+                    # Cannot shrink!  Do a collection, asking for at least
+                    # one word of free space, and try again.  May raise
+                    # MemoryError.  Obscure: not called directly, but
+                    # across an llop, to make sure that there is the
+                    # correct push_roots/pop_roots around the call...
+                    llop.gc_obtain_free_space(llmemory.Address,
+                                              llmemory.sizeof(lltype.Signed))
+                    continue
+                # Now we can have side-effects: set GCFLAG_HASHTAKEN
+                # and lower the top of space.
+                self.top_of_space = shrunk_top
+                hdr.tid |= GCFLAG_HASHTAKEN
+            #
+            return llmemory.cast_adr_to_int(obj)  # direct case

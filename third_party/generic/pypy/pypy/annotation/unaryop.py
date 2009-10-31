@@ -2,6 +2,7 @@
 Unary operations on SomeValues.
 """
 
+from types import MethodType
 from pypy.annotation.model import \
      SomeObject, SomeInteger, SomeBool, SomeString, SomeChar, SomeList, \
      SomeDict, SomeTuple, SomeImpossibleValue, \
@@ -19,11 +20,12 @@ from pypy.rpython import extregistry
 def immutablevalue(x):
     return getbookkeeper().immutablevalue(x)
 
-UNARY_OPERATIONS = set(['len', 'is_true', 'getattr', 'setattr', 'delattr', 'hash',
+UNARY_OPERATIONS = set(['len', 'is_true', 'getattr', 'setattr', 'delattr',
                         'simple_call', 'call_args', 'str', 'repr',
                         'iter', 'next', 'invert', 'type', 'issubtype',
                         'pos', 'neg', 'nonzero', 'abs', 'hex', 'oct',
-                        'ord', 'int', 'float', 'long', 'id',
+                        'ord', 'int', 'float', 'long',
+                        'hash', 'id',    # <== not supported any more
                         'getslice', 'setslice', 'delslice',
                         'neg_ovf', 'abs_ovf', 'hint', 'unicode', 'unichr'])
 
@@ -97,7 +99,8 @@ class __extend__(SomeObject):
         return obj.is_true()
 
     def hash(obj):
-        raise TypeError, "hash() is not generally supported"
+        raise TypeError, ("cannot use hash() in RPython; "
+                          "see objectmodel.compute_xxx()")
 
     def str(obj):
         getbookkeeper().count('str', obj)
@@ -120,10 +123,8 @@ class __extend__(SomeObject):
         return SomeString()
 
     def id(obj):
-        raise Exception("cannot use id() in RPython; pick one of:\n"
-                        "\t\t objectmodel.compute_unique_id()\n"
-                        "\t\t hash()\n"
-                        "\t\t objectmodel.current_object_addr_as_int()")
+        raise Exception("cannot use id() in RPython; "
+                        "see objectmodel.compute_xxx()")
 
     def int(obj):
         return SomeInteger()
@@ -202,9 +203,6 @@ class __extend__(SomeFloat):
             return getbookkeeper().immutablevalue(bool(self.const))
         return s_Bool
 
-    def hash(flt):
-        return SomeInteger()
-
 class __extend__(SomeInteger):
 
     def invert(self):
@@ -271,11 +269,6 @@ class __extend__(SomeTuple):
     def getanyitem(tup):
         return unionof(*tup.items)
 
-    def hash(tup):
-        for s_item in tup.items:
-            s_item.hash()    # record that we need the hash of each item
-        return SomeInteger()
-
     def getslice(tup, s_start, s_stop):
         assert s_start.is_immutable_constant(),"tuple slicing: needs constants"
         assert s_stop.is_immutable_constant(), "tuple slicing: needs constants"
@@ -341,6 +334,8 @@ class __extend__(SomeList):
             # not over an iterator object (because it has no known length)
             s_iterable = args_s[0]
             if isinstance(s_iterable, (SomeList, SomeDict)):
+                lst = SomeList(lst.listdef) # create a fresh copy
+                lst.known_maxlength = True
                 lst.listdef.resize()
                 lst.listdef.listitem.hint_maxlength = True
         elif 'fence' in hints:
@@ -372,10 +367,14 @@ def check_negative_slice(s_start, s_stop):
 
 class __extend__(SomeDict):
 
-    def len(dct):
+    def _is_empty(dct):
         s_key = dct.dictdef.read_key()
         s_value = dct.dictdef.read_value()
-        if isinstance(s_key, SomeImpossibleValue) or isinstance(s_value, SomeImpossibleValue):
+        return (isinstance(s_key, SomeImpossibleValue) or
+                isinstance(s_value, SomeImpossibleValue))
+        
+    def len(dct):
+        if dct._is_empty():
             return immutablevalue(0)
         return SomeObject.len(dct)
 
@@ -440,6 +439,10 @@ class __extend__(SomeDict):
 
     def op_contains(dct, s_element):
         dct.dictdef.generalize_key(s_element)
+        if dct._is_empty():
+            s_bool = SomeBool()
+            s_bool.const = False
+            return s_bool
         return s_Bool
     op_contains.can_only_throw = _can_only_throw
 
@@ -489,9 +492,6 @@ class __extend__(SomeString,
 
     def ord(str):
         return SomeInteger(nonneg=True)
-
-    def hash(str):
-        return SomeInteger()
 
     def method_split(str, patt): # XXX
         getbookkeeper().count("str_split", str, patt)
@@ -621,10 +621,6 @@ class __extend__(SomeInstance):
             # create or update the attribute in clsdef
             clsdef.generalize_attr(attr, s_value)
 
-    def hash(ins):
-        getbookkeeper().needs_hash_support[ins.classdef] = True
-        return SomeInteger()
-
     def is_true_behavior(ins, s):
         if not ins.can_be_None:
             s.const = True
@@ -720,8 +716,19 @@ class __extend__(SomePtr):
 
     def getattr(p, s_attr):
         assert s_attr.is_constant(), "getattr on ptr %r with non-constant field-name" % p.ll_ptrtype
-        v = getattr(p.ll_ptrtype._example(), s_attr.const)
-        return ll_to_annotation(v)
+        example = p.ll_ptrtype._example()
+        try:
+            v = example._lookup_adtmeth(s_attr.const)
+        except AttributeError:
+            v = getattr(example, s_attr.const)
+            return ll_to_annotation(v)
+        else:
+            if isinstance(v, MethodType):
+                from pypy.rpython.lltypesystem import lltype
+                ll_ptrtype = lltype.typeOf(v.im_self)
+                assert isinstance(ll_ptrtype, (lltype.Ptr, lltype.InteriorPtr))
+                return SomeLLADTMeth(ll_ptrtype, v.im_func)
+            return getbookkeeper().immutablevalue(v)
     getattr.can_only_throw = []
 
     def len(p):
@@ -778,13 +785,22 @@ class __extend__(SomeOOInstance):
 
 class __extend__(SomeOOBoundMeth):
     def simple_call(m, *args_s):
-        inst = m.ootype._example()
         _, meth = m.ootype._lookup(m.name)
         if isinstance(meth, ootype._overloaded_meth):
             return meth._resolver.annotate(args_s)
         else:
             METH = ootype.typeOf(meth)
             return lltype_to_annotation(METH.RESULT)
+
+    def call(m, args):
+        args_s, kwds_s = args.unpack()
+        if kwds_s:
+            raise Exception("keyword arguments to call to a low-level bound method")
+        inst = m.ootype._example()
+        _, meth = ootype.typeOf(inst)._lookup(m.name)
+        METH = ootype.typeOf(meth)
+        return lltype_to_annotation(METH.RESULT)
+
 
 class __extend__(SomeOOStaticMeth):
 

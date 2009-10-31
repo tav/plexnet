@@ -73,6 +73,8 @@ class Translation(object):
                                         kwds.get('standalone'))
         kwds.pop('policy', None)
         kwds.pop('standalone', None)
+        gc = kwds.pop('gc', None)
+        if gc: self.config.translation.gc = gc
         self.config.translation.set(**kwds)
 
     def ensure_opt(self, name, value=None, fallback=None):
@@ -101,6 +103,12 @@ class Translation(object):
     # disable some goals (steps)
     def disable(self, to_disable):
         self.driver.disable(to_disable)
+
+    def set_backend_extra_options(self, **extra_options):
+        for name in extra_options:
+            backend, option = name.split('_', 1)
+            self.ensure_backend(backend)
+        self.driver.set_backend_extra_options(extra_options)
 
     # backend independent
 

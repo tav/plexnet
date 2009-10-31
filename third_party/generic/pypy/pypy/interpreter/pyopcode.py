@@ -9,11 +9,10 @@ from pypy.interpreter.error import OperationError
 from pypy.interpreter.baseobjspace import UnpackValueError, Wrappable
 from pypy.interpreter import gateway, function, eval
 from pypy.interpreter import pyframe, pytraceback
-from pypy.interpreter.argument import Arguments
 from pypy.interpreter.pycode import PyCode
 from pypy.tool.sourcetools import func_with_new_name
 from pypy.rlib.objectmodel import we_are_translated
-from pypy.rlib.jit import hint, we_are_jitted
+from pypy.rlib import jit
 from pypy.rlib.rarithmetic import r_uint, intmask
 from pypy.tool.stdlib_opcode import opcodedesc, HAVE_ARGUMENT
 from pypy.tool.stdlib_opcode import unrolling_opcode_descs
@@ -131,7 +130,7 @@ class __extend__(pyframe.PyFrame):
 
     def handle_operation_error(self, ec, operr, attach_tb=True):
         if attach_tb:
-            if not we_are_jitted():
+            if not jit.we_are_jitted():
                 # xxx this is a hack.  It allows bytecode_trace() to
                 # call a signal handler which raises, and catch the
                 # raised exception immediately.  See test_alarm_raise in
@@ -154,7 +153,7 @@ class __extend__(pyframe.PyFrame):
                     operr = e
             pytraceback.record_application_traceback(
                 self.space, operr, self, self.last_instr)
-            if not we_are_jitted():
+            if not jit.we_are_jitted():
                 ec.exception_trace(self, operr)
 
         block = self.unrollstack(SApplicationException.kind)
@@ -172,11 +171,12 @@ class __extend__(pyframe.PyFrame):
             next_instr = block.handle(self, unroller)
             return next_instr
 
+    @jit.unroll_safe
     def dispatch_bytecode(self, co_code, next_instr, ec):
         space = self.space
         while True:
             self.last_instr = intmask(next_instr)
-            if not we_are_jitted():
+            if not jit.we_are_jitted():
                 ec.bytecode_trace(self)
                 next_instr = r_uint(self.last_instr)
             opcode = ord(co_code[next_instr])
@@ -235,6 +235,9 @@ class __extend__(pyframe.PyFrame):
                         next_instr = block.handle(self, unroller)
                 return next_instr
 
+            if opcode == opcodedesc.JUMP_ABSOLUTE.index:
+                return self.JUMP_ABSOLUTE(oparg, next_instr, ec)
+
             if we_are_translated():
                 from pypy.rlib import rstack # for resume points
 
@@ -266,14 +269,15 @@ class __extend__(pyframe.PyFrame):
                 if res is not None:
                     next_instr = res
 
-            if we_are_jitted():
+            if jit.we_are_jitted():
                 return next_instr
 
+    @jit.unroll_safe
     def unrollstack(self, unroller_kind):
-        n = len(self.blockstack)
-        n = hint(n, promote=True)
+        n = self.blockcount
+        n = jit.hint(n, promote=True)
         while n > 0:
-            block = self.blockstack.pop()
+            block = self.pop_block()
             n -= 1
             if (block.handling_mask & unroller_kind) != 0:
                 return block
@@ -588,7 +592,7 @@ class __extend__(pyframe.PyFrame):
             f.setdictscope(w_locals)
 
     def POP_BLOCK(f, *ignored):
-        block = f.blockstack.pop()
+        block = f.pop_block()
         block.cleanup(f)  # the block knows how to clean up the value stack
 
     def end_finally(f):
@@ -633,7 +637,7 @@ class __extend__(pyframe.PyFrame):
     def UNPACK_SEQUENCE(f, itemcount, *ignored):
         w_iterable = f.popvalue()
         try:
-            items = f.space.unpackiterable(w_iterable, itemcount)
+            items = f.space.viewiterable(w_iterable, itemcount)
         except UnpackValueError, e:
             raise OperationError(f.space.w_ValueError, f.space.wrap(e.msg))
         f.pushrevvalues(itemcount, items)
@@ -857,15 +861,15 @@ class __extend__(pyframe.PyFrame):
 
     def SETUP_LOOP(f, offsettoend, next_instr, *ignored):
         block = LoopBlock(f, next_instr + offsettoend)
-        f.blockstack.append(block)
+        f.append_block(block)
 
     def SETUP_EXCEPT(f, offsettoend, next_instr, *ignored):
         block = ExceptBlock(f, next_instr + offsettoend)
-        f.blockstack.append(block)
+        f.append_block(block)
 
     def SETUP_FINALLY(f, offsettoend, next_instr, *ignored):
         block = FinallyBlock(f, next_instr + offsettoend)
-        f.blockstack.append(block)
+        f.append_block(block)
 
     def WITH_CLEANUP(f, *ignored):
         # see comment in END_FINALLY for stack state
@@ -887,22 +891,39 @@ class __extend__(pyframe.PyFrame):
                                   f.space.w_None,
                                   f.space.w_None)
                       
+    @jit.unroll_safe
     def call_function(f, oparg, w_star=None, w_starstar=None):
         from pypy.rlib import rstack # for resume points
         from pypy.interpreter.function import is_builtin_code
     
         n_arguments = oparg & 0xff
         n_keywords = (oparg>>8) & 0xff
-        keywords = None
         if n_keywords:
-            keywords = f.popstrdictvalues(n_keywords)
-        arguments = f.popvalues(n_arguments)
-        args = Arguments(f.space, arguments, keywords, w_star, w_starstar)
-        w_function  = f.popvalue()
-        if f.is_being_profiled and is_builtin_code(w_function):
-            w_result = f.space.call_args_and_c_profile(f, w_function, args)
+            keywords = [None] * n_keywords
+            keywords_w = [None] * n_keywords
+            dic_w = {}
+            while True:
+                n_keywords -= 1
+                if n_keywords < 0:
+                    break
+                w_value = f.popvalue()
+                w_key   = f.popvalue()
+                key = f.space.str_w(w_key)
+                keywords[n_keywords] = key
+                keywords_w[n_keywords] = w_value
         else:
+            keywords = None
+            keywords_w = None
+        arguments = f.popvalues(n_arguments)
+        args = f.argument_factory(arguments, keywords, keywords_w, w_star, w_starstar)
+        w_function  = f.popvalue()
+        if jit.we_are_jitted():
             w_result = f.space.call_args(w_function, args)
+        else:
+            if f.is_being_profiled and is_builtin_code(w_function):
+                w_result = f.space.call_args_and_c_profile(f, w_function, args)
+            else:
+                w_result = f.space.call_args(w_function, args)
         rstack.resume_point("call_function", f, returns=w_result)
         f.pushvalue(w_result)
         
@@ -941,7 +962,7 @@ class __extend__(pyframe.PyFrame):
     def MAKE_FUNCTION(f, numdefaults, *ignored):
         w_codeobj = f.popvalue()
         codeobj = f.space.interp_w(PyCode, w_codeobj)
-        defaultarguments = f.popvalues_mutable(numdefaults)
+        defaultarguments = f.popvalues(numdefaults)
         fn = function.Function(f.space, codeobj, f.w_globals, defaultarguments)
         f.pushvalue(f.space.wrap(fn))
 
@@ -1124,6 +1145,7 @@ class FrameBlock:
     def __init__(self, frame, handlerposition):
         self.handlerposition = handlerposition
         self.valuestackdepth = frame.valuestackdepth
+        self.previous = None # this makes a linked list of blocks
 
     def __eq__(self, other):
         return (self.__class__ is other.__class__ and
@@ -1169,7 +1191,7 @@ class LoopBlock(FrameBlock):
             # re-push the loop block without cleaning up the value stack,
             # and jump to the beginning of the loop, stored in the
             # exception's argument
-            frame.blockstack.append(self)
+            frame.append_block(self)
             return unroller.jump_to
         else:
             # jump to the end of the loop

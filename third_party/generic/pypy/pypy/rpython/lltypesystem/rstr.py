@@ -2,9 +2,10 @@ from weakref import WeakValueDictionary
 from pypy.tool.pairtype import pairtype
 from pypy.rpython.error import TyperError
 from pypy.rlib.objectmodel import malloc_zero_filled, we_are_translated
+from pypy.rlib.objectmodel import _hash_string
 from pypy.rlib.debug import ll_assert
+from pypy.rlib.jit import purefunction
 from pypy.rpython.robject import PyObjRepr, pyobj_repr
-from pypy.rlib.rarithmetic import _hash_string
 from pypy.rpython.rmodel import inputconst, IntegerRepr
 from pypy.rpython.rstr import AbstractStringRepr,AbstractCharRepr,\
      AbstractUniCharRepr, AbstractStringIteratorRepr,\
@@ -70,17 +71,6 @@ def _new_copy_contents_fun(TP, CHAR_TP, name):
 copy_string_contents = _new_copy_contents_fun(STR, Char, 'string')
 copy_unicode_contents = _new_copy_contents_fun(UNICODE, UniChar, 'unicode')
 
-STR.become(GcStruct('rpy_string', ('hash',  Signed),
-                    ('chars', Array(Char, hints={'immutable': True})),
-                    adtmeths={'malloc' : staticAdtMethod(mallocstr),
-                              'empty'  : staticAdtMethod(emptystrfun),
-                              'copy_contents' : staticAdtMethod(copy_string_contents)}))
-UNICODE.become(GcStruct('rpy_unicode', ('hash', Signed),
-                        ('chars', Array(UniChar, hints={'immutable': True})),
-                        adtmeths={'malloc' : staticAdtMethod(mallocunicode),
-                                  'empty'  : staticAdtMethod(emptyunicodefun),
-                                  'copy_contents' : staticAdtMethod(copy_unicode_contents)}
-                        ))
 SIGNED_ARRAY = GcArray(Signed)
 CONST_STR_CACHE = WeakValueDictionary()
 CONST_UNICODE_CACHE = WeakValueDictionary()
@@ -288,6 +278,7 @@ class LLHelpers(AbstractLLHelpers):
                 raise UnicodeDecodeError
             s.chars[i] = cast_primitive(UniChar, str.chars[i])
         return s
+    ll_str2unicode.oopspec = 'str.str2unicode(str)'
 
     def ll_strhash(s):
         # unlike CPython, there is no reason to avoid to return -1
@@ -296,6 +287,8 @@ class LLHelpers(AbstractLLHelpers):
         x = s.hash
         if x == 0:
             x = _hash_string(s.chars)
+            if x == 0:
+                x = 29872897
             s.hash = x
         return x
     ll_strhash._pure_function_ = True # it's pure but it does not look like it
@@ -406,6 +399,7 @@ class LLHelpers(AbstractLLHelpers):
             i += 1
         return len1 - len2
 
+    @purefunction
     def ll_streq(s1, s2):
         if s1 == s2:       # also if both are NULLs
             return True
@@ -843,10 +837,27 @@ class LLHelpers(AbstractLLHelpers):
 
 TEMP = GcArray(Ptr(STR))
 
+# ____________________________________________________________
+
+STR.become(GcStruct('rpy_string', ('hash',  Signed),
+                    ('chars', Array(Char, hints={'immutable': True})),
+                    adtmeths={'malloc' : staticAdtMethod(mallocstr),
+                              'empty'  : staticAdtMethod(emptystrfun),
+                              'copy_contents' : staticAdtMethod(copy_string_contents),
+                              'gethash': LLHelpers.ll_strhash}))
+UNICODE.become(GcStruct('rpy_unicode', ('hash', Signed),
+                        ('chars', Array(UniChar, hints={'immutable': True})),
+                        adtmeths={'malloc' : staticAdtMethod(mallocunicode),
+                                  'empty'  : staticAdtMethod(emptyunicodefun),
+                                  'copy_contents' : staticAdtMethod(copy_unicode_contents),
+                                  'gethash': LLHelpers.ll_strhash}
+                        ))
+
 
 # TODO: make the public interface of the rstr module cleaner
 ll_strconcat = LLHelpers.ll_strconcat
 ll_join = LLHelpers.ll_join
+ll_str2unicode = LLHelpers.ll_str2unicode
 do_stringformat = LLHelpers.do_stringformat
 
 string_repr = StringRepr()

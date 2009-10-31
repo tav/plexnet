@@ -4,11 +4,12 @@ Built-in functions.
 
 import sys
 from pypy.annotation.model import SomeInteger, SomeObject, SomeChar, SomeBool
-from pypy.annotation.model import SomeString, SomeTuple, s_Bool
+from pypy.annotation.model import SomeString, SomeTuple, s_Bool, SomeBuiltin
 from pypy.annotation.model import SomeUnicodeCodePoint, SomeAddress
 from pypy.annotation.model import SomeFloat, unionof, SomeUnicodeString
 from pypy.annotation.model import SomePBC, SomeInstance, SomeDict
 from pypy.annotation.model import SomeWeakRef
+from pypy.annotation.model import SomeOOObject
 from pypy.annotation.model import annotation_to_lltype, lltype_to_annotation, ll_to_annotation
 from pypy.annotation.model import add_knowntypedata
 from pypy.annotation.model import s_ImpossibleValue
@@ -185,7 +186,9 @@ def builtin_isinstance(s_obj, s_type, variables=None):
         for variable in variables:
             assert bk.annotator.binding(variable) == s_obj
         r.knowntypedata = {}
-        add_knowntypedata(r.knowntypedata, True, variables, bk.valueoftype(typ))
+        if (not isinstance(s_type, SomeBuiltin)
+            or typ.__module__ == '__builtin__'):
+            add_knowntypedata(r.knowntypedata, True, variables, bk.valueoftype(typ))
     return r
 
 # note that this one either needs to be constant, or we will create SomeObject
@@ -265,6 +268,9 @@ def builtin_apply(*stuff):
 
 
 def OSError_init(s_self, *args):
+    pass
+
+def WindowsError_init(s_self, *args):
     pass
 
 def termios_error_init(s_self, *args):
@@ -383,6 +389,15 @@ BUILTIN_ANALYZERS[pypy.rpython.lltypesystem.llmemory.cast_int_to_adr] = llmemory
 BUILTIN_ANALYZERS[getattr(OSError.__init__, 'im_func', OSError.__init__)] = (
     OSError_init)
 
+try:
+    WindowsError
+except NameError:
+    pass
+else:
+    BUILTIN_ANALYZERS[getattr(WindowsError.__init__, 'im_func',
+                              WindowsError.__init__)] = (
+        WindowsError_init)
+
 BUILTIN_ANALYZERS[sys.getdefaultencoding] = conf
 try:
     import unicodedata
@@ -478,6 +493,10 @@ def cast_int_to_ptr(PtrT, s_int):
     assert PtrT.is_constant()
     return SomePtr(ll_ptrtype=PtrT.const)
 
+def identityhash(s_obj):
+    assert isinstance(s_obj, (SomePtr, SomeOOObject, SomeOOInstance))
+    return SomeInteger()
+
 def getRuntimeTypeInfo(T):
     assert T.is_constant()
     return immutablevalue(lltype.getRuntimeTypeInfo(T.const))
@@ -502,12 +521,13 @@ BUILTIN_ANALYZERS[lltype.direct_arrayitems] = direct_arrayitems
 BUILTIN_ANALYZERS[lltype.direct_ptradd] = direct_ptradd
 BUILTIN_ANALYZERS[lltype.cast_ptr_to_int] = cast_ptr_to_int
 BUILTIN_ANALYZERS[lltype.cast_int_to_ptr] = cast_int_to_ptr
+BUILTIN_ANALYZERS[lltype.identityhash] = identityhash
 BUILTIN_ANALYZERS[lltype.getRuntimeTypeInfo] = getRuntimeTypeInfo
 BUILTIN_ANALYZERS[lltype.runtime_type_info] = runtime_type_info
 BUILTIN_ANALYZERS[lltype.Ptr] = constPtr
 
 # ootype
-from pypy.annotation.model import SomeOOInstance, SomeOOClass
+from pypy.annotation.model import SomeOOInstance, SomeOOClass, SomeOOStaticMeth
 from pypy.rpython.ootypesystem import ootype
 
 def new(I):
@@ -547,10 +567,6 @@ def runtimenew(c):
     else:
         return SomeOOInstance(c.ootype)
 
-def ooidentityhash(i):
-    assert isinstance(i, SomeOOInstance)
-    return SomeInteger()
-
 def ooupcast(I, i):
     assert isinstance(I.const, ootype.Instance)
     if ootype.isSubclass(i.ootype, I.const):
@@ -565,6 +581,25 @@ def oodowncast(I, i):
     else:
         raise AnnotatorError, 'Cannot cast %s to %s' % (i.ootype, I.const)
 
+def cast_to_object(obj):
+    assert isinstance(obj, SomeOOStaticMeth) or \
+           (isinstance(obj, SomeOOClass) and obj.ootype is None) or \
+           isinstance(obj.ootype, ootype.OOType)
+    return SomeOOObject()
+
+def cast_from_object(T, obj):
+    TYPE = T.const
+    if TYPE is ootype.Object:
+        return SomeOOObject()
+    elif TYPE is ootype.Class:
+        return SomeOOClass(ootype.ROOT) # ???
+    elif isinstance(TYPE, ootype.StaticMethod):
+        return SomeOOStaticMeth(TYPE)
+    elif isinstance(TYPE, ootype.OOType):
+        return SomeOOInstance(TYPE)
+    else:
+        raise AnnotatorError, 'Cannot cast Object to %s' % TYPE
+
 BUILTIN_ANALYZERS[ootype.instanceof] = instanceof
 BUILTIN_ANALYZERS[ootype.new] = new
 BUILTIN_ANALYZERS[ootype.oonewarray] = oonewarray
@@ -572,9 +607,10 @@ BUILTIN_ANALYZERS[ootype.null] = null
 BUILTIN_ANALYZERS[ootype.runtimenew] = runtimenew
 BUILTIN_ANALYZERS[ootype.classof] = classof
 BUILTIN_ANALYZERS[ootype.subclassof] = subclassof
-BUILTIN_ANALYZERS[ootype.ooidentityhash] = ooidentityhash
 BUILTIN_ANALYZERS[ootype.ooupcast] = ooupcast
 BUILTIN_ANALYZERS[ootype.oodowncast] = oodowncast
+BUILTIN_ANALYZERS[ootype.cast_to_object] = cast_to_object
+BUILTIN_ANALYZERS[ootype.cast_from_object] = cast_from_object
 
 #________________________________
 # weakrefs

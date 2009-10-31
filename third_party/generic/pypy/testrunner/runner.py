@@ -264,6 +264,7 @@ class RunParam(object):
             
         reldir = self.reltoroot(p)
         entries = [p1 for p1 in p.listdir() if p1.check(dotfile=0)]
+        entries.sort()
 
         if p != self.root:
             for p1 in entries:

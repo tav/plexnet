@@ -2,22 +2,47 @@
 
 import re, sys, os, random
 
-r_functionstart = re.compile(r"\t.type\s+(\w+),\s*[@]function\s*$")
-r_functionend   = re.compile(r"\t.size\s+(\w+),\s*[.]-(\w+)\s*$")
-r_label         = re.compile(r"([.]?\w+)[:]\s*$")
-r_globl         = re.compile(r"\t[.]globl\t(\w+)\s*$")
+LABEL               = r'([a-zA-Z_$.][a-zA-Z0-9_$@.]*)'
+r_functionstart_elf = re.compile(r"\t.type\s+"+LABEL+",\s*[@]function\s*$")
+r_functionend_elf   = re.compile(r"\t.size\s+"+LABEL+",\s*[.]-"+LABEL+"\s*$")
+
+# darwin
+r_textstart            = re.compile(r"\t.text\s*$")
+# see
+# http://developer.apple.com/documentation/developertools/Reference/Assembler/040-Assembler_Directives/asm_directives.html
+OTHERSECTIONS = ['section', 'zerofill',
+                 'const', 'static_const', 'cstring',
+                 'literal4', 'literal8', 'literal16',
+                 'constructor', 'desctructor',
+                 'symbol_stub',
+                 'data', 'static_data',
+                 'non_lazy_symbol_pointer', 'lazy_symbol_pointer',
+                 'dyld', 'mod_init_func', 'mod_term_func',
+                 'const_data'
+                 ]
+r_sectionstart         = re.compile(r"\t\.("+'|'.join(OTHERSECTIONS)+").*$")
+r_functionstart_darwin = re.compile(r"_(\w+):\s*$")
+
+OFFSET_LABELS   = 2**30
+
+# inside functions
+r_label         = re.compile(LABEL+"[:]\s*$")
+r_globl         = re.compile(r"\t[.]globl\t"+LABEL+"\s*$")
+r_globllabel    = re.compile(LABEL+r"=[.][+]%d\s*$"%OFFSET_LABELS)
 r_insn          = re.compile(r"\t([a-z]\w*)\s")
-r_jump          = re.compile(r"\tj\w+\s+([.]?\w+)\s*$")
-OPERAND         =           r"(?:[-\w$%+.:@]+(?:[(][\w%,]+[)])?|[(][\w%,]+[)])"
+r_jump          = re.compile(r"\tj\w+\s+"+LABEL+"\s*$")
+OPERAND         =           r'(?:[-\w$%+.:@"]+(?:[(][\w%,]+[)])?|[(][\w%,]+[)])'
 r_unaryinsn     = re.compile(r"\t[a-z]\w*\s+("+OPERAND+")\s*$")
 r_unaryinsn_star= re.compile(r"\t[a-z]\w*\s+([*]"+OPERAND+")\s*$")
-r_jmp_switch    = re.compile(r"\tjmp\t[*]([.]?\w+)[(]")
-r_jmptable_item = re.compile(r"\t.long\t([.]?\w+)\s*$")
-r_jmptable_end  = re.compile(r"\t.text|\t.section\s+.text")
+r_jmp_switch    = re.compile(r"\tjmp\t[*]"+LABEL+"[(]")
+r_jmp_source    = re.compile(r"\d*[(](%[\w]+)[,)]")
+r_jmptable_item = re.compile(r"\t.long\t"+LABEL+"(-\"[A-Za-z0-9$]+\")?\s*$")
+r_jmptable_end  = re.compile(r"\t.text|\t.section\s+.text|\t\.align|"+LABEL)
 r_binaryinsn    = re.compile(r"\t[a-z]\w*\s+("+OPERAND+"),\s*("+OPERAND+")\s*$")
 LOCALVAR        = r"%eax|%edx|%ecx|%ebx|%esi|%edi|%ebp|\d*[(]%esp[)]"
 LOCALVARFP      = LOCALVAR + r"|-?\d*[(]%ebp[)]"
 r_gcroot_marker = re.compile(r"\t/[*] GCROOT ("+LOCALVARFP+") [*]/")
+r_bottom_marker = re.compile(r"\t/[*] GC_STACK_BOTTOM [*]/")
 r_localvarnofp  = re.compile(LOCALVAR)
 r_localvarfp    = re.compile(LOCALVARFP)
 r_localvar_esp  = re.compile(r"(\d*)[(]%esp[)]")
@@ -26,9 +51,10 @@ r_localvar_ebp  = re.compile(r"(-?\d*)[(]%ebp[)]")
 
 class GcRootTracker(object):
 
-    def __init__(self, verbose=0, shuffle=False):
+    def __init__(self, verbose=0, shuffle=False, format='elf'):
         self.verbose = verbose
         self.shuffle = shuffle     # to debug the sorting logic in asmgcroot.py
+        self.format = format
         self.clear()
 
     def clear(self):
@@ -54,34 +80,75 @@ class GcRootTracker(object):
         shapes = {}
         shapelines = []
         shapeofs = 0
-        print >> output, """\t.text
-        .globl pypy_asm_stackwalk
-            .type pypy_asm_stackwalk, @function
-        pypy_asm_stackwalk:
+        def _globalname(name):
+            if self.format in ('darwin', 'mingw32'):
+                return '_' + name
+            return name
+        def _globl(name):
+            print >> output, "\t.globl %s" % _globalname(name)
+        def _label(name):
+            print >> output, "%s:" % _globalname(name)
+        def _variant(**kwargs):
+            txt = kwargs[self.format]
+            print >> output, "\t%s" % txt
+
+        print >> output, "\t.text"
+        _globl('pypy_asm_stackwalk')
+        _variant(elf='.type pypy_asm_stackwalk, @function',
+                 darwin='',
+                 mingw32='')
+        _label('pypy_asm_stackwalk')
+        print >> output, """\
             /* See description in asmgcroot.py */
             movl   4(%esp), %edx     /* my argument, which is the callback */
             movl   %esp, %eax        /* my frame top address */
-            pushl  %eax              /* ASM_FRAMEDATA[4] */
-            pushl  %ebp              /* ASM_FRAMEDATA[3] */
-            pushl  %edi              /* ASM_FRAMEDATA[2] */
-            pushl  %esi              /* ASM_FRAMEDATA[1] */
-            pushl  %ebx              /* ASM_FRAMEDATA[0] */
-            movl   %esp, %eax        /* address of ASM_FRAMEDATA */
-            pushl  %eax
-            call   *%edx             /* invoke the callback */
-            popl   %eax
-            popl   %ebx              /* restore from ASM_FRAMEDATA[0] */
-            popl   %esi              /* restore from ASM_FRAMEDATA[1] */
-            popl   %edi              /* restore from ASM_FRAMEDATA[2] */
-            popl   %ebp              /* restore from ASM_FRAMEDATA[3] */
-            popl   %eax
+            pushl  %eax              /* ASM_FRAMEDATA[6] */
+            pushl  %ebp              /* ASM_FRAMEDATA[5] */
+            pushl  %edi              /* ASM_FRAMEDATA[4] */
+            pushl  %esi              /* ASM_FRAMEDATA[3] */
+            pushl  %ebx              /* ASM_FRAMEDATA[2] */
+
+            /* Add this ASM_FRAMEDATA to the front of the circular linked */
+            /* list.  Let's call it 'self'. */
+            movl   __gcrootanchor+4, %eax  /* next = gcrootanchor->next */
+            pushl  %eax                    /* self->next = next         */
+            pushl  $__gcrootanchor         /* self->prev = gcrootanchor */
+            movl   %esp, __gcrootanchor+4  /* gcrootanchor->next = self */
+            movl   %esp, (%eax)            /* next->prev = self         */
+
+            /* note: the Mac OS X 16 bytes aligment must be respected. */
+            call   *%edx                   /* invoke the callback */
+
+            /* Detach this ASM_FRAMEDATA from the circular linked list */
+            popl   %esi                    /* prev = self->prev         */
+            popl   %edi                    /* next = self->next         */
+            movl   %edi, 4(%esi)           /* prev->next = next         */
+            movl   %esi, (%edi)            /* next->prev = prev         */
+
+            popl   %ebx              /* restore from ASM_FRAMEDATA[2] */
+            popl   %esi              /* restore from ASM_FRAMEDATA[3] */
+            popl   %edi              /* restore from ASM_FRAMEDATA[4] */
+            popl   %ebp              /* restore from ASM_FRAMEDATA[5] */
+            popl   %ecx              /* ignored      ASM_FRAMEDATA[6] */
+            /* the return value is the one of the 'call' above, */
+            /* because %eax (and possibly %edx) are unmodified  */
             ret
-        .size pypy_asm_stackwalk_init, .-pypy_asm_stackwalk_init
-        """
+""".replace("__gcrootanchor", _globalname("__gcrootanchor"))
+        _variant(elf='.size pypy_asm_stackwalk, .-pypy_asm_stackwalk',
+                 darwin='',
+                 mingw32='')
         print >> output, '\t.data'
         print >> output, '\t.align\t4'
-        print >> output, '\t.globl\t__gcmapstart'
-        print >> output, '__gcmapstart:'
+        _globl('__gcrootanchor')
+        _label('__gcrootanchor')
+        print >> output, """\
+            /* A circular doubly-linked list of all */
+            /* the ASM_FRAMEDATAs currently alive */
+            .long\t__gcrootanchor       /* prev */
+            .long\t__gcrootanchor       /* next */
+""".replace("__gcrootanchor", _globalname("__gcrootanchor"))
+        _globl('__gcmapstart')
+        _label('__gcmapstart')
         for label, state, is_range in self.gcmaptable:
             try:
                 n = shapes[state]
@@ -94,27 +161,33 @@ class GcRootTracker(object):
                 shapeofs += len(bytes)
             if is_range:
                 n = ~ n
-            print >> output, '\t.long\t%s' % (label,)
+            print >> output, '\t.long\t%s-%d' % (label, OFFSET_LABELS)
             print >> output, '\t.long\t%d' % (n,)
-        print >> output, '\t.globl\t__gcmapend'
-        print >> output, '__gcmapend:'
-        print >> output, '\t.section\t.rodata'
-        print >> output, '\t.globl\t__gccallshapes'
-        print >> output, '__gccallshapes:'
+        _globl('__gcmapend')
+        _label('__gcmapend')
+        _variant(elf='.section\t.rodata',
+                 darwin='.const',
+                 mingw32='')
+        _globl('__gccallshapes')
+        _label('__gccallshapes')
         output.writelines(shapelines)
 
     def find_functions(self, iterlines):
+        _find_functions = getattr(self, '_find_functions_' + self.format)
+        return _find_functions(iterlines)
+            
+    def _find_functions_elf(self, iterlines):
         functionlines = []
         in_function = False
         for line in iterlines:
-            if r_functionstart.match(line):
+            if r_functionstart_elf.match(line):
                 assert not in_function, (
                     "missed the end of the previous function")
                 yield False, functionlines
                 in_function = True
                 functionlines = []
             functionlines.append(line)
-            if r_functionend.match(line):
+            if r_functionend_elf.match(line):
                 assert in_function, (
                     "missed the start of the current function")
                 yield True, functionlines
@@ -124,16 +197,64 @@ class GcRootTracker(object):
             "missed the end of the previous function")
         yield False, functionlines
 
+    def _find_functions_darwin(self, iterlines):
+        functionlines = []
+        in_text = False
+        in_function = False
+        for n, line in enumerate(iterlines):
+            if r_textstart.match(line):
+                assert not in_text, "unexpected repeated .text start: %d" % n
+                in_text = True
+            elif r_sectionstart.match(line):
+                if in_function:
+                    yield in_function, functionlines
+                    functionlines = []
+                in_text = False
+                in_function = False
+            elif in_text and r_functionstart_darwin.match(line):
+                yield in_function, functionlines
+                functionlines = []
+                in_function = True
+            functionlines.append(line)
+
+        if functionlines:
+            yield in_function, functionlines
+
+    def _find_functions_mingw32(self, iterlines):
+        functionlines = []
+        in_text = False
+        in_function = False
+        for n, line in enumerate(iterlines):
+            if r_textstart.match(line):
+                in_text = True
+            elif r_sectionstart.match(line):
+                in_text = False
+            elif in_text and r_functionstart_darwin.match(line):
+                yield in_function, functionlines
+                functionlines = []
+                in_function = True
+            functionlines.append(line)
+        if functionlines:
+            yield in_function, functionlines
+
     def process(self, iterlines, newfile, entrypoint='main', filename='?'):
+        if self.format in ('darwin', 'mingw32'):
+            entrypoint = '_' + entrypoint
         for in_function, lines in self.find_functions(iterlines):
             if in_function:
                 lines = self.process_function(lines, entrypoint, filename)
             newfile.writelines(lines)
+        if self.verbose == 1:
+            sys.stderr.write('\n')
 
     def process_function(self, lines, entrypoint, filename):
-        tracker = FunctionGcRootTracker(lines, filetag=getidentifier(filename))
-        tracker.is_main = tracker.funcname == entrypoint
-        if self.verbose:
+        tracker = FunctionGcRootTracker(lines, filetag=getidentifier(filename),
+                                        format=self.format)
+        is_main = tracker.funcname == entrypoint
+        tracker.is_stack_bottom = is_main
+        if self.verbose == 1:
+            sys.stderr.write('.')
+        elif self.verbose > 1:
             print >> sys.stderr, '[trackgcroot:%s] %s' % (filename,
                                                           tracker.funcname)
         table = tracker.computegcmaptable(self.verbose)
@@ -145,23 +266,35 @@ class GcRootTracker(object):
             self.gcmaptable[:0] = table
         else:
             self.gcmaptable.extend(table)
-        self.seen_main |= tracker.is_main
+        self.seen_main |= is_main
         return tracker.lines
 
 
 class FunctionGcRootTracker(object):
 
-    def __init__(self, lines, filetag=0):
-        match = r_functionstart.match(lines[0])
-        self.funcname = match.group(1)
-        match = r_functionend.match(lines[-1])
-        assert self.funcname == match.group(1)
-        assert self.funcname == match.group(2)
+    def __init__(self, lines, filetag=0, format='elf'):
+        if format == 'elf':
+            match = r_functionstart_elf.match(lines[0])
+            funcname = match.group(1)
+            match = r_functionend_elf.match(lines[-1])
+            assert funcname == match.group(1)
+            assert funcname == match.group(2)
+        elif format == 'darwin':
+            match = r_functionstart_darwin.match(lines[0])
+            funcname = '_'+match.group(1)
+        elif format == 'mingw32':
+            match = r_functionstart_darwin.match(lines[0])
+            funcname = '_'+match.group(1)
+        else:
+            assert False, "unknown format: %s" % format
+
+        self.funcname = funcname
         self.lines = lines
         self.uses_frame_pointer = False
         self.r_localvar = r_localvarnofp
         self.filetag = filetag
-        self.is_main = False
+        # a "stack bottom" function is either main() or a callback from C code
+        self.is_stack_bottom = False
 
     def computegcmaptable(self, verbose=0):
         self.findlabels()
@@ -169,7 +302,6 @@ class FunctionGcRootTracker(object):
         try:
             if not self.list_call_insns():
                 return []
-            self.findprevinsns()
             self.findframesize()
             self.fixlocalvars()
             self.trackgcroots()
@@ -187,7 +319,7 @@ class FunctionGcRootTracker(object):
         for insn in self.list_call_insns():
             if not hasattr(insn, 'framesize'):
                 continue     # calls that never end up reaching a RET
-            if self.is_main:
+            if self.is_stack_bottom:
                 retaddr = LOC_NOWHERE     # end marker for asmgcroot.py
             elif self.uses_frame_pointer:
                 retaddr = frameloc(LOC_EBP_BASED, 4)
@@ -204,7 +336,8 @@ class FunctionGcRootTracker(object):
                     loc = localvar.getlocation(insn.framesize,
                                                self.uses_frame_pointer)
                 else:
-                    assert localvar in REG2LOC
+                    assert localvar in REG2LOC, "%s: %s" % (self.funcname,
+                                                            localvar)
                     loc = REG2LOC[localvar]
                 assert isinstance(loc, int)
                 if tag is None:
@@ -212,7 +345,7 @@ class FunctionGcRootTracker(object):
                 else:
                     regindex = CALLEE_SAVE_REGISTERS.index(tag)
                     shape[1 + regindex] = loc
-            if LOC_NOWHERE in shape and not self.is_main:
+            if LOC_NOWHERE in shape and not self.is_stack_bottom:
                 reg = CALLEE_SAVE_REGISTERS[shape.index(LOC_NOWHERE) - 1]
                 raise AssertionError("cannot track where register %s is saved"
                                      % (reg,))
@@ -230,15 +363,27 @@ class FunctionGcRootTracker(object):
                 assert label not in self.labels, "duplicate label"
                 self.labels[label] = Label(label, lineno)
 
+    def append_instruction(self, insn):
+        # Add the instruction to the list, and link it to the previous one.
+        previnsn = self.insns[-1]
+        self.insns.append(insn)
+
+        try:
+            lst = insn.previous_insns
+        except AttributeError:
+            lst = insn.previous_insns = []
+        if not isinstance(previnsn, InsnStop):
+            lst.append(previnsn)
+
     def parse_instructions(self):
         self.insns = [InsnFunctionStart()]
-        in_APP = False
+        ignore_insns = False
         for lineno, line in enumerate(self.lines):
             self.currentlineno = lineno
             insn = []
             match = r_insn.match(line)
             if match:
-                if not in_APP:
+                if not ignore_insns:
                     opname = match.group(1)
                     try:
                         meth = getattr(self, 'visit_' + opname)
@@ -247,18 +392,23 @@ class FunctionGcRootTracker(object):
                     insn = meth(line)
             elif r_gcroot_marker.match(line):
                 insn = self._visit_gcroot_marker(line)
-            elif line == '#APP\n':
-                in_APP = True
-            elif line == '#NO_APP\n':
-                in_APP = False
+            elif r_bottom_marker.match(line):
+                self.is_stack_bottom = True
+            elif line == '\t/* ignore_in_trackgcroot */\n':
+                ignore_insns = True
+            elif line == '\t/* end_ignore_in_trackgcroot */\n':
+                ignore_insns = False
             else:
                 match = r_label.match(line)
                 if match:
                     insn = self.labels[match.group(1)]
+
             if isinstance(insn, list):
-                self.insns.extend(insn)
+                for i in insn:
+                    self.append_instruction(i)
             else:
-                self.insns.append(insn)
+                self.append_instruction(insn)
+
             del self.currentlineno
 
     def find_missing_visit_method(self, opname):
@@ -271,20 +421,6 @@ class FunctionGcRootTracker(object):
         visit_nop = FunctionGcRootTracker.__dict__['visit_nop']
         setattr(FunctionGcRootTracker, 'visit_' + opname, visit_nop)
         return self.visit_nop
-
-    def findprevinsns(self):
-        # builds the previous_insns of each Insn.  For Labels, all jumps
-        # to them are already registered; all that is left to do is to
-        # make each Insn point to the Insn just before it.
-        for i in range(len(self.insns)-1):
-            previnsn = self.insns[i]
-            nextinsn = self.insns[i+1]
-            try:
-                lst = nextinsn.previous_insns
-            except AttributeError:
-                lst = nextinsn.previous_insns = []
-            if not isinstance(previnsn, InsnStop):
-                lst.append(previnsn)
 
     def list_call_insns(self):
         return [insn for insn in self.insns if isinstance(insn, InsnCall)]
@@ -326,27 +462,37 @@ class FunctionGcRootTracker(object):
                         insn1.framesize = size_at_insn1
 
     def fixlocalvars(self):
+        def fixvar(localvar):
+            if localvar is None:
+                return None
+            elif isinstance(localvar, (list, tuple)):
+                return [fixvar(var) for var in localvar]
+
+            match = r_localvar_esp.match(localvar)
+            if match:
+                if localvar == '0(%esp)': # for pushl and popl, by
+                    hint = None           # default ebp addressing is
+                else:                     # a bit nicer
+                    hint = 'esp'
+                ofs_from_esp = int(match.group(1) or '0')
+                localvar = ofs_from_esp - insn.framesize
+                assert localvar != 0    # that's the return address
+                return LocalVar(localvar, hint=hint)
+            elif self.uses_frame_pointer:
+                match = r_localvar_ebp.match(localvar)
+                if match:
+                    ofs_from_ebp = int(match.group(1) or '0')
+                    localvar = ofs_from_ebp - 4
+                    assert localvar != 0    # that's the return address
+                    return LocalVar(localvar, hint='ebp')
+            return localvar
+
         for insn in self.insns:
-            if hasattr(insn, 'framesize'):
-                for name in insn._locals_:
-                    localvar = getattr(insn, name)
-                    match = r_localvar_esp.match(localvar)
-                    if match:
-                        if localvar == '0(%esp)': # for pushl and popl, by
-                            hint = None           # default ebp addressing is
-                        else:                     # a bit nicer
-                            hint = 'esp'
-                        ofs_from_esp = int(match.group(1) or '0')
-                        localvar = ofs_from_esp - insn.framesize
-                        assert localvar != 0    # that's the return address
-                        setattr(insn, name, LocalVar(localvar, hint=hint))
-                    elif self.uses_frame_pointer:
-                        match = r_localvar_ebp.match(localvar)
-                        if match:
-                            ofs_from_ebp = int(match.group(1) or '0')
-                            localvar = ofs_from_ebp - 4
-                            assert localvar != 0    # that's the return address
-                            setattr(insn, name, LocalVar(localvar, hint='ebp'))
+            if not hasattr(insn, 'framesize'):
+                continue
+            for name in insn._locals_:
+                localvar = getattr(insn, name)
+                setattr(insn, name, fixvar(localvar))
 
     def trackgcroots(self):
 
@@ -358,7 +504,7 @@ class FunctionGcRootTracker(object):
                 yield source
 
         for insn in self.insns:
-            for loc, tag in insn.requestgcroots().items():
+            for loc, tag in insn.requestgcroots(self).items():
                 self.walk_instructions_backwards(walker, insn, loc)
 
     def dump(self):
@@ -398,7 +544,7 @@ class FunctionGcRootTracker(object):
         match = r_globl.match(self.lines[call.lineno+1])
         if match:
             label1 = match.group(1)
-            match = r_label.match(self.lines[call.lineno+2])
+            match = r_globllabel.match(self.lines[call.lineno+2])
             if match:
                 label2 = match.group(1)
                 if label1 == label2:
@@ -411,7 +557,13 @@ class FunctionGcRootTracker(object):
                     break
                 k += 1
             self.labels[label] = None
-            self.lines.insert(call.lineno+1, '%s:\n' % (label,))
+            # These global symbols are not directly labels pointing to the
+            # code location because such global labels in the middle of
+            # functions confuse gdb.  Instead, we add to the global symbol's
+            # value a big constant, which is subtracted again when we need
+            # the original value for gcmaptable.s.  That's a hack.
+            self.lines.insert(call.lineno+1, '%s=.+%d\n' % (label,
+                                                            OFFSET_LABELS))
             self.lines.insert(call.lineno+1, '\t.globl\t%s\n' % (label,))
         call.global_label = label
 
@@ -430,10 +582,13 @@ class FunctionGcRootTracker(object):
         'rep', 'movs', 'lods', 'stos', 'scas', 'cwtl', 'prefetch',
         # floating-point operations cannot produce GC pointers
         'f',
-        'cvt',  # sse2
+        'cvt', 'ucomi', 'subs', 'subp' , 'adds', 'addp', 'xorp', 'movap',
+        'movd', 'sqrtsd',
+        'mins', 'minp', 'maxs', 'maxp', # sse2
         # arithmetic operations should not produce GC pointers
         'inc', 'dec', 'not', 'neg', 'or', 'and', 'sbb', 'adc',
         'shl', 'shr', 'sal', 'sar', 'rol', 'ror', 'mul', 'imul', 'div', 'idiv',
+        'bswap', 'bt',
         # zero-extending moves should not produce GC pointers
         'movz',
         ])
@@ -449,6 +604,7 @@ class FunctionGcRootTracker(object):
 
     def visit_addl(self, line, sign=+1):
         match = r_binaryinsn.match(line)
+        source = match.group(1)
         target = match.group(2)
         if target == '%esp':
             count = match.group(1)
@@ -457,7 +613,7 @@ class FunctionGcRootTracker(object):
                 return InsnCannotFollowEsp()
             return InsnStackAdjust(sign * int(count[1:]))
         elif self.r_localvar.match(target):
-            return InsnSetLocal(target)
+            return InsnSetLocal(target, [source, target])
         else:
             return []
 
@@ -476,9 +632,10 @@ class FunctionGcRootTracker(object):
         match = r_binaryinsn.match(line)
         if not match:
             raise UnrecognizedOperation(line)
+        source = match.group(1)
         target = match.group(2)
         if self.r_localvar.match(target):
-            return InsnSetLocal(target)
+            return InsnSetLocal(target, [source])
         elif target == '%esp':
             raise UnrecognizedOperation(line)
         else:
@@ -522,14 +679,19 @@ class FunctionGcRootTracker(object):
             # only for  leal -12(%ebp), %esp  in function epilogues
             source = match.group(1)
             match = r_localvar_ebp.match(source)
-            if not match:
-                framesize = None    # strange instruction
-            else:
+            if match:
                 if not self.uses_frame_pointer:
                     raise UnrecognizedOperation('epilogue without prologue')
                 ofs_from_ebp = int(match.group(1) or '0')
                 assert ofs_from_ebp <= 0
                 framesize = 4 - ofs_from_ebp
+            else:
+                match = r_localvar_esp.match(source)
+                # leal 12(%esp), %esp
+                if match:
+                    return InsnStackAdjust(int(match.group(1)))
+
+                framesize = None    # strange instruction
             return InsnEpilogue(framesize)
         else:
             return self.binary_insn(line)
@@ -541,7 +703,7 @@ class FunctionGcRootTracker(object):
             if self.r_localvar.match(source):
                 return [InsnCopyLocal(source, target)]
             else:
-                return [InsnSetLocal(target)]
+                return [InsnSetLocal(target, [source])]
         else:
             return []
 
@@ -559,6 +721,9 @@ class FunctionGcRootTracker(object):
         match = r_unaryinsn.match(line)
         source = match.group(1)
         return [InsnStackAdjust(-4)] + self.insns_for_copy(source, '0(%esp)')
+
+    def visit_pushw(self, line):
+        return [InsnStackAdjust(-2)]   # rare but not impossible
 
     def _visit_pop(self, target):
         return self.insns_for_copy('0(%esp)', target) + [InsnStackAdjust(+4)]
@@ -583,16 +748,49 @@ class FunctionGcRootTracker(object):
         return self._visit_epilogue() + self._visit_pop('%ebp')
 
     def visit_ret(self, line):
-        return InsnRet(self.is_main)
+        return InsnRet()
 
     def visit_jmp(self, line):
+        tablelabels = []
         match = r_jmp_switch.match(line)
         if match:
             # this is a jmp *Label(%index), used for table-based switches.
             # Assume that the table is just a list of lines looking like
             # .long LABEL or .long 0, ending in a .text or .section .text.hot.
-            tablelabel = match.group(1)
-            tablelin = self.labels[tablelabel].lineno + 1
+            tablelabels.append(match.group(1))
+        elif r_unaryinsn_star.match(line):
+            # maybe a jmp similar to the above, but stored in a
+            # registry:
+            #     movl L9341(%eax), %eax
+            #     jmp *%eax
+            operand = r_unaryinsn_star.match(line).group(1)[1:]
+            def walker(insn, locs):
+                sources = []
+                for loc in locs:
+                    for s in insn.all_sources_of(loc):
+                        # if the source looks like 8(%eax,%edx,4)
+                        # %eax is the real source, %edx is an offset.
+                        match = r_jmp_source.match(s)
+                        if match and not r_localvar_esp.match(s):
+                            sources.append(match.group(1))
+                        else:
+                            sources.append(s)
+                for source in sources:
+                    label_match = re.compile(LABEL).match(source)
+                    if label_match:
+                        tablelabels.append(label_match.group(0))
+                        return
+                yield tuple(sources)
+            insn = InsnStop()
+            insn.previous_insns = [self.insns[-1]]
+            self.walk_instructions_backwards(walker, insn, (operand,))
+
+            # Remove probable tail-calls
+            tablelabels = [label for label in tablelabels
+                           if label in self.labels]
+        assert len(tablelabels) <= 1
+        if tablelabels:
+            tablelin = self.labels[tablelabels[0]].lineno + 1
             while not r_jmptable_end.match(self.lines[tablelin]):
                 match = r_jmptable_item.match(self.lines[tablelin])
                 if not match:
@@ -605,7 +803,7 @@ class FunctionGcRootTracker(object):
         if r_unaryinsn_star.match(line):
             # that looks like an indirect tail-call.
             # tail-calls are equivalent to RET for us
-            return InsnRet(self.is_main)
+            return InsnRet()
         try:
             self.conditional_jump(line)
         except KeyError:
@@ -614,7 +812,7 @@ class FunctionGcRootTracker(object):
             target = match.group(1)
             assert not target.startswith('.')
             # tail-calls are equivalent to RET for us
-            return InsnRet(self.is_main)
+            return InsnRet()
         return InsnStop()
 
     def register_jump_to(self, label):
@@ -622,6 +820,8 @@ class FunctionGcRootTracker(object):
 
     def conditional_jump(self, line):
         match = r_jump.match(line)
+        if not match:
+            raise UnrecognizedOperation(line)
         label = match.group(1)
         self.register_jump_to(label)
         return []
@@ -642,6 +842,18 @@ class FunctionGcRootTracker(object):
     visit_jns = conditional_jump
     visit_jo = conditional_jump
     visit_jno = conditional_jump
+    visit_jc = conditional_jump
+    visit_jnc = conditional_jump
+
+    def visit_xchgl(self, line):
+        # only support the format used in VALGRIND_DISCARD_TRANSLATIONS
+        # which is to use a marker no-op "xchgl %ebx, %ebx"
+        match = r_binaryinsn.match(line)
+        source = match.group(1)
+        target = match.group(2)
+        if source == target:
+            return []
+        raise UnrecognizedOperation(line)
 
     def visit_call(self, line):
         match = r_unaryinsn.match(line)
@@ -651,8 +863,28 @@ class FunctionGcRootTracker(object):
             target = match.group(1)
             if target in FUNCTIONS_NOT_RETURNING:
                 return InsnStop()
-        return [InsnCall(self.currentlineno),
-                InsnSetLocal('%eax')]      # the result is there
+            if sys.platform == 'win32' and target == '__alloca':
+                # in functions with large stack requirements, windows
+                # needs a call to _alloca(), to turn reserved pages
+                # into committed memory.
+                # With mingw32 gcc at least, %esp is not used before
+                # this call.  So we don't bother to compute the exact
+                # stack effect.
+                return [InsnCannotFollowEsp()]
+            if target in self.labels:
+                lineoffset = self.labels[target].lineno - self.currentlineno
+                if lineoffset >= 0:
+                    assert  lineoffset in (1,2)
+                    return [InsnStackAdjust(-4)]
+        insns = [InsnCall(self.currentlineno),
+                 InsnSetLocal('%eax')]      # the result is there
+        if sys.platform == 'win32':
+            # handle __stdcall calling convention:
+            # Stack cleanup is performed by the called function,
+            # Function name is decorated with "@N" where N is the stack size
+            if match and '@' in target:
+                insns.append(InsnStackAdjust(int(target.split('@')[1])))
+        return insns
 
 
 class UnrecognizedOperation(Exception):
@@ -702,15 +934,19 @@ class LocalVar(object):
 class Insn(object):
     _args_ = []
     _locals_ = []
+
     def __repr__(self):
         return '%s(%s)' % (self.__class__.__name__,
                            ', '.join([str(getattr(self, name))
                                       for name in self._args_]))
-    def requestgcroots(self):
+    def requestgcroots(self, tracker):
         return {}
 
     def source_of(self, localvar, tag):
         return localvar
+
+    def all_sources_of(self, localvar):
+        return [localvar]
 
 class Label(Insn):
     _args_ = ['label', 'lineno']
@@ -726,6 +962,7 @@ class InsnFunctionStart(Insn):
         self.arguments = {}
         for reg in CALLEE_SAVE_REGISTERS:
             self.arguments[reg] = somenewvalue
+
     def source_of(self, localvar, tag):
         if localvar not in self.arguments:
             if localvar in ('%eax', '%edx', '%ecx'):
@@ -743,32 +980,50 @@ class InsnFunctionStart(Insn):
             self.arguments[localvar] = somenewvalue
         return self.arguments[localvar]
 
+    def all_sources_of(self, localvar):
+        return []
+
 class InsnSetLocal(Insn):
-    _args_ = ['target']
-    _locals_ = ['target']
-    def __init__(self, target):
+    _args_ = ['target', 'sources']
+    _locals_ = ['target', 'sources']
+
+    def __init__(self, target, sources=()):
         self.target = target
+        self.sources = sources
+
     def source_of(self, localvar, tag):
         if localvar == self.target:
             return somenewvalue
         return localvar
 
+    def all_sources_of(self, localvar):
+        if localvar == self.target:
+            return self.sources
+        return [localvar]
+
 class InsnCopyLocal(Insn):
     _args_ = ['source', 'target']
     _locals_ = ['source', 'target']
+
     def __init__(self, source, target):
         self.source = source
         self.target = target
+
     def source_of(self, localvar, tag):
         if localvar == self.target:
             return self.source
         return localvar
 
+    def all_sources_of(self, localvar):
+        if localvar == self.target:
+            return [self.source]
+        return [localvar]
+
 class InsnStackAdjust(Insn):
     _args_ = ['delta']
     def __init__(self, delta):
-        assert delta % 4 == 0
-        self.delta = delta
+        assert delta % 2 == 0     # should be "% 4", but there is the special
+        self.delta = delta        # case of 'pushw' to handle
 
 class InsnCannotFollowEsp(InsnStackAdjust):
     def __init__(self):
@@ -779,11 +1034,12 @@ class InsnStop(Insn):
 
 class InsnRet(InsnStop):
     framesize = 0
-    def __init__(self, is_main):
-        self.is_main = is_main
-    def requestgcroots(self):
-        if self.is_main:  # no need to track the value of these registers in
-            return {}     # the caller function if we are the main()
+    def requestgcroots(self, tracker):
+        # no need to track the value of these registers in the caller
+        # function if we are the main(), or if we are flagged as a
+        # "bottom" function (a callback from C code)
+        if tracker.is_stack_bottom:
+            return {}
         else:
             return dict(zip(CALLEE_SAVE_REGISTERS, CALLEE_SAVE_REGISTERS))
 
@@ -821,12 +1077,15 @@ class InsnCall(Insn):
             localvar, tag1, tag))
         return localvar
 
+    def all_sources_of(self, localvar):
+        return [localvar]
+
 class InsnGCROOT(Insn):
     _args_ = ['loc']
     _locals_ = ['loc']
     def __init__(self, loc):
         self.loc = loc
-    def requestgcroots(self):
+    def requestgcroots(self, tracker):
         return {self.loc: None}
 
 class InsnPrologue(Insn):
@@ -842,11 +1101,21 @@ class InsnEpilogue(Insn):
             self.framesize = framesize
 
 
-FUNCTIONS_NOT_RETURNING = {
-    'abort': None,
-    '_exit': None,
-    '__assert_fail': None,
-    }
+if sys.platform != 'win32':
+    FUNCTIONS_NOT_RETURNING = {
+        'abort': None,
+        '_exit': None,
+        '__assert_fail': None,
+        '___assert_rtn': None,
+        'L___assert_rtn$stub': None
+        }
+else:
+    FUNCTIONS_NOT_RETURNING = {
+        '_abort': None,
+        '__exit': None,
+        '__assert': None,
+        '__wassert': None,
+        }
 
 CALLEE_SAVE_REGISTERS_NOEBP = ['%ebx', '%esi', '%edi']
 CALLEE_SAVE_REGISTERS = CALLEE_SAVE_REGISTERS_NOEBP + ['%ebp']
@@ -1017,9 +1286,14 @@ if __name__ == '__main__':
             output_raw_table = True
         else:
             break
-    tracker = GcRootTracker(verbose=verbose, shuffle=shuffle)
+    if sys.platform == 'darwin':
+        format = 'darwin'
+    elif sys.platform == 'win32':
+        format = 'mingw32'
+    else:
+        format = 'elf'
+    tracker = GcRootTracker(verbose=verbose, shuffle=shuffle, format=format)
     for fn in sys.argv[1:]:
-        tmpfn = fn + '.TMP'
         f = open(fn, 'r')
         firstline = f.readline()
         f.seek(0)
@@ -1027,12 +1301,17 @@ if __name__ == '__main__':
             tracker.reload_raw_table(f)
             f.close()
         else:
-            g = open(tmpfn, 'w')
-            tracker.process(f, g, filename=fn)
-            f.close()
+            assert fn.endswith('.s')
+            lblfn = fn[:-2] + '.lbl.s'
+            g = open(lblfn, 'w')
+            try:
+                tracker.process(f, g, filename=fn)
+            except:
+                g.close()
+                os.unlink(lblfn)
+                raise
             g.close()
-            os.unlink(fn)
-            os.rename(tmpfn, fn)
+            f.close()
             if output_raw_table:
                 tracker.dump_raw_table(sys.stdout)
                 tracker.clear()

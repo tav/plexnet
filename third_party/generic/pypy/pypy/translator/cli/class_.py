@@ -42,6 +42,9 @@ class Class(Node):
 
     def get_base_class(self):
         base_class = self.INSTANCE._superclass
+        if self.INSTANCE is self.db.genoo.EXCEPTION:
+            assert self.is_root(base_class)
+            return '[mscorlib]System.Exception'
         if self.is_root(base_class):
             return '[mscorlib]System.Object'
         else:
@@ -98,8 +101,8 @@ class Class(Node):
                 # there would be a type mismatch.
                 args =  m_meth.graph.getargs()
                 SELF = args[0].concretetype
-                if not ootype.isSubclass(self.INSTANCE, SELF):
-                    continue
+##                if not ootype.isSubclass(self.INSTANCE, SELF):
+##                    continue
                 f = self.db.genoo.Function(self.db, m_meth.graph, m_name, is_method = True)
                 f.render(ilasm)
             else:
@@ -114,7 +117,7 @@ class Class(Node):
                 if isinstance(METH.RESULT, ootype.OOType):
                     ilasm.opcode('ldnull')
                 else:
-                    push_constant(self.db, METH.RESULT, 0, self.gen)
+                    push_constant(self.db, METH.RESULT, METH.RESULT._defl(), self.gen)
                 ilasm.opcode('ret')
                 ilasm.end_function()
 
@@ -146,6 +149,8 @@ class Class(Node):
         self.ilasm.end_function()
 
     def _toString(self):
+        if ootype.isSubclass(self.INSTANCE, self.db.genoo.EXCEPTION):
+            return # don't override the default ToString, which prints a traceback
         self.ilasm.begin_function('ToString', [], 'string', False, 'virtual', 'instance', 'default')
         self.ilasm.opcode('ldarg.0')
         self.ilasm.call('string class [pypylib]pypy.test.Result::InstanceToPython(object)')

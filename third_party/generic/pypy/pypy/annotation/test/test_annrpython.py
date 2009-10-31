@@ -1120,6 +1120,30 @@ class TestAnnotateTestCase:
         assert s.items[3].const == 7
         assert s.items[4].const == 2
 
+    def test_specialize_and_star_args(self):
+        class I(object):
+            def execute(self, op, *args):
+                if op == 0:
+                    return args[0]+args[1]
+                if op == 1:
+                    return args[0] * args[1] + args[2]
+            execute._annspecialcase_ = "specialize:arg(1)"
+
+        def f(x, y):
+            i = I()
+            a = i.execute(0, x, y)
+            b = i.execute(1, y, y, 5)
+            return a+b
+
+        a = self.RPythonAnnotator()
+        s = a.build_types(f, [int, int])
+       
+        executedesc = a.bookkeeper.getdesc(I.execute.im_func)
+        assert len(executedesc._cache) == 2       
+
+        assert len(executedesc._cache[(0, 'star', 2)].startblock.inputargs) == 4
+        assert len(executedesc._cache[(1, 'star', 3)].startblock.inputargs) == 5
+
     def test_assert_list_doesnt_lose_info(self):
         class T(object):
             pass
@@ -2746,11 +2770,10 @@ class TestAnnotateTestCase:
         assert isinstance(s, annmodel.SomeInteger)
 
     def test_instance_with_flags(self):
-        py.test.skip("not supported any more")
         from pypy.rlib.jit import hint
 
         class A:
-            _virtualizable_ = True
+            _virtualizable2_ = []
         class B(A):
             def meth(self):
                 return self
@@ -2785,6 +2808,64 @@ class TestAnnotateTestCase:
         assert isinstance(s.items[1], annmodel.SomePBC)
         assert isinstance(s.items[2], annmodel.SomeInstance)
         assert s.items[2].flags == {}
+
+    def test_no_access_directly_on_heap(self):
+        from pypy.rlib.jit import hint
+
+        class A:
+            _virtualizable2_ = []
+
+        class I:
+            pass
+
+        def f():
+            x = A()
+            x = hint(x, access_directly=True)
+            i = I()
+            i.x = x
+
+        a = self.RPythonAnnotator()
+        py.test.raises(Exception, a.build_types, f, [])        
+
+
+        class M:
+            def __init__(self):
+                self.l = []
+                self.d = {}
+
+        class C:
+            def _freeze_(self):
+                return True
+
+            def __init__(self):
+                self.m = M()
+                self.l2 = []
+
+        c = C()
+         
+        def f():
+            x = A()
+            x = hint(x, access_directly=True)
+            c.m.l.append(x)
+
+        a = self.RPythonAnnotator()
+        py.test.raises(AssertionError, a.build_types, f, [])        
+
+        def f():
+            x = A()
+            x = hint(x, access_directly=True)
+            c.m.d[None] = x
+            
+        a = self.RPythonAnnotator()
+        py.test.raises(AssertionError, a.build_types, f, [])        
+
+        def f():
+            x = A()
+            x = hint(x, access_directly=True)
+            c.m.d[x] = None
+            
+        a = self.RPythonAnnotator()
+        py.test.raises(AssertionError, a.build_types, f, [])        
 
     def test_ctr_location(self):
         from pypy.rlib.jit import hint
@@ -3105,6 +3186,52 @@ class TestAnnotateTestCase:
         a = self.RPythonAnnotator()
         s = a.build_types(f, [int])
         assert s.const == 0
+
+    def test_hash_sideeffect(self):
+        class X:
+            pass
+        x1 = X()
+        x2 = X()
+        x3 = X()
+        d = {(2, x1): 5, (3, x2): 7}
+        def f(n, m):
+            if   m == 1: x = x1
+            elif m == 2: x = x2
+            else:        x = x3
+            return d[n, x]
+        a = self.RPythonAnnotator()
+        s = a.build_types(f, [int, int])
+        assert s.knowntype == int
+        assert hasattr(x1, '__precomputed_identity_hash')
+        assert hasattr(x2, '__precomputed_identity_hash')
+        assert not hasattr(x3, '__precomputed_identity_hash')
+
+    def test_contains_of_empty_dict(self):
+        class A(object):
+            def meth(self):
+                return 1
+
+        def g(x, y):
+            d1 = {}
+            for i in range(y):
+                if x in d1:
+                    return d1[x].meth()
+                d1[i+1] = A()
+            return 0
+                
+        a = self.RPythonAnnotator()
+        s = a.build_types(g, [int, int])
+        assert s.knowntype is int
+        
+        def f(x):
+            d0 = {}
+            if x in d0:
+                d0[x].meth()
+            return x+1
+
+        a = self.RPythonAnnotator()
+        s = a.build_types(f, [int])
+        assert s.knowntype is int
 
 
 def g(n):

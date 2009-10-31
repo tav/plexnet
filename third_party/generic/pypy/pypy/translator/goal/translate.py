@@ -20,8 +20,6 @@ from pypy.config.translationoption import PLATFORMS, set_platform
 GOALS= [
         ("annotate", "do type inference", "-a --annotate", ""),
         ("rtype", "do rtyping", "-t --rtype", ""),
-        ("prejitbackendopt", "backend optimize before jitting",
-         "--prejitbackendopt", ""),
         ("pyjitpl", "JIT generation step", "--pyjitpl", ""),
         ("backendopt", "do backend optimizations", "--backendopt", ""),
         ("source", "create source", "-s --source", ""),
@@ -263,7 +261,9 @@ def main():
         if config.translation.jit:
             if 'jitpolicy' not in targetspec_dic:
                 raise Exception('target has no jitpolicy defined.')
-            drv.set_extra_goals(['pyjitpl'])
+            if (translateconfig.goals != ['annotate'] and
+                translateconfig.goals != ['rtype']):
+                drv.set_extra_goals(['pyjitpl'])
         log_config(config.translation, "translation configuration")
         pdb_plus_show.expose({'drv': drv, 'prof': prof})
 

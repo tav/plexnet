@@ -27,9 +27,8 @@ translation_optiondescription = OptionDescription(
                  requires={
                      "ootype": [
                                 ("translation.backendopt.constfold", False),
-                                ("translation.backendopt.heap2stack", False),
                                 ("translation.backendopt.clever_malloc_removal", False),
-                                ("translation.list_comprehension_operations", False),
+                                ("translation.gc", "boehm"), # it's not really used, but some jit code expects a value here
                                 ]
                      }),
     ChoiceOption("backend", "Backend to use for code generation",
@@ -69,7 +68,9 @@ translation_optiondescription = OptionDescription(
                  }),
     OptionDescription("gcconfig", "Configure garbage collectors", [
         BoolOption("debugprint", "Turn on debug printing for the GC",
-                   default=False)
+                   default=False),
+        BoolOption("removetypeptr", "Remove the typeptr from every object",
+                   default=False, cmdline="--gcremovetypeptr"),
         ]),
     ChoiceOption("gcrootfinder",
                  "Strategy for finding GC Roots (framework GCs only)",
@@ -79,13 +80,8 @@ translation_optiondescription = OptionDescription(
                  requires={
                      "shadowstack": [("translation.gctransformer", "framework")],
                      "asmgcc": [("translation.gctransformer", "framework"),
-                                ("translation.backend", "c"),
-                                ("translation.thread", False)],
-                    },
-                 suggests={
-                     "shadowstack": [("translation.gc", "generation")],
-                     "asmgcc": [("translation.gc", "generation")],
-                 }),
+                                ("translation.backend", "c")],
+                    }),
 
     # other noticeable options
     BoolOption("thread", "enable use of threading primitives",
@@ -97,11 +93,21 @@ translation_optiondescription = OptionDescription(
     BoolOption("rweakref", "The backend supports RPython-level weakrefs",
                default=True),
 
-    # JIT generation
+    # JIT generation: use -Ojit to enable it
     BoolOption("jit", "generate a JIT",
-               default=False, cmdline="--jit",
-               requires=[("translation.gc", "boehm"),
+               default=False,
+               requires=[("translation.thread", False),
+                         ("translation.gcconfig.removetypeptr", False)],
+               suggests=[("translation.gc", "hybrid"),     # or "boehm"
+                         ("translation.gcrootfinder", "asmgcc"),
                          ("translation.list_comprehension_operations", True)]),
+    ChoiceOption("jit_backend", "choose the backend for the JIT",
+                 ["auto", "x86", "x86-without-sse2", "llvm"],
+                 default="auto", cmdline="--jit-backend"),
+    ChoiceOption("jit_debug", "the amount of debugging dumps made by the JIT",
+                 ["off", "profile", "steps", "detailed"],
+                 default="profile",      # XXX for now
+                 cmdline="--jit-debug"),
 
     # misc
     BoolOption("verbose", "Print extra information", default=False),
@@ -162,6 +168,10 @@ translation_optiondescription = OptionDescription(
     IntOption("withsmallfuncsets",
               "Represent groups of less funtions than this as indices into an array",
                default=0),
+    BoolOption("taggedpointers",
+               "When true, enable the use of tagged pointers. "
+               "If false, use normal boxing",
+               default=False),
 
     # options for ootype
     OptionDescription("ootype", "Object Oriented Typesystem options", [
@@ -191,9 +201,6 @@ translation_optiondescription = OptionDescription(
         BoolOption("mallocs", "Remove mallocs", default=True),
         BoolOption("constfold", "Constant propagation",
                    default=True),
-        BoolOption("heap2stack", "Escape analysis and stack allocation",
-                   default=False,
-                   requires=[("translation.stackless", False)]),
         # control profile based inlining
         StrOption("profile_based_inline",
                   "Use call count profiling to drive inlining"
@@ -228,6 +235,10 @@ translation_optiondescription = OptionDescription(
         BoolOption("remove_asserts",
                    "Remove operations that look like 'raise AssertionError', "
                    "which lets the C optimizer remove the asserts",
+                   default=False),
+        BoolOption("really_remove_asserts",
+                   "Really remove operations that look like 'raise AssertionError', "
+                   "without relying on the C compiler",
                    default=False),
 
         BoolOption("stack_optimization",
@@ -289,7 +300,7 @@ def get_combined_translation_config(other_optdescr=None,
 
 # ____________________________________________________________
 
-OPT_LEVELS = ['0', '1', 'size', 'mem', '2', '3']
+OPT_LEVELS = ['0', '1', 'size', 'mem', '2', '3', 'jit']
 DEFAULT_OPT_LEVEL = '2'
 
 OPT_TABLE_DOC = {
@@ -299,6 +310,7 @@ OPT_TABLE_DOC = {
     'mem':  'Optimize for run-time memory usage and use a memory-saving GC.',
     '2':    'Enable most optimizations and use a high-performance GC.',
     '3':    'Enable all optimizations and use a high-performance GC.',
+    'jit':  'Enable the JIT.',
     }
 
 OPT_TABLE = {
@@ -306,9 +318,10 @@ OPT_TABLE = {
     '0':    'boehm       nobackendopt',
     '1':    'boehm       lowinline',
     'size': 'boehm       lowinline     remove_asserts',
-    'mem':  'markcompact lowinline     remove_asserts',
+    'mem':  'markcompact lowinline     remove_asserts    removetypeptr',
     '2':    'hybrid      extraopts',
     '3':    'hybrid      extraopts     remove_asserts',
+    'jit':  'hybrid      extraopts     jit',
     }
 
 def set_opt_level(config, level):
@@ -328,9 +341,9 @@ def set_opt_level(config, level):
     gc = words.pop(0)
 
     # set the GC (only meaningful with lltype)
-    if config.translation.sandbox and gc == 'hybrid':
-        gc = 'generation'
-    config.translation.suggest(gc=gc)
+    # but only set it if it wasn't already suggested to be something else
+    if config.translation._cfgimpl_value_owners['gc'] != 'suggested':
+        config.translation.suggest(gc=gc)
 
     # set the backendopts
     for word in words:
@@ -343,6 +356,10 @@ def set_opt_level(config, level):
             config.translation.backendopt.suggest(remove_asserts=True)
         elif word == 'extraopts':
             config.translation.suggest(withsmallfuncsets=5)
+        elif word == 'jit':
+            config.translation.suggest(jit=True)
+        elif word == 'removetypeptr':
+            config.translation.gcconfig.suggest(removetypeptr=True)
         else:
             raise ValueError(word)
 

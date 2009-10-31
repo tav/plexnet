@@ -1,17 +1,15 @@
 
 # -*- coding: utf-8 -*-
 """
-The py lib is an extensible library for testing, distributed processing and 
-interacting with filesystems. 
+advanced testing and development support library: 
 
 - `py.test`_: cross-project testing tool with many advanced features
 - `py.execnet`_: ad-hoc code distribution to SSH, Socket and local sub processes
 - `py.path`_: path abstractions over local and subversion files 
 - `py.code`_: dynamic code compile and traceback printing support
 
-The py lib and its tools should work well on Linux, Win32, 
-OSX, Python versions 2.3-2.6.  For questions please go to
-http://pylib.org/contact.html
+Compatibility: Linux, Win32, OSX, Python versions 2.3-2.6. 
+For questions please check out http://pylib.org/contact.html
 
 .. _`py.test`: http://pylib.org/test.html
 .. _`py.execnet`: http://pylib.org/execnet.html
@@ -20,23 +18,23 @@ http://pylib.org/contact.html
  
 """
 from initpkg import initpkg
+trunk = None
 
-version = "1.0.0b1"
+version = trunk or "1.0.x"
+
+del trunk 
 
 initpkg(__name__,
-    description = "pylib and py.test: agile development and test support library",
-    revision = int('$LastChangedRevision: 63360 $'.split(':')[1][:-1]),
-    lastchangedate = '$LastChangedDate: 2009-03-26 12:51:47 +0000 (Thu, 26 Mar 2009) $',
+    description = "py.test and pylib: advanced testing tool and networking lib", 
     version = version, 
     url = "http://pylib.org", 
-    download_url = "http://codespeak.net/py/%s/download.html" % version,
     license = "MIT license",
     platforms = ['unix', 'linux', 'osx', 'cygwin', 'win32'],
     author = "holger krekel, Guido Wesdorp, Carl Friedrich Bolz, Armin Rigo, Maciej Fijalkowski & others",
     author_email = "holger at merlinux.eu, py-dev at codespeak.net",
     long_description = globals()['__doc__'],
     classifiers = [
-        "Development Status :: 4 - Beta", 
+        "Development Status :: 5 - Production/Stable", 
         "Intended Audience :: Developers", 
         "License :: OSI Approved :: MIT License",
         "Operating System :: POSIX",
@@ -49,14 +47,14 @@ initpkg(__name__,
         "Programming Language :: Python",
     ],
 
-
     # EXPORTED API 
     exportdefs = {
 
     # py lib events and plugins 
-    '_com.PyPlugins'         : ('./_com.py', 'PyPlugins'), 
+    '_com.Registry'          : ('./_com.py', 'Registry'), 
     '_com.MultiCall'         : ('./_com.py', 'MultiCall'), 
-    '_com.pyplugins'         : ('./_com.py', 'pyplugins'), 
+    '_com.comregistry'       : ('./_com.py', 'comregistry'), 
+    '_com.HookRelay'             : ('./_com.py', 'HookRelay'), 
 
     # py lib cmdline tools 
     'cmdline.pytest'         : ('./cmdline/pytest.py', 'main',),
@@ -69,15 +67,12 @@ initpkg(__name__,
 
     # helpers for use from test functions or collectors
     'test.__doc__'           : ('./test/__init__.py', '__doc__'),
-    'test._PytestPlugins'    : ('./test/pytestplugin.py', 'PytestPlugins'),
+    'test._PluginManager'    : ('./test/pluginmanager.py', 'PluginManager'),
     'test.raises'            : ('./test/outcome.py', 'raises'),
-    'test.mark'              : ('./test/outcome.py', 'mark',),
-    'test.deprecated_call'   : ('./test/outcome.py', 'deprecated_call'), 
     'test.skip'              : ('./test/outcome.py', 'skip'),
     'test.importorskip'      : ('./test/outcome.py', 'importorskip'),
     'test.fail'              : ('./test/outcome.py', 'fail'),
     'test.exit'              : ('./test/outcome.py', 'exit'),
-    'test.pdb'               : ('./test/custompdb.py', 'set_trace'),
 
     # configuration/initialization related test api
     'test.config'            : ('./test/config.py', 'config_per_process'),
@@ -94,6 +89,7 @@ initpkg(__name__,
     'test.collect.Instance'  : ('./test/pycollect.py', 'Instance'),
     'test.collect.Generator' : ('./test/pycollect.py', 'Generator'),
     'test.collect.Function'  : ('./test/pycollect.py', 'Function'),
+    'test.collect._fillfuncargs' : ('./test/funcargs.py', 'fillfuncargs'),
 
     # thread related API (still in early design phase)
     '_thread.WorkerPool'      : ('./thread/pool.py', 'WorkerPool'),
@@ -117,7 +113,6 @@ initpkg(__name__,
 
     # some nice slightly magic APIs
     'magic.__doc__'          : ('./magic/__init__.py', '__doc__'),
-    'magic.greenlet'         : ('./magic/greenlet.py', 'greenlet'),
     'magic.invoke'           : ('./magic/invoke.py', 'invoke'),
     'magic.revoke'           : ('./magic/invoke.py', 'revoke'),
     'magic.patch'            : ('./magic/patch.py', 'patch'),
@@ -133,6 +128,7 @@ initpkg(__name__,
     'code.Frame'             : ('./code/frame.py', 'Frame'),
     'code.ExceptionInfo'     : ('./code/excinfo.py', 'ExceptionInfo'),
     'code.Traceback'         : ('./code/traceback2.py', 'Traceback'),
+    'code.getfslineno'       : ('./code/source.py', 'getfslineno'),
 
     # backports and additions of builtins
     'builtin.__doc__'        : ('./builtin/__init__.py', '__doc__'),
@@ -146,6 +142,7 @@ initpkg(__name__,
 
     # gateways into remote contexts
     'execnet.__doc__'        : ('./execnet/__init__.py', '__doc__'),
+    'execnet._HookSpecs'           : ('./execnet/gateway.py', 'ExecnetAPI'),
     'execnet.SocketGateway'  : ('./execnet/register.py', 'SocketGateway'),
     'execnet.PopenGateway'   : ('./execnet/register.py', 'PopenGateway'),
     'execnet.SshGateway'     : ('./execnet/register.py', 'SshGateway'),
@@ -178,6 +175,7 @@ initpkg(__name__,
 
     # logging API ('producers' and 'consumers' connected via keywords)
     'log.__doc__'            : ('./log/__init__.py', '__doc__'),
+    'log._apiwarn'            : ('./log/warning.py', '_apiwarn'),
     'log.Producer'           : ('./log/producer.py', 'Producer'),
     'log.default'            : ('./log/producer.py', 'default'),
     'log._getstate'          : ('./log/producer.py', '_getstate'),
@@ -197,7 +195,5 @@ initpkg(__name__,
     'compat.subprocess'      : ('./compat/subprocess.py', '*'),
 })
 
-import py
-py._com.pyplugins.consider_env()
 
 

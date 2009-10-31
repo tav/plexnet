@@ -22,10 +22,9 @@ def transparent_class(name, BaseCls):
             self.space = space
     
         def descr_call_mismatch(self, space, name, reqcls, args):
-            args_w, kwds_w = args.unpack()
-            args_w = args_w[:]
+            args_w = args.arguments_w[:]
             args_w[0] = space.wrap(name)
-            args = argument.Arguments(space, args_w,  kwds_w)
+            args = args.replace_arguments(args_w)
             return space.call_args(self.w_controller, args)
     
         def getclass(self, space):
@@ -110,7 +109,7 @@ class W_TransparentList(W_TransparentObject):
     from pypy.objspace.std.listtype import list_typedef as typedef
 
 class W_TransparentDict(W_TransparentObject):
-    from pypy.objspace.std.dictobject import W_DictObject as original
+    from pypy.objspace.std.dictmultiobject import W_DictMultiObject as original
     from pypy.objspace.std.dicttype import dict_typedef as typedef
 
 registerimplementation(W_TransparentList)

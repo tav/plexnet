@@ -115,14 +115,14 @@ class __extend__(pairtype(IntegerRepr, IntegerRepr)):
     rtype_inplace_or = rtype_or_
 
     def rtype_lshift(_, hop):
-        return _rtype_template(hop, 'lshift', [ValueError])
+        return _rtype_template(hop, 'lshift')
     rtype_inplace_lshift = rtype_lshift
 
     def rtype_lshift_ovf(_, hop):
-        return _rtype_template(hop, 'lshift_ovf', [ValueError])
+        return _rtype_template(hop, 'lshift_ovf')
 
     def rtype_rshift(_, hop):
-        return _rtype_template(hop, 'rshift', [ValueError])
+        return _rtype_template(hop, 'rshift')
     rtype_inplace_rshift = rtype_rshift
 
     def rtype_pow(_, hop):
@@ -385,6 +385,7 @@ class __extend__(IntegerRepr):
 
     def rtype_float(_, hop):
         vlist = hop.inputargs(Float)
+        hop.exception_cannot_occur()
         return vlist[0]
 
     # version picked by specialisation based on which
@@ -407,10 +408,8 @@ class __extend__(IntegerRepr):
         fn = hop.rtyper.type_system.ll_str.ll_int2oct        
         return hop.gendirectcall(fn, varg, true)
 
-def ll_identity(n):
-    return n
-
-ll_hash_int = ll_identity
+def ll_hash_int(n):
+    return intmask(n)
 
 def ll_check_chr(n):
     if 0 <= n <= 255:

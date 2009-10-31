@@ -52,6 +52,23 @@ class GatewayCleanup:
             gw.exit()
             #gw.join() # should work as well
 
+class ExecnetAPI:
+    def pyexecnet_gateway_init(self, gateway):
+        """ signal initialisation of new gateway. """ 
+    def pyexecnet_gateway_exit(self, gateway):
+        """ signal exitting of gateway. """ 
+
+    def pyexecnet_gwmanage_newgateway(self, gateway, platinfo):
+        """ called when a manager has made a new gateway. """ 
+
+    def pyexecnet_gwmanage_rsyncstart(self, source, gateways):
+        """ called before rsyncing a directory to remote gateways takes place. """
+
+    def pyexecnet_gwmanage_rsyncfinish(self, source, gateways):
+        """ called after rsyncing a directory to remote gateways takes place. """
+
+        
+        
 # ----------------------------------------------------------
 # Base Gateway (used for both remote and local side) 
 # ----------------------------------------------------------
@@ -70,6 +87,11 @@ class Gateway(object):
         self._io = io
         self._channelfactory = ChannelFactory(self, _startcount)
         self._cleanup.register(self) 
+        if _startcount == 1: # only import 'py' on the "client" side 
+            import py
+            self.hook = py._com.HookRelay(ExecnetAPI, py._com.comregistry)
+        else:
+            self.hook = ExecnetAPI()
 
     def _initreceive(self, requestqueue=False):
         if requestqueue: 
@@ -145,7 +167,8 @@ class Gateway(object):
             except IOError: 
                 self._trace('IOError on _stopsend()')
             self._channelfactory._finished_receiving()
-            self._trace('leaving %r' % threading.currentThread())
+            if threading: # might be None during shutdown/finalization
+                self._trace('leaving %r' % threading.currentThread())
 
     from sys import exc_info
     def _send(self, msg):
@@ -207,7 +230,7 @@ class Gateway(object):
         from sys import exc_info
         channel, (source, outid, errid) = item 
         try:
-            loc = { 'channel' : channel }
+            loc = { 'channel' : channel, '__name__': '__channelexec__'}
             self._trace("execution starts:", repr(source)[:50])
             close = self._local_redirect_thread_output(outid, errid) 
             try:
@@ -331,12 +354,7 @@ class Gateway(object):
         self._cleanup.unregister(self)
         self._stopexec()
         self._stopsend()
-        try:
-            py._com.pyplugins.notify("gateway_exit", self)
-        except NameError: 
-            # XXX on the remote side 'py' is not imported 
-            # and so we can't notify 
-            pass
+        self.hook.pyexecnet_gateway_exit(gateway=self)
 
     def _remote_redirect(self, stdout=None, stderr=None): 
         """ return a handle representing a redirection of a remote 

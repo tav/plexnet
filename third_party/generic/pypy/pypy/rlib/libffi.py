@@ -311,8 +311,6 @@ if _WIN32:
                 "Procedure called with too many "
                 "arguments (%d bytes in excess) " % (result,))
 
-    
-    FormatError = rwin32.FormatError
     LoadLibrary = rwin32.LoadLibrary
 
     get_libc_handle = external('get_libc_handle', [], rwin32.HANDLE)
@@ -508,8 +506,10 @@ class CallbackFuncPtr(AbstractFuncPtr):
 
 class RawFuncPtr(AbstractFuncPtr):
 
-    def __init__(self, name, argtypes, restype, funcsym, flags=FUNCFLAG_CDECL):
+    def __init__(self, name, argtypes, restype, funcsym, flags=FUNCFLAG_CDECL,
+                 keepalive=None):
         AbstractFuncPtr.__init__(self, name, argtypes, restype, flags)
+        self.keepalive = keepalive
         self.funcsym = funcsym
 
     def call(self, args_ll, ll_result):
@@ -529,9 +529,11 @@ class FuncPtr(AbstractFuncPtr):
     ll_args = lltype.nullptr(rffi.VOIDPP.TO)
     ll_result = lltype.nullptr(rffi.VOIDP.TO)
 
-    def __init__(self, name, argtypes, restype, funcsym, flags=FUNCFLAG_CDECL):
+    def __init__(self, name, argtypes, restype, funcsym, flags=FUNCFLAG_CDECL,
+                 keepalive=None):
         # initialize each one of pointers with null
         AbstractFuncPtr.__init__(self, name, argtypes, restype, flags)
+        self.keepalive = keepalive
         self.funcsym = funcsym
         self.argnum = len(self.argtypes)
         self.pushed_args = 0
@@ -619,20 +621,21 @@ class CDLL:
         # these arguments are already casted to proper ffi
         # structures!
         return FuncPtr(name, argtypes, restype, dlsym(self.lib, name),
-                       flags=flags)
+                       flags=flags, keepalive=self)
 
     def getrawpointer(self, name, argtypes, restype, flags=FUNCFLAG_CDECL):
         # these arguments are already casted to proper ffi
         # structures!
         return RawFuncPtr(name, argtypes, restype, dlsym(self.lib, name),
-                          flags=flags)
+                          flags=flags, keepalive=self)
 
     def getrawpointer_byordinal(self, ordinal, argtypes, restype,
                                 flags=FUNCFLAG_CDECL):
         # these arguments are already casted to proper ffi
         # structures!
         return RawFuncPtr(name, argtypes, restype,
-                          dlsym_byordinal(self.lib, ordinal), flags=flags)
+                          dlsym_byordinal(self.lib, ordinal), flags=flags,
+                          keepalive=self)
 
     def getaddressindll(self, name):
         return dlsym(self.lib, name)

@@ -1,21 +1,42 @@
+"""
+Implements terminal reporting of the full testing process.
+
+This is a good source for looking at the various reporting hooks. 
+"""
 import py
 import sys
 
-class TerminalPlugin(object):
-    """ Report a test run to a terminal. """
-    def pytest_configure(self, config):
-        if config.option.collectonly:
-            self.reporter = CollectonlyReporter(config)
-        else:
-            self.reporter = TerminalReporter(config)
-        # XXX see remote.py's XXX 
-        for attr in 'pytest_terminal_hasmarkup', 'pytest_terminal_fullwidth':
-            if hasattr(config, attr):
-                #print "SETTING TERMINAL OPTIONS", attr, getattr(config, attr)
-                name = attr.split("_")[-1]
-                assert hasattr(self.reporter._tw, name), name
-                setattr(self.reporter._tw, name, getattr(config, attr))
-        config.bus.register(self.reporter)
+def pytest_addoption(parser):
+    group = parser.getgroup("debugconfig")
+    group.addoption('--collectonly',
+        action="store_true", dest="collectonly",
+        help="only collect tests, don't execute them."),
+    group.addoption('--traceconfig',
+               action="store_true", dest="traceconfig", default=False,
+               help="trace considerations of conftest.py files."),
+    group._addoption('--nomagic',
+               action="store_true", dest="nomagic", default=False,
+               help="don't reinterpret asserts, no traceback cutting. ")
+    group._addoption('--fulltrace',
+               action="store_true", dest="fulltrace", default=False,
+               help="don't cut any tracebacks (default is to cut).")
+    group.addoption('--debug',
+               action="store_true", dest="debug", default=False,
+               help="generate and show debugging information.")
+
+def pytest_configure(config):
+    if config.option.collectonly:
+        reporter = CollectonlyReporter(config)
+    else:
+        reporter = TerminalReporter(config)
+    # XXX see remote.py's XXX 
+    for attr in 'pytest_terminal_hasmarkup', 'pytest_terminal_fullwidth':
+        if hasattr(config, attr):
+            #print "SETTING TERMINAL OPTIONS", attr, getattr(config, attr)
+            name = attr.split("_")[-1]
+            assert hasattr(self.reporter._tw, name), name
+            setattr(reporter._tw, name, getattr(config, attr))
+    config.pluginmanager.register(reporter, 'terminalreporter')
 
 class TerminalReporter:
     def __init__(self, config, file=None):
@@ -29,6 +50,7 @@ class TerminalReporter:
         self.gateway2info = {}
 
     def write_fspath_result(self, fspath, res):
+        fspath = self.curdir.bestrelpath(fspath)
         if fspath != self.currentfspath:
             self._tw.line()
             relpath = self.curdir.bestrelpath(fspath)
@@ -59,44 +81,44 @@ class TerminalReporter:
         self.ensure_newline()
         self._tw.sep(sep, title, **markup)
 
-    def getcategoryletterword(self, event):
-        res = self.config.pytestplugins.call_firstresult("pytest_report_teststatus", event=event)
+    def getcategoryletterword(self, rep):
+        res = self.config.hook.pytest_report_teststatus(report=rep)
         if res:
             return res
         for cat in 'skipped failed passed ???'.split():
-            if getattr(event, cat, None):
+            if getattr(rep, cat, None):
                 break 
-        return cat, self.getoutcomeletter(event), self.getoutcomeword(event)
+        return cat, self.getoutcomeletter(rep), self.getoutcomeword(rep)
 
-    def getoutcomeletter(self, event):
-        return event.shortrepr 
+    def getoutcomeletter(self, rep):
+        return rep.shortrepr 
 
-    def getoutcomeword(self, event):
-        if event.passed: 
+    def getoutcomeword(self, rep):
+        if rep.passed: 
             return "PASS", dict(green=True)
-        elif event.failed: 
+        elif rep.failed: 
             return "FAIL", dict(red=True)
-        elif event.skipped: 
+        elif rep.skipped: 
             return "SKIP"
         else: 
             return "???", dict(red=True)
 
-    def pyevent_internalerror(self, event):
-        for line in str(event.repr).split("\n"):
-            self.write_line("InternalException: " + line)
+    def pytest_internalerror(self, excrepr):
+        for line in str(excrepr).split("\n"):
+            self.write_line("INTERNALERROR> " + line)
 
-    def pyevent_gwmanage_newgateway(self, gateway, rinfo):
+    def pyexecnet_gwmanage_newgateway(self, gateway, platinfo):
         #self.write_line("%s instantiated gateway from spec %r" %(gateway.id, gateway.spec._spec))
         d = {}
-        d['version'] = repr_pythonversion(rinfo.version_info)
+        d['version'] = repr_pythonversion(platinfo.version_info)
         d['id'] = gateway.id
         d['spec'] = gateway.spec._spec 
-        d['platform'] = rinfo.platform 
+        d['platform'] = platinfo.platform 
         if self.config.option.verbose:
-            d['extra'] = "- " + rinfo.executable
+            d['extra'] = "- " + platinfo.executable
         else:
             d['extra'] = ""
-        d['cwd'] = rinfo.cwd
+        d['cwd'] = platinfo.cwd
         infoline = ("%(id)s %(spec)s -- platform %(platform)s, "
                         "Python %(version)s "
                         "cwd: %(cwd)s"
@@ -104,18 +126,18 @@ class TerminalReporter:
         self.write_line(infoline)
         self.gateway2info[gateway] = infoline
 
-    def pyevent_gwmanage_rsyncstart(self, source, gateways):
+    def pyexecnet_gwmanage_rsyncstart(self, source, gateways):
         targets = ", ".join([gw.id for gw in gateways])
         msg = "rsyncstart: %s -> %s" %(source, targets)
         if not self.config.option.verbose:
             msg += " # use --verbose to see rsync progress"
         self.write_line(msg)
 
-    def pyevent_gwmanage_rsyncfinish(self, source, gateways):
+    def pyexecnet_gwmanage_rsyncfinish(self, source, gateways):
         targets = ", ".join([gw.id for gw in gateways])
         self.write_line("rsyncfinish: %s -> %s" %(source, targets))
 
-    def pyevent_plugin_registered(self, plugin):
+    def pytest_plugin_registered(self, plugin):
         if self.config.option.traceconfig: 
             msg = "PLUGIN registered: %s" %(plugin,)
             # XXX this event may happen during setup/teardown time 
@@ -123,146 +145,237 @@ class TerminalReporter:
             #     which garbles our output if we use self.write_line 
             self.write_line(msg)
 
-    def pyevent_testnodeready(self, node):
+    def pytest_testnodeready(self, node):
         self.write_line("%s txnode ready to receive tests" %(node.gateway.id,))
 
-    def pyevent_testnodedown(self, node, error):
+    def pytest_testnodedown(self, node, error):
         if error:
             self.write_line("%s node down, error: %s" %(node.gateway.id, error))
 
-    def pyevent_trace(self, category, msg):
+    def pytest_trace(self, category, msg):
         if self.config.option.debug or \
            self.config.option.traceconfig and category.find("config") != -1:
             self.write_line("[%s] %s" %(category, msg))
 
-    def pyevent_itemstart(self, item, node=None):
+    def pytest_rescheduleitems(self, items):
         if self.config.option.debug:
-            info = item.repr_metainfo()
-            line = info.verboseline(basedir=self.curdir) + " "
-            extra = ""
-            if node:
-                extra = "-> " + str(node.gateway.id)
-            self.write_ensure_prefix(line, extra)
-        # in dist situations itemstart (currently only means we 
-        # queued the item for testing, doesn't tell much
-        elif self.config.option.verbose and self.config.option.dist == "no":
-            # ensure that the path is printed before the 1st test of
-            # a module starts running
-            info = item.repr_metainfo()
-            line = info.verboseline(basedir=self.curdir) + " "
-            #self.write_fspath_result(fspath, "")
-            self.write_ensure_prefix(line, "") 
+            self.write_sep("!", "RESCHEDULING %s " %(items,))
 
-    def pyevent_rescheduleitems(self, event):
-        if self.config.option.debug:
-            self.write_sep("!", "RESCHEDULING %s " %(event.items,))
+    def pytest_deselected(self, items):
+        self.stats.setdefault('deselected', []).append(items)
 
-    def pyevent_deselected(self, event):
-        self.stats.setdefault('deselected', []).append(event)
-    
-    def pyevent_itemtestreport(self, event):
-        fspath = event.colitem.fspath 
-        cat, letter, word = self.getcategoryletterword(event)
+    def pytest_itemstart(self, item, node=None):
+        if self.config.option.dist != "no":
+            # for dist-testing situations itemstart means we 
+            # queued the item for sending, not interesting (unless debugging) 
+            if self.config.option.debug:
+                line = self._reportinfoline(item)
+                extra = ""
+                if node:
+                    extra = "-> " + str(node.gateway.id)
+                self.write_ensure_prefix(line, extra)
+        else:
+            if self.config.option.verbose:
+                line = self._reportinfoline(item)
+                self.write_ensure_prefix(line, "") 
+            else:
+                # ensure that the path is printed before the 
+                # 1st test of a module starts running
+
+                self.write_fspath_result(self._getfspath(item), "")
+
+    def pytest__teardown_final_logerror(self, report):
+        self.stats.setdefault("error", []).append(report)
+ 
+    def pytest_runtest_logreport(self, report):
+        rep = report
+        cat, letter, word = self.getcategoryletterword(rep)
+        if not letter and not word:
+            # probably passed setup/teardown
+            return
         if isinstance(word, tuple):
             word, markup = word
         else:
             markup = {}
-        self.stats.setdefault(cat, []).append(event)
+        self.stats.setdefault(cat, []).append(rep)
         if not self.config.option.verbose:
-            self.write_fspath_result(fspath, letter)
+            self.write_fspath_result(self._getfspath(rep.item), letter)
         else:
-            info = event.colitem.repr_metainfo()
-            line = info.verboseline(basedir=self.curdir) + " "
-            if not hasattr(event, 'node'):
+            line = self._reportinfoline(rep.item)
+            if not hasattr(rep, 'node'):
                 self.write_ensure_prefix(line, word, **markup)
             else:
                 self.ensure_newline()
-                if hasattr(event, 'node'):
-                    self._tw.write("%s " % event.node.gateway.id)
+                if hasattr(rep, 'node'):
+                    self._tw.write("%s " % rep.node.gateway.id)
                 self._tw.write(word, **markup)
                 self._tw.write(" " + line)
                 self.currentfspath = -2
 
-    def pyevent_collectionreport(self, event):
-        if not event.passed:
-            if event.failed:
-                self.stats.setdefault("failed", []).append(event)
-                msg = event.longrepr.reprcrash.message 
-                self.write_fspath_result(event.colitem.fspath, "F")
-            elif event.skipped:
-                self.stats.setdefault("skipped", []).append(event)
-                self.write_fspath_result(event.colitem.fspath, "S")
+    def pytest_collectreport(self, report):
+        if not report.passed:
+            if report.failed:
+                self.stats.setdefault("error", []).append(report)
+                msg = report.longrepr.reprcrash.message 
+                self.write_fspath_result(report.collector.fspath, "E")
+            elif report.skipped:
+                self.stats.setdefault("skipped", []).append(report)
+                self.write_fspath_result(report.collector.fspath, "S")
 
-    def pyevent_testrunstart(self, event):
+    def pytest_sessionstart(self, session):
         self.write_sep("=", "test session starts", bold=True)
         self._sessionstarttime = py.std.time.time()
 
         verinfo = ".".join(map(str, sys.version_info[:3]))
         msg = "python: platform %s -- Python %s" % (sys.platform, verinfo)
-        if self.config.option.verbose or self.config.option.debug:
+        if self.config.option.verbose or self.config.option.debug or getattr(self.config.option, 'pastebin', None):
+            msg += " -- pytest-%s" % (py.__version__)
             msg += " -- " + str(sys.executable)
         self.write_line(msg)
 
-        rev = py.__pkg__.getrev()
-        self.write_line("using py lib: %s <rev %s>" % (
-                       py.path.local(py.__file__).dirpath(), rev))
+        if self.config.option.debug or self.config.option.traceconfig:
+            rev = py.__pkg__.getrev()
+            self.write_line("using py lib: %s <rev %s>" % (
+                           py.path.local(py.__file__).dirpath(), rev))
         if self.config.option.traceconfig:
             plugins = []
-            for x in self.config.pytestplugins._plugins:
-                if isinstance(x, str) and x.startswith("pytest_"):
-                    plugins.append(x[7:])
-                else:
-                    plugins.append(str(x)) # XXX display conftest plugins more nicely 
+            for plugin in self.config.pluginmanager.comregistry:
+                name = getattr(plugin, '__name__', None)
+                if name is None:
+                    name = plugin.__class__.__name__
+                plugins.append(name)
             plugins = ", ".join(plugins) 
             self.write_line("active plugins: %s" %(plugins,))
         for i, testarg in py.builtin.enumerate(self.config.args):
             self.write_line("test object %d: %s" %(i+1, testarg))
 
-    def pyevent_testrunfinish(self, event):
+    def pytest_sessionfinish(self, exitstatus, __multicall__):
+        __multicall__.execute() 
         self._tw.line("")
-        if event.exitstatus in (0, 1, 2):
+        if exitstatus in (0, 1, 2):
+            self.summary_errors()
             self.summary_failures()
             self.summary_skips()
-            self.config.pytestplugins.call_each("pytest_terminal_summary", terminalreporter=self)
-        if event.excrepr is not None:
-            self.summary_final_exc(event.excrepr)
-        if event.exitstatus == 2:
-            self.write_sep("!", "KEYBOARD INTERRUPT")
+            self.config.hook.pytest_terminal_summary(terminalreporter=self)
+        if exitstatus == 2:
+            self._report_keyboardinterrupt()
         self.summary_deselected()
         self.summary_stats()
 
-    def pyevent_looponfailinfo(self, event):
-        if event.failreports:
+    def pytest_keyboard_interrupt(self, excinfo):
+        self._keyboardinterrupt_memo = excinfo.getrepr()
+
+    def _report_keyboardinterrupt(self):
+        self.write_sep("!", "KEYBOARD INTERRUPT")
+        excrepr = self._keyboardinterrupt_memo
+        if self.config.option.verbose:
+            excrepr.toterminal(self._tw)
+        else:
+            excrepr.reprcrash.toterminal(self._tw)
+
+    def pytest_looponfailinfo(self, failreports, rootdirs):
+        if failreports:
             self.write_sep("#", "LOOPONFAILING", red=True)
-            for report in event.failreports:
+            for report in failreports:
                 try:
                     loc = report.longrepr.reprcrash
                 except AttributeError:
                     loc = str(report.longrepr)[:50]
                 self.write_line(loc, red=True)
         self.write_sep("#", "waiting for changes")
-        for rootdir in event.rootdirs:
+        for rootdir in rootdirs:
             self.write_line("### Watching:   %s" %(rootdir,), bold=True)
 
+    def _reportinfoline(self, item):
+        collect_fspath = self._getfspath(item)
+        fspath, lineno, msg = self._getreportinfo(item)
+        if fspath and fspath != collect_fspath:
+            fspath = "%s <- %s" % (
+                self.curdir.bestrelpath(collect_fspath),
+                self.curdir.bestrelpath(fspath))
+        elif fspath:
+            fspath = self.curdir.bestrelpath(fspath)
+        if lineno is not None:
+            lineno += 1
+        if fspath and lineno and msg:
+            line = "%(fspath)s:%(lineno)s: %(msg)s"
+        elif fspath and msg:
+            line = "%(fspath)s: %(msg)s"
+        elif fspath and lineno:
+            line = "%(fspath)s:%(lineno)s %(extrapath)s"
+        else:
+            line = "[noreportinfo]"
+        return line % locals() + " "
+        
+    def _getfailureheadline(self, rep):
+        if hasattr(rep, "collector"):
+            return str(rep.collector.fspath)
+        elif hasattr(rep, 'item'):
+            fspath, lineno, msg = self._getreportinfo(rep.item)
+            return msg
+        else:
+            return "test session" 
+
+    def _getreportinfo(self, item):
+        try:
+            return item.__reportinfo
+        except AttributeError:
+            pass
+        reportinfo = item.config.hook.pytest_report_iteminfo(item=item)
+        # cache on item
+        item.__reportinfo = reportinfo
+        return reportinfo
+
+    def _getfspath(self, item):
+        try:
+            return item.fspath
+        except AttributeError:
+            fspath, lineno, msg = self._getreportinfo(item)
+            return fspath
+
     #
-    # summaries for TestrunFinish 
+    # summaries for sessionfinish 
     #
 
     def summary_failures(self):
         if 'failed' in self.stats and self.config.option.tbstyle != "no":
             self.write_sep("=", "FAILURES")
-            for ev in self.stats['failed']:
-                self.write_sep("_", "FAILURES")
-                if hasattr(ev, 'node'):
-                    self.write_line(self.gateway2info.get(
-                        ev.node.gateway, "node %r (platinfo not found? strange)")
-                            [:self._tw.fullwidth-1])
-                ev.toterminal(self._tw)
+            for rep in self.stats['failed']:
+                msg = self._getfailureheadline(rep)
+                self.write_sep("_", msg)
+                self.write_platinfo(rep)
+                rep.toterminal(self._tw)
+
+    def summary_errors(self):
+        if 'error' in self.stats and self.config.option.tbstyle != "no":
+            self.write_sep("=", "ERRORS")
+            for rep in self.stats['error']:
+                msg = self._getfailureheadline(rep)
+                if not hasattr(rep, 'when'):
+                    # collect
+                    msg = "ERROR during collection " + msg
+                elif rep.when == "setup":
+                    msg = "ERROR at setup of " + msg 
+                elif rep.when == "teardown":
+                    msg = "ERROR at teardown of " + msg 
+                self.write_sep("_", msg)
+                self.write_platinfo(rep)
+                rep.toterminal(self._tw)
+
+    def write_platinfo(self, rep):
+        if hasattr(rep, 'node'):
+            self.write_line(self.gateway2info.get(
+                rep.node.gateway, 
+                "node %r (platinfo not found? strange)")
+                    [:self._tw.fullwidth-1])
 
     def summary_stats(self):
         session_duration = py.std.time.time() - self._sessionstarttime
 
         keys = "failed passed skipped deselected".split()
+        for key in self.stats.keys():
+            if key not in keys:
+                keys.append(key)
         parts = []
         for key in keys:
             val = self.stats.get(key, None)
@@ -286,14 +399,6 @@ class TerminalReporter:
                     for num, fspath, lineno, reason in fskips:
                         self._tw.line("%s:%d: [%d] %s" %(fspath, lineno, num, reason))
 
-    def summary_final_exc(self, excrepr):
-        self.write_sep("!")
-        if self.config.option.verbose:
-            excrepr.toterminal(self._tw)
-        else:
-            excrepr.reprcrash.toterminal(self._tw)
-
-
 class CollectonlyReporter:
     INDENT = "  "
 
@@ -308,24 +413,28 @@ class CollectonlyReporter:
     def outindent(self, line):
         self.out.line(self.indent + str(line))
 
-    def pyevent_collectionstart(self, event):
-        self.outindent(event.collector)
+    def pytest_internalerror(self, excrepr):
+        for line in str(excrepr).split("\n"):
+            self.out.line("INTERNALERROR> " + line)
+
+    def pytest_collectstart(self, collector):
+        self.outindent(collector)
         self.indent += self.INDENT 
     
-    def pyevent_itemstart(self, item, node=None):
+    def pytest_itemstart(self, item, node=None):
         self.outindent(item)
 
-    def pyevent_collectionreport(self, event):
-        if not event.passed:
-            self.outindent("!!! %s !!!" % event.longrepr.reprcrash.message)
-            self._failed.append(event)
+    def pytest_collectreport(self, report):
+        if not report.passed:
+            self.outindent("!!! %s !!!" % report.longrepr.reprcrash.message)
+            self._failed.append(report)
         self.indent = self.indent[:-len(self.INDENT)]
 
-    def pyevent_testrunfinish(self, event):
+    def pytest_sessionfinish(self, session, exitstatus):
         if self._failed:
             self.out.sep("!", "collection failures")
-        for event in self._failed:
-            event.toterminal(self.out)
+        for rep in self._failed:
+            rep.toterminal(self.out)
                 
 def folded_skips(skipped):
     d = {}
@@ -346,336 +455,3 @@ def repr_pythonversion(v=None):
     except (TypeError, ValueError):
         return str(v)
 
-# ===============================================================================
-#
-# plugin tests 
-#
-# ===============================================================================
-
-from py.__.test import event
-from py.__.test.runner import basic_run_report
-
-class TestTerminal:
-
-    def test_pass_skip_fail(self, testdir, linecomp):
-        modcol = testdir.getmodulecol("""
-            import py
-            def test_ok():
-                pass
-            def test_skip():
-                py.test.skip("xx")
-            def test_func():
-                assert 0
-        """)
-        rep = TerminalReporter(modcol.config, file=linecomp.stringio)
-        rep.config.bus.register(rep)
-        rep.config.bus.notify("testrunstart", event.TestrunStart())
-        
-        for item in testdir.genitems([modcol]):
-            ev = basic_run_report(item) 
-            rep.config.bus.notify("itemtestreport", ev)
-        linecomp.assert_contains_lines([
-                "*test_pass_skip_fail.py .sF"
-        ])
-        rep.config.bus.notify("testrunfinish", event.TestrunFinish())
-        linecomp.assert_contains_lines([
-            "    def test_func():",
-            ">       assert 0",
-            "E       assert 0",
-        ])
-
-    def test_pass_skip_fail_verbose(self, testdir, linecomp):
-        modcol = testdir.getmodulecol("""
-            import py
-            def test_ok():
-                pass
-            def test_skip():
-                py.test.skip("xx")
-            def test_func():
-                assert 0
-        """, configargs=("-v",))
-        rep = TerminalReporter(modcol.config, file=linecomp.stringio)
-        rep.config.bus.register(rep)
-        rep.config.bus.notify("testrunstart", event.TestrunStart())
-        items = modcol.collect()
-        rep.config.option.debug = True # 
-        for item in items:
-            rep.config.bus.notify("itemstart", item, None)
-            s = linecomp.stringio.getvalue().strip()
-            assert s.endswith(item.name)
-            rep.config.bus.notify("itemtestreport", basic_run_report(item))
-
-        linecomp.assert_contains_lines([
-            "*test_pass_skip_fail_verbose.py:2: *test_ok*PASS*",
-            "*test_pass_skip_fail_verbose.py:4: *test_skip*SKIP*",
-            "*test_pass_skip_fail_verbose.py:6: *test_func*FAIL*",
-        ])
-        rep.config.bus.notify("testrunfinish", event.TestrunFinish())
-        linecomp.assert_contains_lines([
-            "    def test_func():",
-            ">       assert 0",
-            "E       assert 0",
-        ])
-
-    def test_collect_fail(self, testdir, linecomp):
-        modcol = testdir.getmodulecol("import xyz")
-        rep = TerminalReporter(modcol.config, file=linecomp.stringio)
-        rep.config.bus.register(rep)
-        rep.config.bus.notify("testrunstart", event.TestrunStart())
-        l = list(testdir.genitems([modcol]))
-        assert len(l) == 0
-        linecomp.assert_contains_lines([
-            "*test_collect_fail.py F*"
-        ])
-        rep.config.bus.notify("testrunfinish", event.TestrunFinish())
-        linecomp.assert_contains_lines([
-            ">   import xyz",
-            "E   ImportError: No module named xyz"
-        ])
-
-    def test_internalerror(self, testdir, linecomp):
-        modcol = testdir.getmodulecol("def test_one(): pass")
-        rep = TerminalReporter(modcol.config, file=linecomp.stringio)
-        excinfo = py.test.raises(ValueError, "raise ValueError('hello')")
-        rep.pyevent_internalerror(event.InternalException(excinfo))
-        linecomp.assert_contains_lines([
-            "InternalException: >*raise ValueError*"
-        ])
-
-    def test_gwmanage_events(self, testdir, linecomp):
-        modcol = testdir.getmodulecol("""
-            def test_one():
-                pass
-        """, configargs=("-v",))
-
-        rep = TerminalReporter(modcol.config, file=linecomp.stringio)
-        class gw1:
-            id = "X1"
-            spec = py.execnet.XSpec("popen")
-        class gw2:
-            id = "X2"
-            spec = py.execnet.XSpec("popen")
-        class rinfo:
-            version_info = (2, 5, 1, 'final', 0)
-            executable = "hello"
-            platform = "xyz"
-            cwd = "qwe"
-
-        rep.pyevent_gwmanage_newgateway(gw1, rinfo)
-        linecomp.assert_contains_lines([
-            "X1*popen*xyz*2.5*"
-        ])
-
-        rep.pyevent_gwmanage_rsyncstart(source="hello", gateways=[gw1, gw2])
-        linecomp.assert_contains_lines([
-            "rsyncstart: hello -> X1, X2"
-        ])
-        rep.pyevent_gwmanage_rsyncfinish(source="hello", gateways=[gw1, gw2])
-        linecomp.assert_contains_lines([
-            "rsyncfinish: hello -> X1, X2"
-        ])
-
-    def test_writeline(self, testdir, linecomp):
-        modcol = testdir.getmodulecol("def test_one(): pass")
-        stringio = py.std.cStringIO.StringIO()
-        rep = TerminalReporter(modcol.config, file=linecomp.stringio)
-        rep.write_fspath_result(py.path.local("xy.py"), '.')
-        rep.write_line("hello world")
-        lines = linecomp.stringio.getvalue().split('\n')
-        assert not lines[0]
-        assert lines[1].endswith("xy.py .")
-        assert lines[2] == "hello world"
-
-    def test_looponfailreport(self, testdir, linecomp):
-        modcol = testdir.getmodulecol("""
-            def test_fail():
-                assert 0
-            def test_fail2():
-                raise ValueError()
-        """)
-        rep = TerminalReporter(modcol.config, file=linecomp.stringio)
-        reports = [basic_run_report(x) for x in modcol.collect()]
-        rep.pyevent_looponfailinfo(event.LooponfailingInfo(reports, [modcol.config.topdir]))
-        linecomp.assert_contains_lines([
-            "*test_looponfailreport.py:2: assert 0",
-            "*test_looponfailreport.py:4: ValueError*",
-            "*waiting*", 
-            "*%s*" % (modcol.config.topdir),
-        ])
-
-    def test_tb_option(self, testdir, linecomp):
-        # XXX usage of testdir and event bus
-        for tbopt in ["long", "short", "no"]:
-            print 'testing --tb=%s...' % tbopt
-            modcol = testdir.getmodulecol("""
-                import py
-                def g():
-                    raise IndexError
-                def test_func():
-                    print 6*7
-                    g()  # --calling--
-            """, configargs=("--tb=%s" % tbopt,))
-            rep = TerminalReporter(modcol.config, file=linecomp.stringio)
-            rep.config.bus.register(rep)
-            rep.config.bus.notify("testrunstart", event.TestrunStart())
-            rep.config.bus.notify("testrunstart", event.TestrunStart())
-            for item in testdir.genitems([modcol]):
-                rep.config.bus.notify("itemtestreport", basic_run_report(item))
-            rep.config.bus.notify("testrunfinish", event.TestrunFinish())
-            s = linecomp.stringio.getvalue()
-            if tbopt == "long":
-                print s
-                assert 'print 6*7' in s
-            else:
-                assert 'print 6*7' not in s
-            if tbopt != "no":
-                assert '--calling--' in s
-                assert 'IndexError' in s
-            else:
-                assert 'FAILURES' not in s
-                assert '--calling--' not in s
-                assert 'IndexError' not in s
-            linecomp.stringio.truncate(0)
-
-    def test_show_path_before_running_test(self, testdir, linecomp):
-        modcol = testdir.getmodulecol("""
-            def test_foobar():
-                pass
-        """)
-        rep = TerminalReporter(modcol.config, file=linecomp.stringio)
-        modcol.config.bus.register(rep)
-        l = list(testdir.genitems([modcol]))
-        assert len(l) == 1
-        modcol.config.option.debug = True
-        rep.config.bus.notify("itemstart", l[0])
-        linecomp.assert_contains_lines([
-            "*test_show_path_before_running_test.py*"
-        ])
-
-    def pseudo_keyboard_interrupt(self, testdir, linecomp, verbose=False):
-        modcol = testdir.getmodulecol("""
-            def test_foobar():
-                assert 0
-            def test_spamegg():
-                import py; py.test.skip('skip me please!')
-            def test_interrupt_me():
-                raise KeyboardInterrupt   # simulating the user
-        """, configargs=("-v",)*verbose)
-        #""", configargs=("--showskipsummary",) + ("-v",)*verbose)
-        rep = TerminalReporter(modcol.config, file=linecomp.stringio)
-        modcol.config.bus.register(rep)
-        bus = modcol.config.bus
-        bus.notify("testrunstart", event.TestrunStart())
-        try:
-            for item in testdir.genitems([modcol]):
-                bus.notify("itemtestreport", basic_run_report(item))
-        except KeyboardInterrupt:
-            excinfo = py.code.ExceptionInfo()
-        else:
-            py.test.fail("no KeyboardInterrupt??")
-        s = linecomp.stringio.getvalue()
-        if not verbose:
-            assert s.find("_keyboard_interrupt.py Fs") != -1
-        bus.notify("testrunfinish", event.TestrunFinish(exitstatus=2, excinfo=excinfo))
-        text = linecomp.stringio.getvalue()
-        linecomp.assert_contains_lines([
-            "    def test_foobar():",
-            ">       assert 0",
-            "E       assert 0",
-        ])
-        #assert "Skipped: 'skip me please!'" in text
-        assert "_keyboard_interrupt.py:6: KeyboardInterrupt" in text
-        see_details = "raise KeyboardInterrupt   # simulating the user" in text
-        assert see_details == verbose
-
-    def test_keyboard_interrupt(self, testdir, linecomp):
-        self.pseudo_keyboard_interrupt(testdir, linecomp)
-        
-    def test_verbose_keyboard_interrupt(self, testdir, linecomp):
-        self.pseudo_keyboard_interrupt(testdir, linecomp, verbose=True)
-
-    def test_skip_reasons_folding(self):
-        class longrepr:
-            class reprcrash:
-                path = 'xyz'
-                lineno = 3
-                message = "justso"
-
-        ev1 = event.CollectionReport(None, None)
-        ev1.when = "execute"
-        ev1.skipped = True
-        ev1.longrepr = longrepr 
-        
-        ev2 = event.ItemTestReport(None, excinfo=longrepr)
-        ev2.skipped = True
-
-        l = folded_skips([ev1, ev2])
-        assert len(l) == 1
-        num, fspath, lineno, reason = l[0]
-        assert num == 2
-        assert fspath == longrepr.reprcrash.path
-        assert lineno == longrepr.reprcrash.lineno
-        assert reason == longrepr.reprcrash.message
-
-class TestCollectonly:
-    def test_collectonly_basic(self, testdir, linecomp):
-        modcol = testdir.getmodulecol(configargs=['--collectonly'], source="""
-            def test_func():
-                pass
-        """)
-        rep = CollectonlyReporter(modcol.config, out=linecomp.stringio)
-        modcol.config.bus.register(rep)
-        indent = rep.indent
-        rep.config.bus.notify("collectionstart", event.CollectionStart(modcol))
-        linecomp.assert_contains_lines([
-           "<Module 'test_collectonly_basic.py'>"
-        ])
-        item = modcol.join("test_func")
-        rep.config.bus.notify("itemstart", item)
-        linecomp.assert_contains_lines([
-           "  <Function 'test_func'>", 
-        ])
-        rep.config.bus.notify( "collectionreport", 
-            event.CollectionReport(modcol, [], excinfo=None))
-        assert rep.indent == indent 
-
-    def test_collectonly_skipped_module(self, testdir, linecomp):
-        modcol = testdir.getmodulecol(configargs=['--collectonly'], source="""
-            import py
-            py.test.skip("nomod")
-        """)
-        rep = CollectonlyReporter(modcol.config, out=linecomp.stringio)
-        modcol.config.bus.register(rep)
-        cols = list(testdir.genitems([modcol]))
-        assert len(cols) == 0
-        linecomp.assert_contains_lines("""
-            <Module 'test_collectonly_skipped_module.py'>
-              !!! Skipped: 'nomod' !!!
-        """)
-
-    def test_collectonly_failed_module(self, testdir, linecomp):
-        modcol = testdir.getmodulecol(configargs=['--collectonly'], source="""
-            raise ValueError(0)
-        """)
-        rep = CollectonlyReporter(modcol.config, out=linecomp.stringio)
-        modcol.config.bus.register(rep)
-        cols = list(testdir.genitems([modcol]))
-        assert len(cols) == 0
-        linecomp.assert_contains_lines("""
-            <Module 'test_collectonly_failed_module.py'>
-              !!! ValueError: 0 !!!
-        """)
-
-def test_repr_python_version():
-    py.magic.patch(sys, 'version_info', (2, 5, 1, 'final', 0))
-    try:
-        assert repr_pythonversion() == "2.5.1-final-0"
-        py.std.sys.version_info = x = (2,3)
-        assert repr_pythonversion() == str(x) 
-    finally: 
-        py.magic.revert(sys, 'version_info') 
-
-def test_generic(plugintester):
-    plugintester.apicheck(TerminalPlugin)
-    plugintester.apicheck(TerminalReporter)
-    plugintester.apicheck(CollectonlyReporter)

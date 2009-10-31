@@ -11,6 +11,7 @@ from pypy.annotation.listdef import s_list_of_strings
 from pypy.annotation import policy as annpolicy
 from py.compat import optparse
 from pypy.tool.udir import udir
+from pypy.rlib.jit import DEBUG_OFF, DEBUG_DETAILED, DEBUG_PROFILE, DEBUG_STEPS
 
 import py
 from pypy.tool.ansi_print import ansi_log
@@ -33,6 +34,13 @@ def taskdef(taskfunc, deps, title, new_state=None, expected_states=[],
 
 _BACKEND_TO_TYPESYSTEM = {
     'c': 'lltype',
+}
+
+JIT_DEBUG = {
+    'off' : DEBUG_OFF,
+    'profile' : DEBUG_PROFILE,
+    'steps' : DEBUG_STEPS,
+    'detailed' : DEBUG_DETAILED,
 }
 
 def backend_to_typesystem(backend):
@@ -65,6 +73,7 @@ class ProfInstrument(object):
 
 
 class TranslationDriver(SimpleTaskEngine):
+    _backend_extra_options = {}
 
     def __init__(self, setopts=None, default_goal=None,
                  disable=[],
@@ -120,7 +129,7 @@ class TranslationDriver(SimpleTaskEngine):
             else:
                 task, postfix = parts
                 if task in ('rtype', 'backendopt', 'llinterpret',
-                            'prejitbackendopt', 'pyjitpl'):
+                            'pyjitpl'):
                     if ts:
                         if ts == postfix:
                             expose_task(task, explicit_task)
@@ -139,6 +148,9 @@ class TranslationDriver(SimpleTaskEngine):
     def set_extra_goals(self, goals):
         self.extra_goals = goals
 
+    def set_backend_extra_options(self, extra_options):
+        self._backend_extra_options = extra_options
+        
     def get_info(self): # XXX more?
         d = {'backend': self.config.translation.backend}
         return d
@@ -355,31 +367,34 @@ class TranslationDriver(SimpleTaskEngine):
     task_rtype_ootype = taskdef(task_rtype_ootype, ['annotate'], "ootyping")
     OOTYPE = 'rtype_ootype'
 
-    def task_prejitbackendopt_lltype(self):
-        from pypy.translator.backendopt.all import backend_optimizations
-        backend_optimizations(self.translator,
-                              inline_threshold=0,
-                              merge_if_blocks=True,
-                              constfold=True,
-                              raisingop2direct_call=False,
-                              remove_asserts=False)
-    #
-    task_prejitbackendopt_lltype = taskdef(
-        task_prejitbackendopt_lltype,
-        [RTYPE],
-        "Backendopt before jitting")
-
     def task_pyjitpl_lltype(self):
         get_policy = self.extra['jitpolicy']
         self.jitpolicy = get_policy(self)
         #
         from pypy.jit.metainterp.warmspot import apply_jit
-        apply_jit(self.translator, policy=self.jitpolicy)
+        apply_jit(self.translator, policy=self.jitpolicy,
+                  debug_level=JIT_DEBUG[self.config.translation.jit_debug],
+                  backend_name=self.config.translation.jit_backend, inline=True)
         #
         self.log.info("the JIT compiler was generated")
     #
     task_pyjitpl_lltype = taskdef(task_pyjitpl_lltype,
-                                  [RTYPE, '?prejitbackendopt_lltype'],
+                                  [RTYPE],
+                                  "JIT compiler generation")
+
+    def task_pyjitpl_ootype(self):
+        get_policy = self.extra['jitpolicy']
+        self.jitpolicy = get_policy(self)
+        #
+        from pypy.jit.metainterp.warmspot import apply_jit
+        apply_jit(self.translator, policy=self.jitpolicy,
+                  debug_level=JIT_DEBUG[self.config.translation.jit_debug],
+                  backend_name='cli', inline=True) #XXX
+        #
+        self.log.info("the JIT compiler was generated")
+    #
+    task_pyjitpl_ootype = taskdef(task_pyjitpl_ootype,
+                                  [OOTYPE],
                                   "JIT compiler generation")
 
     def task_backendopt_lltype(self):
@@ -453,7 +468,11 @@ class TranslationDriver(SimpleTaskEngine):
         translator = self.translator
         cbuilder = self.cbuilder
         database = self.database
-        c_source_filename = cbuilder.generate_source(database)
+        if self._backend_extra_options.get('c_debug_defines', False):
+            defines = cbuilder.DEBUG_DEFINES
+        else:
+            defines = {}
+        c_source_filename = cbuilder.generate_source(database, defines)
         self.log.info("written: %s" % (c_source_filename,))
         if self.config.translation.dump_static_data_info:
             from pypy.translator.tool.staticsizereport import dump_static_data_info
@@ -488,7 +507,8 @@ class TranslationDriver(SimpleTaskEngine):
             self.c_entryp = cbuilder.executable_name
             self.create_exe()
         else:
-            self.c_entryp = cbuilder.get_entry_point()
+            isolated = self._backend_extra_options.get('c_isolated', False)
+            self.c_entryp = cbuilder.get_entry_point(isolated=isolated)
     #
     task_compile_c = taskdef(task_compile_c, ['source_c'], "Compiling c source")
 

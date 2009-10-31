@@ -2,9 +2,7 @@
     Manage setup, running and local representation of remote nodes/processes. 
 """
 import py
-from py.__.test import event
 from py.__.test.dist.mypickle import PickleChannel
-
 
 class TXNode(object):
     """ Represents a Test Execution environment in the controlling process. 
@@ -19,11 +17,17 @@ class TXNode(object):
         self.putevent = putevent 
         self.gateway = gateway
         self.channel = install_slave(gateway, config)
-        self.channel.setcallback(self.callback, endmarker=self.ENDMARK)
         self._sendslaveready = slaveready
+        self.channel.setcallback(self.callback, endmarker=self.ENDMARK)
         self._down = False
 
+    def __repr__(self):
+        id = self.gateway.id
+        status = self._down and 'true' or 'false'
+        return "<TXNode %r down=%s>" %(id, status)
+
     def notify(self, eventname, *args, **kwargs):
+        assert not args
         self.putevent((eventname, args, kwargs))
       
     def callback(self, eventcall):
@@ -40,21 +44,21 @@ class TXNode(object):
                 if not self._down:
                     if not err:
                         err = "Not properly terminated"
-                    self.notify("testnodedown", self, err)
+                    self.notify("pytest_testnodedown", node=self, error=err)
                     self._down = True
                 return
             eventname, args, kwargs = eventcall 
             if eventname == "slaveready":
                 if self._sendslaveready:
                     self._sendslaveready(self)
-                self.notify("testnodeready", self)
+                self.notify("pytest_testnodeready", node=self)
             elif eventname == "slavefinished":
                 self._down = True
-                self.notify("testnodedown", self, None)
-            elif eventname == "itemtestreport":
-                rep = args[0]
+                self.notify("pytest_testnodedown", error=None, node=self)
+            elif eventname == "pytest_runtest_logreport":
+                rep = kwargs['report']
                 rep.node = self
-                self.notify("itemtestreport", rep)
+                self.notify("pytest_runtest_logreport", report=rep)
             else:
                 self.notify(eventname, *args, **kwargs)
         except KeyboardInterrupt: 
@@ -63,7 +67,7 @@ class TXNode(object):
         except:
             excinfo = py.code.ExceptionInfo()
             print "!" * 20, excinfo
-            self.notify("internalerror", event.InternalException(excinfo))
+            self.config.pluginmanager.notify_exception(excinfo)
 
     def send(self, item):
         assert item is not None
@@ -106,12 +110,17 @@ class SlaveNode(object):
     def sendevent(self, eventname, *args, **kwargs):
         self.channel.send((eventname, args, kwargs))
 
+    def pytest_runtest_logreport(self, report):
+        self.sendevent("pytest_runtest_logreport", report=report)
+
     def run(self):
         channel = self.channel
         self.config, basetemp = channel.receive()
         if basetemp:
             self.config.basetemp = py.path.local(basetemp)
-        self.config.pytestplugins.do_configure(self.config)
+        self.config.pluginmanager.do_configure(self.config)
+        self.config.pluginmanager.register(self)
+        self.runner = self.config.pluginmanager.getplugin("pytest_runner")
         self.sendevent("slaveready")
         try:
             while 1:
@@ -121,17 +130,24 @@ class SlaveNode(object):
                     break
                 if isinstance(task, list):
                     for item in task:
-                        self.runtest(item)
+                        self.run_single(item=item)
                 else:
-                    self.runtest(task)
+                    self.run_single(item=task)
         except KeyboardInterrupt:
             raise
         except:
-            self.sendevent("internalerror", event.InternalException())
+            er = py.code.ExceptionInfo().getrepr(funcargs=True, showlocals=True)
+            self.sendevent("pytest_internalerror", excrepr=er)
             raise
 
-    def runtest(self, item):
-        runner = item._getrunner()
-        testrep = runner(item)
-        self.sendevent("itemtestreport", testrep)
-
+    def run_single(self, item):
+        call = self.runner.CallInfo(item._checkcollectable, when='setup')
+        if call.excinfo:
+            # likely it is not collectable here because of
+            # platform/import-dependency induced skips 
+            # we fake a setup-error report with the obtained exception
+            # and do not care about capturing or non-runner hooks 
+            rep = self.runner.pytest_runtest_makereport(item=item, call=call)
+            self.pytest_runtest_logreport(rep)
+            return
+        item.config.hook.pytest_runtest_protocol(item=item) 

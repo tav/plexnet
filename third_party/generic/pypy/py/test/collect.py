@@ -1,57 +1,16 @@
 """
-Collect test items at filesystem and python module levels. 
-
-Collectors and test items form a tree.  The difference
-between a collector and a test item as seen from the session 
-is smalll.  Collectors usually return a list of child 
-collectors/items whereas items usually return None 
-indicating a successful test run.  
-
-The is a schematic example of a tree of collectors and test items:: 
-
-    Directory
-        Directory 
-            CustomCollector  # provided via conftest's 
-                CustomItem   # provided via conftest's
-                CustomItem   # provided via conftest's
-        Directory       
-            ... 
-
+base test collection objects.  
+Collectors and test Items form a tree
+that is usually built iteratively.  
 """ 
 import py
-from py.__.misc.warn import APIWARN
-from py.__.test.outcome import Skipped
+pydir = py.path.local(py.__file__).dirpath()
 
 def configproperty(name):
     def fget(self):
         #print "retrieving %r property from %s" %(name, self.fspath)
         return self.config.getvalue(name, self.fspath) 
     return property(fget)
-
-class ReprMetaInfo(object):
-    def __init__(self, fspath=None, lineno=None, modpath=None):
-        self.fspath = fspath
-        self.lineno = lineno 
-        self.modpath = modpath
-
-    def verboseline(self, basedir=None):
-        params = self.__dict__.copy()
-        if self.fspath:
-            if basedir is not None:
-                params['fspath'] = basedir.bestrelpath(self.fspath)
-        if self.lineno is not None:
-            params['lineno'] = self.lineno + 1
-
-        if self.fspath and self.lineno and self.modpath:
-            line = "%(fspath)s:%(lineno)s: %(modpath)s"
-        elif self.fspath and self.modpath:
-            line = "%(fspath)s: %(modpath)s"
-        elif self.fspath and self.lineno:
-            line = "%(fspath)s:%(lineno)s"
-        else:
-            line = "[nometainfo]"
-        return line % params
-        
 
 class Node(object): 
     """ base class for Nodes in the collection tree.  
@@ -66,16 +25,16 @@ class Node(object):
         - configuration/options for setup/teardown 
           stdout/stderr capturing and execution of test items 
     """
-    ReprMetaInfo = ReprMetaInfo
-    def __init__(self, name, parent=None, config=None):
+    def __init__(self, name, parent=None):
         self.name = name 
         self.parent = parent
-        if config is None:
-            config = parent.config
-        self.config = config 
+        self.config = getattr(parent, 'config', None)
         self.fspath = getattr(parent, 'fspath', None) 
 
-
+    def _checkcollectable(self):
+        if not hasattr(self, 'fspath'):
+            self.parent._memocollect() # to reraise exception
+            
     # 
     # note to myself: Pickling is uh.
     # 
@@ -89,6 +48,7 @@ class Node(object):
         except Exception:
             # seems our parent can't collect us 
             # so let's be somewhat operable 
+            # _checkcollectable() is to tell outsiders about the fact
             self.name = name 
             self.parent = parent 
             self.config = parent.config
@@ -121,13 +81,6 @@ class Node(object):
     
     def __hash__(self):
         return hash((self.name, self.parent))
-
-    def __cmp__(self, other): 
-        if not isinstance(other, Node):
-            return -1
-        s1 = self._getsortvalue()
-        s2 = other._getsortvalue()
-        return cmp(s1, s2) 
  
     def setup(self): 
         pass
@@ -169,6 +122,12 @@ class Node(object):
     def listnames(self): 
         return [x.name for x in self.listchain()]
 
+    def getparent(self, cls):
+        current = self
+        while current and not isinstance(current, cls):
+            current = current.parent
+        return current 
+
     def _getitembynames(self, namelist):
         cur = self
         for name in namelist:
@@ -208,16 +167,13 @@ class Node(object):
                 if colitem.fspath == fspath or colitem.name == basename:
                     l.append(colitem)
             if not l:
-                msg = ("Collector %r does not provide %r colitem "
-                       "existing colitems are: %s" %
-                       (cur, fspath, colitems))
-                raise AssertionError(msg) 
+                raise self.config.Error("can't collect: %s" %(fspath,))
             if basenames:
                 if len(l) > 1:
                     msg = ("Collector %r has more than one %r colitem "
                            "existing colitems are: %s" %
                            (cur, fspath, colitems))
-                    raise AssertionError(msg) 
+                    raise self.config.Error("xxx-too many test types for: %s" % (fspath, ))
                 cur = l[0]
             else:
                 if len(l) > 1:
@@ -250,7 +206,7 @@ class Node(object):
     def _matchonekeyword(self, key, chain):
         elems = key.split(".")
         # XXX O(n^2), anyone cares?
-        chain = [item._keywords() for item in chain if item._keywords()]
+        chain = [item.readkeywords() for item in chain if item._keywords()]
         for start, _ in enumerate(chain):
             if start + len(elems) > len(chain):
                 return False
@@ -265,9 +221,6 @@ class Node(object):
             if num == len(elems) - 1 and ok:
                 return True
         return False
-
-    def _getsortvalue(self): 
-        return self.name 
 
     def _prunetraceback(self, traceback):
         return traceback 
@@ -296,7 +249,8 @@ class Node(object):
         return col._getitembynames(names)
     _fromtrail = staticmethod(_fromtrail)
 
-    def _repr_failure_py(self, excinfo, outerr):
+    def _repr_failure_py(self, excinfo, outerr=None):
+        assert outerr is None, "XXX deprecated"
         excinfo.traceback = self._prunetraceback(excinfo.traceback)
         # XXX temporary hack: getrepr() should not take a 'style' argument
         # at all; it should record all data in all cases, and the style
@@ -305,13 +259,9 @@ class Node(object):
             style = "short"
         else:
             style = "long"
-        repr = excinfo.getrepr(funcargs=True, 
+        return excinfo.getrepr(funcargs=True, 
                                showlocals=self.config.option.showlocals,
                                style=style)
-        for secname, content in zip(["out", "err"], outerr):
-            if content:
-                repr.addsection("Captured std%s" % secname, content.rstrip())
-        return repr 
 
     repr_failure = _repr_failure_py
     shortfailurerepr = "F"
@@ -327,7 +277,6 @@ class Collector(Node):
     """
     Directory = configproperty('Directory')
     Module = configproperty('Module')
-    #DoctestFile = configproperty('DoctestFile')
 
     def collect(self):
         """ returns a list of children (items and collectors) 
@@ -341,9 +290,10 @@ class Collector(Node):
             if colitem.name == name:
                 return colitem
 
-    def repr_failure(self, excinfo, outerr):
+    def repr_failure(self, excinfo, outerr=None):
         """ represent a failure. """
-        return self._repr_failure_py(excinfo, outerr)
+        assert outerr is None, "XXX deprecated"
+        return self._repr_failure_py(excinfo)
 
     def _memocollect(self):
         """ internal helper method to cache results of calling collect(). """
@@ -363,7 +313,7 @@ class Collector(Node):
         setattr(self, attrname, True)
         method = getattr(self.__class__, 'run', None)
         if method is not None and method != Collector.run:
-            warnoldcollect()
+            warnoldcollect(function=method)
             names = self.run()
             return filter(None, [self.join(name) for name in names])
 
@@ -372,20 +322,27 @@ class Collector(Node):
             You can return an empty list.  Callers of this method
             must take care to catch exceptions properly.  
         """
-        warnoldcollect()
         return [colitem.name for colitem in self._memocollect()]
 
     def join(self, name): 
         """  DEPRECATED: return a child collector or item for the given name.  
              If the return value is None there is no such child. 
         """
-        warnoldcollect()
         return self.collect_by_name(name)
 
+    def _prunetraceback(self, traceback):
+        if hasattr(self, 'fspath'):
+            path = self.fspath 
+            ntraceback = traceback.cut(path=self.fspath)
+            if ntraceback == traceback:
+                ntraceback = ntraceback.cut(excludepath=pydir)
+            traceback = ntraceback.filter()
+        return traceback 
+
 class FSCollector(Collector): 
-    def __init__(self, fspath, parent=None, config=None): 
+    def __init__(self, fspath, parent=None):
         fspath = py.path.local(fspath) 
-        super(FSCollector, self).__init__(fspath.basename, parent, config=config) 
+        super(FSCollector, self).__init__(fspath.basename, parent)
         self.fspath = fspath 
 
     def __getstate__(self):
@@ -436,7 +393,18 @@ class Directory(FSCollector):
                     l.append(res)
         return l
 
+    def _ignore(self, path):
+        ignore_paths = self.config.getconftest_pathlist("collect_ignore", path=path)
+        return ignore_paths and path in ignore_paths
+        # XXX more refined would be: 
+        if ignore_paths:
+            for p in ignore_paths:
+                if path == p or path.relto(p):
+                    return True
+
     def consider(self, path):
+        if self._ignore(path):
+            return
         if path.check(file=1):
             res = self.consider_file(path)
         elif path.check(dir=1):
@@ -444,71 +412,55 @@ class Directory(FSCollector):
         else:
             res = None            
         if isinstance(res, list):
-            # throw out identical modules
+            # throw out identical results
             l = []
             for x in res:
                 if x not in l:
+                    assert x.parent == self, "wrong collection tree construction"
                     l.append(x)
             res = l 
         return res
 
     def consider_file(self, path):
-        return self.config.pytestplugins.call_each(
-            'pytest_collect_file', path=path, parent=self)
+        return self.config.hook.pytest_collect_file(path=path, parent=self)
 
     def consider_dir(self, path, usefilters=None):
         if usefilters is not None:
-            APIWARN("0.99", "usefilters argument not needed")
-        res = self.config.pytestplugins.call_firstresult(
-            'pytest_collect_recurse', path=path, parent=self)
-        if res is None or res:
-            return self.config.pytestplugins.call_each(
-                'pytest_collect_directory', path=path, parent=self)
+            py.log._apiwarn("0.99", "usefilters argument not needed")
+        return self.config.hook.pytest_collect_directory(
+            path=path, parent=self)
 
-from py.__.test.runner import basic_run_report, forked_run_report
 class Item(Node): 
     """ a basic test item. """
-    def _getrunner(self):
-        if self.config.option.boxed:
-            return forked_run_report
-        return basic_run_report
-
     def _deprecated_testexecution(self):
         if self.__class__.run != Item.run:
-            warnoldtestrun()
-            self.run()
-            return True
+            warnoldtestrun(function=self.run)
         elif self.__class__.execute != Item.execute:
-            warnoldtestrun()
-            self.execute(self.obj, *self._args)
-            return True
+            warnoldtestrun(function=self.execute)
+        else:
+            return False
+        self.run()
+        return True
 
     def run(self):
-        warnoldtestrun()
-        return self.execute(self.obj, *self._args)
+        """ deprecated, here because subclasses might call it. """
+        return self.execute(self.obj)
 
-    def execute(self, obj, *args):
-        warnoldtestrun()
-        return obj(*args)
+    def execute(self, obj):
+        """ deprecated, here because subclasses might call it. """
+        return obj()
 
-    def repr_metainfo(self):
-        try:
-            return self.ReprMetaInfo(self.fspath, modpath=self.__class__.__name__)
-        except AttributeError:
-            code = py.code.Code(self.execute)
-            return self.ReprMetaInfo(code.path, code.firstlineno)
-      
-    def runtest(self):
-        """ execute this test item."""
+    def reportinfo(self):
+        return self.fspath, None, ""
         
-def warnoldcollect():
-    APIWARN("1.0", 
+def warnoldcollect(function=None):
+    py.log._apiwarn("1.0", 
         "implement collector.collect() instead of "
         "collector.run() and collector.join()",
-        stacklevel=2)
+        stacklevel=2, function=function)
 
-def warnoldtestrun():
-    APIWARN("1.0", 
+def warnoldtestrun(function=None):
+    py.log._apiwarn("1.0", 
         "implement item.runtest() instead of "
         "item.run() and item.execute()",
-        stacklevel=2)
+        stacklevel=2, function=function)

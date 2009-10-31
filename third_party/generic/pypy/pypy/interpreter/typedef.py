@@ -9,8 +9,8 @@ from pypy.interpreter.baseobjspace import Wrappable, W_Root, ObjSpace, \
     DescrMismatch
 from pypy.interpreter.error import OperationError
 from pypy.tool.sourcetools import compile2, func_with_new_name
-from pypy.rlib.objectmodel import instantiate
-from pypy.rlib.rarithmetic import intmask
+from pypy.rlib.objectmodel import instantiate, compute_identity_hash
+from pypy.rlib.jit import hint
 
 class TypeDef:
     def __init__(self, __name, __base=None, **rawdict):
@@ -19,12 +19,9 @@ class TypeDef:
         self.base = __base
         self.hasdict = '__dict__' in rawdict
         self.weakrefable = '__weakref__' in rawdict
-        self.custom_hash = '__hash__' in rawdict
         if __base is not None:
             self.hasdict     |= __base.hasdict
             self.weakrefable |= __base.weakrefable
-            self.custom_hash |= __base.custom_hash
-            # NB. custom_hash is sometimes overridden manually by callers
         self.rawdict = {}
         self.acceptable_as_base_class = True
         # xxx used by faking
@@ -49,39 +46,8 @@ class TypeDef:
 # ____________________________________________________________
 #  Hash support
 
-def get_default_hash_function(cls):
-    # go to the first parent class of 'cls' that has a typedef
-    while 'typedef' not in cls.__dict__:
-        cls = cls.__bases__[0]
-        if cls is object:
-            # not found: 'cls' must have been an abstract class,
-            # no hash function is needed
-            return None
-    if cls.typedef.custom_hash:
-        return None   # the typedef says that instances have their own
-                      # hash, so we don't need a default RPython-level
-                      # hash function.
-    try:
-        hashfunction = _hashfunction_cache[cls]
-    except KeyError:
-        def hashfunction(w_obj):
-            "Return the identity hash of 'w_obj'."
-            assert isinstance(w_obj, cls)
-            return hash(w_obj)   # forces a hash_cache only on 'cls' instances
-        hashfunction = func_with_new_name(hashfunction,
-                                       'hashfunction_for_%s' % (cls.__name__,))
-        _hashfunction_cache[cls] = hashfunction
-    return hashfunction
-get_default_hash_function._annspecialcase_ = 'specialize:memo'
-_hashfunction_cache = {}
-
 def default_identity_hash(space, w_obj):
-    fn = get_default_hash_function(w_obj.__class__)
-    if fn is None:
-        typename = space.type(w_obj).getname(space, '?')
-        msg = "%s objects have no default hash" % (typename,)
-        raise OperationError(space.w_TypeError, space.wrap(msg))
-    return space.wrap(intmask(fn(w_obj)))
+    return space.wrap(compute_identity_hash(w_obj))
 
 def descr__hash__unhashable(space, w_obj):
     typename = space.type(w_obj).getname(space, '?')
@@ -225,7 +191,7 @@ def _builduserclswithfeature(supercls, *features):
     if "user" in features:     # generic feature needed by all subcls
         class Proto(object):
             def getclass(self, space):
-                return self.w__class__
+                return hint(self.w__class__, promote=True)
 
             def setclass(self, space, w_subtype):
                 # only used by descr_set___class__
@@ -326,9 +292,8 @@ def check_new_dictionary(space, w_dict):
     if not space.is_true(space.isinstance(w_dict, space.w_dict)):
         raise OperationError(space.w_TypeError,
                 space.wrap("setting dictionary to a non-dict"))
-    if space.config.objspace.std.withmultidict:
-        from pypy.objspace.std import dictmultiobject
-        assert isinstance(w_dict, dictmultiobject.W_DictMultiObject)
+    from pypy.objspace.std import dictmultiobject
+    assert isinstance(w_dict, dictmultiobject.W_DictMultiObject)
     return w_dict
 check_new_dictionary._dont_inline_ = True
 
@@ -507,6 +472,7 @@ GetSetProperty.typedef.acceptable_as_base_class = False
 
 class Member(Wrappable):
     """For slots."""
+    _immutable_ = True
     def __init__(self, index, name, w_cls):
         self.index = index
         self.name = name
@@ -612,14 +578,13 @@ def fget_co_varnames(space, code): # unwrapping through unwrap_spec
     return space.newtuple([space.wrap(name) for name in code.getvarnames()])
 
 def fget_co_argcount(space, code): # unwrapping through unwrap_spec
-    argnames, varargname, kwargname = code.signature()
-    return space.wrap(len(argnames))
+    return space.wrap(code.signature().num_argnames())
 
 def fget_co_flags(space, code): # unwrapping through unwrap_spec
-    argnames, varargname, kwargname = code.signature()
+    sig = code.signature()
     flags = 0
-    if varargname is not None: flags |= CO_VARARGS
-    if kwargname  is not None: flags |= CO_VARKEYWORDS
+    if sig.has_vararg(): flags |= CO_VARARGS
+    if sig.has_kwarg(): flags |= CO_VARKEYWORDS
     return space.wrap(flags)
 
 def fget_co_consts(space, code): # unwrapping through unwrap_spec

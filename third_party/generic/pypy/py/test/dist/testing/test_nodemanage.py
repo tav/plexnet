@@ -1,30 +1,27 @@
-
-""" RSync filter test
-"""
-
 import py
 from py.__.test.dist.nodemanage import NodeManager
 
-from py.__.test import event
-
-def pytest_funcarg__source(pyfuncitem):
-    return py.test.ensuretemp(pyfuncitem.getmodpath()).mkdir("source")
-def pytest_funcarg__dest(pyfuncitem):
-    dest = py.test.ensuretemp(pyfuncitem.getmodpath()).mkdir("dest")
-    return dest 
+class pytest_funcarg__mysetup:
+    def __init__(self, request):
+        basetemp = request.config.mktemp(
+            "mysetup-%s" % request.function.__name__, 
+            numbered=True)
+        self.source = basetemp.mkdir("source")
+        self.dest = basetemp.mkdir("dest")
+        request.getfuncargvalue("_pytest")
 
 class TestNodeManager:
-    @py.test.mark.xfail("consider / forbid implicit rsyncdirs?")
-    def test_rsync_roots_no_roots(self, source, dest):
-        source.ensure("dir1", "file1").write("hello")
+    @py.test.mark.xfail
+    def test_rsync_roots_no_roots(self, mysetup):
+        mysetup.source.ensure("dir1", "file1").write("hello")
         config = py.test.config._reparse([source])
-        nodemanager = NodeManager(config, ["popen//chdir=%s" % dest])
+        nodemanager = NodeManager(config, ["popen//chdir=%s" % mysetup.dest])
         assert nodemanager.config.topdir == source == config.topdir
         nodemanager.rsync_roots()
         p, = nodemanager.gwmanager.multi_exec("import os ; channel.send(os.getcwd())").receive_each()
         p = py.path.local(p)
         print "remote curdir", p
-        assert p == dest.join(config.topdir.basename)
+        assert p == mysetup.dest.join(config.topdir.basename)
         assert p.join("dir1").check()
         assert p.join("dir1", "file1").check()
 
@@ -35,8 +32,9 @@ class TestNodeManager:
         nodemanager.setup_nodes([].append)
         nodemanager.wait_nodesready(timeout=2.0)
 
-    def test_popen_rsync_subdir(self, testdir, source, dest):
-        dir1 = source.mkdir("dir1")
+    def test_popen_rsync_subdir(self, testdir, mysetup):
+        source, dest = mysetup.source, mysetup.dest 
+        dir1 = mysetup.source.mkdir("dir1")
         dir2 = dir1.mkdir("dir2")
         dir2.ensure("hello")
         for rsyncroot in (dir1, source):
@@ -55,7 +53,8 @@ class TestNodeManager:
             assert dest.join("dir1", "dir2", 'hello').check()
             nodemanager.gwmanager.exit()
 
-    def test_init_rsync_roots(self, source, dest):
+    def test_init_rsync_roots(self, mysetup):
+        source, dest = mysetup.source, mysetup.dest
         dir2 = source.ensure("dir1", "dir2", dir=1)
         source.ensure("dir1", "somefile", dir=1)
         dir2.ensure("hello")
@@ -70,7 +69,8 @@ class TestNodeManager:
         assert not dest.join("dir1").check()
         assert not dest.join("bogus").check()
 
-    def test_rsyncignore(self, source, dest):
+    def test_rsyncignore(self, mysetup):
+        source, dest = mysetup.source, mysetup.dest
         dir2 = source.ensure("dir1", "dir2", dir=1)
         dir5 = source.ensure("dir5", "dir6", "bogus")
         dirf = source.ensure("dir5", "file")
@@ -88,7 +88,8 @@ class TestNodeManager:
         assert dest.join("dir5","file").check()
         assert not dest.join("dir6").check()
 
-    def test_optimise_popen(self, source, dest):
+    def test_optimise_popen(self, mysetup):
+        source, dest = mysetup.source, mysetup.dest
         specs = ["popen"] * 3
         source.join("conftest.py").write("rsyncdirs = ['a']")
         source.ensure('a', dir=1)
@@ -99,18 +100,18 @@ class TestNodeManager:
             assert gwspec._samefilesystem()
             assert not gwspec.chdir
 
-    def test_setup_DEBUG(self, source, EventRecorder):
+    def test_setup_DEBUG(self, mysetup, testdir):
+        source = mysetup.source
         specs = ["popen"] * 2
         source.join("conftest.py").write("rsyncdirs = ['a']")
         source.ensure('a', dir=1)
         config = py.test.config._reparse([source, '--debug'])
         assert config.option.debug
         nodemanager = NodeManager(config, specs)
-        evrec = EventRecorder(config.bus, debug=True)
+        reprec = testdir.getreportrecorder(config).hookrecorder
         nodemanager.setup_nodes(putevent=[].append)
         for spec in nodemanager.gwmanager.specs:
-            l = evrec.getnamed("trace")
-            print evrec.events
+            l = reprec.getcalls("pytest_trace")
             assert l 
         nodemanager.teardown_nodes()
 
@@ -119,8 +120,8 @@ class TestNodeManager:
             def test_one():
                 pass
         """)
-        sorter = testdir.inline_run("-d", "--rsyncdir=%s" % testdir.tmpdir, 
-                "--tx=%s" % specssh, testdir.tmpdir)
-        ev = sorter.getfirstnamed("itemtestreport")
-        assert ev.passed 
+        reprec = testdir.inline_run("-d", "--rsyncdir=%s" % testdir.tmpdir, 
+                "--tx", specssh, testdir.tmpdir)
+        rep, = reprec.getreports("pytest_runtest_logreport")
+        assert rep.passed 
 

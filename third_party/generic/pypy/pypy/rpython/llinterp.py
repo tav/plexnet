@@ -182,6 +182,12 @@ class LLInterpreter(object):
         self.mallocs = {}
         self.mallocs.update(items)
 
+    def _store_exception(self, exc):
+        raise PleaseOverwriteStoreException("You just invoked ll2ctypes callback without overwriting _store_exception on llinterpreter")
+
+class PleaseOverwriteStoreException(Exception):
+    pass
+
 def checkptr(ptr):
     assert isinstance(lltype.typeOf(ptr), lltype.Ptr)
 
@@ -572,9 +578,6 @@ class LLFrame(object):
     def op_hint(self, x, hints):
         return x
 
-    def op_is_early_constant(self, x):
-        return False
-
     def op_resume_point(self, *args):
         pass
 
@@ -794,6 +797,10 @@ class LLFrame(object):
         checkptr(ptr)
         return llmemory.cast_ptr_to_adr(ptr)
 
+    def op_cast_adr_to_int(self, adr):
+        checkadr(adr)
+        return llmemory.cast_adr_to_int(adr)
+
     def op_weakref_create(self, v_obj):
         def objgetter():    # special support for gcwrapper.py
             return self.getval(v_obj)
@@ -811,8 +818,14 @@ class LLFrame(object):
         return llmemory.cast_weakrefptr_to_ptr(PTRTYPE, obj)
     op_cast_weakrefptr_to_ptr.need_result_type = True
 
-    def op_gc__collect(self):
-        self.heap.collect()
+    def op_gc__collect(self, *gen):
+        self.heap.collect(*gen)
+
+    def op_gc_assume_young_pointers(self, addr):
+        raise NotImplementedError
+
+    def op_gc_obtain_free_space(self, size):
+        raise NotImplementedError
 
     def op_gc_can_move(self, ptr):
         addr = llmemory.cast_ptr_to_adr(ptr)
@@ -838,6 +851,12 @@ class LLFrame(object):
     def op_gc_restore_exception(self, exc):
         raise NotImplementedError("gc_restore_exception")
 
+    def op_gc_adr_of_nursery_top(self):
+        raise NotImplementedError
+
+    def op_gc_adr_of_nursery_free(self):
+        raise NotImplementedError
+
     def op_gc_call_rtti_destructor(self, rtti, addr):
         if hasattr(rtti._obj, 'destructor_funcptr'):
             d = rtti._obj.destructor_funcptr
@@ -859,14 +878,40 @@ class LLFrame(object):
         assert v_ptr.concretetype.TO._gckind == 'gc'
         newaddr = self.getval(v_newaddr)
         p = llmemory.cast_adr_to_ptr(newaddr, v_ptr.concretetype)
-        self.setvar(v_ptr, p)
+        if isinstance(v_ptr, Constant):
+            assert v_ptr.value == p
+        else:
+            self.setvar(v_ptr, p)
     op_gc_reload_possibly_moved.specialform = True
 
-    def op_gc_id(self, v_ptr):
-        return self.heap.gc_id(v_ptr)
+    def op_gc_identityhash(self, obj):
+        return lltype.identityhash(obj)
+
+    def op_gc_id(self, ptr):
+        PTR = lltype.typeOf(ptr)
+        if isinstance(PTR, lltype.Ptr):
+            return self.heap.gc_id(ptr)
+        elif isinstance(PTR, ootype.OOType):
+            return ootype.identityhash(ptr)     # XXX imprecise
+        raise NotImplementedError("gc_id on %r" % (PTR,))
 
     def op_gc_set_max_heap_size(self, maxsize):
         raise NotImplementedError("gc_set_max_heap_size")
+
+    def op_gc_asmgcroot_static(self, index):
+        raise NotImplementedError("gc_asmgcroot_static")
+
+    def op_gc_stack_bottom(self):
+        pass       # marker for trackgcroot.py
+
+    def op_do_malloc_fixedsize_clear(self):
+        raise NotImplementedError("do_malloc_fixedsize_clear")
+
+    def op_do_malloc_varsize_clear(self):
+        raise NotImplementedError("do_malloc_varsize_clear")
+
+    def op_get_write_barrier_failing_case(self):
+        raise NotImplementedError("get_write_barrier_failing_case")
 
     def op_yield_current_frame_to_caller(self):
         raise NotImplementedError("yield_current_frame_to_caller")
@@ -967,10 +1012,6 @@ class LLFrame(object):
     def op_stack_malloc(self, size): # mmh
         raise NotImplementedError("backend only")
 
-    # ______ for the JIT ____________
-    def op_call_boehm_gc_alloc(self):
-        raise NotImplementedError("call_boehm_gc_alloc")
-
     # ____________________________________________________________
     # Overflow-detecting variants
 
@@ -1008,14 +1049,6 @@ class LLFrame(object):
         try:
             return ovfcheck_lshift(x, y)
         except OverflowError:
-            self.make_llexception()
-
-    def op_int_lshift_ovf_val(self, x, y):
-        assert isinstance(x, int)
-        assert isinstance(y, int)
-        try:
-            return ovfcheck_lshift(x, y)
-        except (OverflowError, ValueError):
             self.make_llexception()
 
     def _makefunc2(fn, operator, xtype, ytype=None):
@@ -1056,29 +1089,21 @@ class LLFrame(object):
     _makefunc2('op_int_add_ovf', '+', '(int, llmemory.AddressOffset)')
     _makefunc2('op_int_mul_ovf', '*', '(int, llmemory.AddressOffset)', 'int')
     _makefunc2('op_int_sub_ovf',          '-',  'int')
-    _makefunc2('op_int_floordiv_ovf',     '//', 'int')
-    _makefunc2('op_int_floordiv_zer',     '//', 'int')
-    _makefunc2('op_int_floordiv_ovf_zer', '//', 'int')
+    _makefunc2('op_int_floordiv_ovf',     '//', 'int')  # XXX negative args
+    _makefunc2('op_int_floordiv_zer',     '//', 'int')  # can get off-by-one
+    _makefunc2('op_int_floordiv_ovf_zer', '//', 'int')  # (see op_int_floordiv)
     _makefunc2('op_int_mod_ovf',          '%',  'int')
     _makefunc2('op_int_mod_zer',          '%',  'int')
     _makefunc2('op_int_mod_ovf_zer',      '%',  'int')
-    _makefunc2('op_int_lshift_val',       '<<', 'int')
-    _makefunc2('op_int_rshift_val',       '>>', 'int')
 
     _makefunc2('op_uint_floordiv_zer',    '//', 'r_uint')
     _makefunc2('op_uint_mod_zer',         '%',  'r_uint')
-    _makefunc2('op_uint_lshift_val',      '<<', 'r_uint')
-    _makefunc2('op_uint_rshift_val',      '>>', 'r_uint')
 
     _makefunc2('op_llong_floordiv_zer',   '//', 'r_longlong')
     _makefunc2('op_llong_mod_zer',        '%',  'r_longlong')
-    _makefunc2('op_llong_lshift_val',     '<<', 'r_longlong')
-    _makefunc2('op_llong_rshift_val',     '>>', 'r_longlong')
 
     _makefunc2('op_ullong_floordiv_zer',  '//', 'r_ulonglong')
     _makefunc2('op_ullong_mod_zer',       '%',  'r_ulonglong')
-    _makefunc2('op_ullong_lshift_val',    '<<', 'r_ulonglong')
-    _makefunc2('op_ullong_rshift_val',    '>>', 'r_ulonglong')
 
     def op_int_add_nonneg_ovf(self, x, y):
         if isinstance(y, int):
@@ -1172,9 +1197,6 @@ class LLFrame(object):
             raise RuntimeError("calling abstract method %r" % (m,))
         return self.perform_call(m, (lltype.typeOf(inst),)+lltype.typeOf(m).ARGS, [inst]+args)
 
-    def op_ooidentityhash(self, inst):
-        return ootype.ooidentityhash(inst)
-
     def op_oostring(self, obj, base):
         return ootype.oostring(obj, base)
 
@@ -1196,12 +1218,10 @@ class LLFrame(object):
         except ValueError:
             self.make_llexception()
 
-    def op_oohash(self, s):
-        return ootype.oohash(s)
-
 class Tracer(object):
     Counter = 0
     file = None
+    TRACE = int(os.getenv('PYPY_TRACE') or '0')
 
     HEADER = """<html><head>
         <script language=javascript type='text/javascript'>
@@ -1245,6 +1265,8 @@ class Tracer(object):
 
     def start(self):
         # start of a dump file
+        if not self.TRACE:
+            return
         from pypy.tool.udir import udir
         n = Tracer.Counter
         Tracer.Counter += 1
@@ -1307,7 +1329,8 @@ class Tracer(object):
             self.file.write(text.replace('\n', '\n'+self.indentation))
 
     def flush(self):
-        self.file.flush()
+        if self.file:
+            self.file.flush()
 
 def wrap_callable(llinterpreter, fn, obj, method_name):
     if method_name is None:

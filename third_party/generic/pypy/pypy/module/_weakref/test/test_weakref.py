@@ -162,13 +162,16 @@ class AppTestWeakref(object):
         class A(object):
             pass
         class Ref(_weakref.ref):
-            pass
+            def __init__(self, ob, callback=None, **other):
+                self.__dict__.update(other)
         def callable(ref):
             b.a = 42
         a = A()
         b = A()
         b.a = 1
-        w = Ref(a, callable)
+        w = Ref(a, callable, x=1, y=2)
+        assert w.x == 1
+        assert w.y == 2
         assert a.__weakref__ is w
         assert b.__weakref__ is None
         w1 = _weakref.ref(a)
@@ -228,6 +231,12 @@ class AppTestWeakref(object):
         assert r == 0
         r = g.next()
         assert r == 1
+        del g
+        gc.collect()
+        assert w() is None
+        g = f(10)
+        w = _weakref.ref(g)
+        assert list(g) == range(10)
         del g
         gc.collect()
         assert w() is None
@@ -402,4 +411,3 @@ class AppTestProxy(object):
 
         a = A()
         assert _weakref.ref(a) == a
-    

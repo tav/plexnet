@@ -8,13 +8,6 @@ from pypy.rpython import robject
 from pypy.rlib import objectmodel
 from pypy.rpython import rmodel
 
-def dum_keys(): pass
-def dum_values(): pass
-def dum_items():pass
-dum_variant = {"keys":   dum_keys,
-               "values": dum_values,
-               "items":  dum_items}
-
 
 class __extend__(annmodel.SomeDict):
     def rtyper_makerepr(self, rtyper):
@@ -53,14 +46,8 @@ class AbstractDictRepr(rmodel.Repr):
         else:
             return self._externalvsinternal(self.rtyper, item_repr)
 
-    def pickkeyrepr(self, key_repr):
-        external, internal = self.pickrepr(key_repr)
-        if external != internal:
-            internal = external
-            while not self.rtyper.needs_hash_support(internal.classdef):
-                internal = internal.rbase
-        return external, internal
-        
+    pickkeyrepr = pickrepr
+
     def compact_repr(self):
         return 'DictR %s %s' % (self.key_repr.compact_repr(), self.value_repr.compact_repr())
 
@@ -92,7 +79,6 @@ class AbstractDictIteratorRepr(rmodel.IteratorRepr):
     def rtype_next(self, hop):
         variant = self.variant
         v_iter, = hop.inputargs(self)
-        v_func = hop.inputconst(lltype.Void, dum_variant[self.variant])
         if variant in ('keys', 'values'):
             c1 = hop.inputconst(lltype.Void, None)
         else:
@@ -101,7 +87,7 @@ class AbstractDictIteratorRepr(rmodel.IteratorRepr):
         hop.has_implicit_exception(StopIteration)
         hop.has_implicit_exception(RuntimeError)
         hop.exception_is_here()
-        v = hop.gendirectcall(self.ll_dictnext, v_iter, v_func, c1)
+        v = hop.gendirectcall(self.ll_dictnext, c1, v_iter)
         if variant == 'keys':
             return self.r_dict.recast_key(hop.llops, v)
         elif variant == 'values':

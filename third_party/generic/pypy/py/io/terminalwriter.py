@@ -129,12 +129,17 @@ def ansi_print(text, esc, file=None, newline=True, flush=False):
     if flush:
         file.flush()
 
+def should_do_markup(file):
+    return hasattr(file, 'isatty') and file.isatty() \
+           and os.environ.get('TERM') != 'dumb'
+
 class TerminalWriter(object):
     _esctable = dict(black=30, red=31, green=32, yellow=33, 
                      blue=34, purple=35, cyan=36, white=37,
                      Black=40, Red=41, Green=42, Yellow=43, 
                      Blue=44, Purple=45, Cyan=46, White=47,
                      bold=1, light=2, blink=5, invert=7)
+    _encoding = "utf-8"
 
     def __init__(self, file=None, stringio=False):
         if file is None:
@@ -146,7 +151,7 @@ class TerminalWriter(object):
             file = WriteFile(file)
         self._file = file
         self.fullwidth = get_terminal_width()
-        self.hasmarkup = hasattr(file, 'isatty') and file.isatty() 
+        self.hasmarkup = should_do_markup(file)
 
     def _escaped(self, text, esc):
         if esc and self.hasmarkup:
@@ -190,63 +195,27 @@ class TerminalWriter(object):
 
     def write(self, s, **kw):
         if s:
-            s = str(s)
+            s = self._getbytestring(s)
             if self.hasmarkup and kw:
                 s = self.markup(s, **kw)
             self._file.write(s)
-        self._file.flush()
+            self._file.flush()
+
+    def _getbytestring(self, s):
+            if isinstance(s, unicode):
+                return s.encode(self._encoding)
+            elif not isinstance(s, str):
+                return str(s)
+            return s
 
     def line(self, s='', **kw):
-        if s:
-            s = self.markup(s, **kw)
-            self._file.write(s + '\n')
-        else:
-            self._file.write('\n')
-        self._file.flush()
+        self.write(s, **kw)
+        self.write('\n')
 
-
-class Win32ConsoleWriter(object):
-
-    def __init__(self, file=None, stringio=False):
-        if file is None:
-            if stringio:
-                self.stringio = file = py.std.cStringIO.StringIO()
-            else:
-                file = py.std.sys.stdout 
-        elif callable(file):
-            file = WriteFile(file)
-        self._file = file
-        self.fullwidth = get_terminal_width()
-        self.hasmarkup = hasattr(file, 'isatty') and file.isatty()
-
-    def sep(self, sepchar, title=None, fullwidth=None, **kw):
-        if fullwidth is None:
-            fullwidth = self.fullwidth
-        # the goal is to have the line be as long as possible
-        # under the condition that len(line) <= fullwidth
-        if title is not None:
-            # we want 2 + 2*len(fill) + len(title) <= fullwidth
-            # i.e.    2 + 2*len(sepchar)*N + len(title) <= fullwidth
-            #         2*len(sepchar)*N <= fullwidth - len(title) - 2
-            #         N <= (fullwidth - len(title) - 2) // (2*len(sepchar))
-            N = (fullwidth - len(title) - 2) // (2*len(sepchar))
-            fill = sepchar * N
-            line = "%s %s %s" % (fill, title, fill)
-        else:
-            # we want len(sepchar)*N <= fullwidth
-            # i.e.    N <= fullwidth // len(sepchar)
-            line = sepchar * (fullwidth // len(sepchar))
-        # in some situations there is room for an extra sepchar at the right,
-        # in particular if we consider that with a sepchar like "_ " the
-        # trailing space is not important at the end of the line
-        if len(line) + len(sepchar.rstrip()) <= fullwidth:
-            line += sepchar.rstrip()
-
-        self.line(line, **kw)
-
+class Win32ConsoleWriter(TerminalWriter):
     def write(self, s, **kw):
         if s:
-            s = str(s)
+            s = self._getbytestring(s)
             if self.hasmarkup:
                 handle = GetStdHandle(STD_OUTPUT_HANDLE)
 
@@ -270,8 +239,8 @@ class Win32ConsoleWriter(object):
             if self.hasmarkup:
                 SetConsoleTextAttribute(handle, FOREGROUND_WHITE)
 
-    def line(self, s='', **kw):
-        self.write(s + '\n', **kw)
+    def line(self, s="", **kw):
+        self.write(s+"\n", **kw)
 
 if sys.platform == 'win32':
     TerminalWriter = Win32ConsoleWriter

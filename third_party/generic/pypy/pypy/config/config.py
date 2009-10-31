@@ -98,9 +98,9 @@ class Config(object):
             raise AttributeError('unknown option %s' % (name,))
         child = getattr(self._cfgimpl_descr, name)
         oldowner = self._cfgimpl_value_owners[child._name]
-        oldvalue = getattr(self, name)
-        if oldvalue != value and oldowner not in ("default", "suggested"):
-            if who in ("default", "suggested"):
+        if oldowner not in ("default", "suggested"):
+            oldvalue = getattr(self, name)
+            if oldvalue == value or who in ("default", "suggested"):
                 return
             raise ConflictConfigError('cannot override value to %s for '
                                       'option %s' % (value, name))
@@ -259,7 +259,11 @@ class ChoiceOption(Option):
         for path, reqvalue in self._requires.get(value, []):
             toplevel = config._cfgimpl_get_toplevel()
             homeconfig, name = toplevel._cfgimpl_get_home_by_path(path)
-            homeconfig.setoption(name, reqvalue, who)
+            if who == 'default':
+                who2 = 'default'
+            else:
+                who2 = 'required'
+            homeconfig.setoption(name, reqvalue, who2)
         for path, reqvalue in self._suggests.get(value, []):
             toplevel = config._cfgimpl_get_toplevel()
             homeconfig, name = toplevel._cfgimpl_get_home_by_path(path)
@@ -303,7 +307,11 @@ class BoolOption(Option):
             for path, reqvalue in self._requires:
                 toplevel = config._cfgimpl_get_toplevel()
                 homeconfig, name = toplevel._cfgimpl_get_home_by_path(path)
-                homeconfig.setoption(name, reqvalue, "required")
+                if who == 'default':
+                    who2 = 'default'
+                else:
+                    who2 = 'required'
+                homeconfig.setoption(name, reqvalue, who2)
         if value and self._suggests is not None:
             for path, reqvalue in self._suggests:
                 toplevel = config._cfgimpl_get_toplevel()

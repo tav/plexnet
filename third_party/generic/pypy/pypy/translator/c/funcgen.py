@@ -371,13 +371,13 @@ class FunctionCodeGenerator(object):
         yield 'while (%s) {' % expr
         for op in self.gen_link(enterlink):
             yield '\t' + op
-        yield '\t  block%d_back:' % self.blocknum[headblock]
+        # the semicolon after the colon is needed in case no operation
+        # produces any code after the label
+        yield '\t  block%d_back: ;' % self.blocknum[headblock]
         if headblock.operations:
             for i, op in enumerate(headblock.operations):
                 for line in self.gen_op(op):
                     yield '\t' + line
-        else:
-            yield '\t;'
         yield '}'
         for op in self.gen_link(exitlink):
             yield op
@@ -665,7 +665,15 @@ class FunctionCodeGenerator(object):
         return '%s\t/* hint: %r */' % (self.OP_SAME_AS(op), hints)
 
     def OP_KEEPALIVE(self, op): # xxx what should be the sematics consequences of this
-        return "/* kept alive: %s */ ;" % self.expr(op.args[0], special_case_void=False)
+        v = op.args[0]
+        TYPE = self.lltypemap(v)
+        if TYPE is Void:
+            return "/* kept alive: void */"
+        if isinstance(TYPE, Ptr) and TYPE.TO._gckind == 'gc':
+            meth = getattr(self.gcpolicy, 'GC_KEEPALIVE', None)
+            if meth:
+                return meth(self, v)
+        return "/* kept alive: %s */" % self.expr(v)
 
     #address operations
     def OP_RAW_STORE(self, op):
@@ -772,6 +780,23 @@ class FunctionCodeGenerator(object):
 
     def OP_PROMOTE_VIRTUALIZABLE(self, op):
         return '/* PROMOTE_VIRTUALIZABLE %s */' % op
+
+    def OP_GET_GROUP_MEMBER(self, op):
+        typename = self.db.gettype(op.result.concretetype)
+        return '%s = (%s)_OP_GET_GROUP_MEMBER(%s, %s);' % (
+            self.expr(op.result),
+            cdecl(typename, ''),
+            self.expr(op.args[0]),
+            self.expr(op.args[1]))
+
+    def OP_GET_NEXT_GROUP_MEMBER(self, op):
+        typename = self.db.gettype(op.result.concretetype)
+        return '%s = (%s)_OP_GET_NEXT_GROUP_MEMBER(%s, %s, %s);' % (
+            self.expr(op.result),
+            cdecl(typename, ''),
+            self.expr(op.args[0]),
+            self.expr(op.args[1]),
+            self.expr(op.args[2]))
 
 
 assert not USESLOTS or '__dict__' not in dir(FunctionCodeGenerator)

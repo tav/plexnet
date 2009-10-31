@@ -1,7 +1,7 @@
 from pypy.interpreter.executioncontext import ExecutionContext, ActionFlag
 from pypy.interpreter.executioncontext import UserDelAction, FrameTraceAction
 from pypy.interpreter.error import OperationError
-from pypy.interpreter.argument import Arguments, ArgumentsFromValuestack
+from pypy.interpreter.argument import Arguments
 from pypy.interpreter.pycompiler import CPythonCompiler, PythonAstCompiler
 from pypy.interpreter.miscutils import ThreadLocals
 from pypy.tool.cache import Cache
@@ -9,6 +9,7 @@ from pypy.tool.uid import HUGEVAL_BYTES
 from pypy.rlib.objectmodel import we_are_translated
 from pypy.rlib.debug import make_sure_not_resized
 from pypy.rlib.timer import DummyTimer, Timer
+from pypy.rlib.jit import we_are_jitted, dont_look_inside
 import os, sys
 
 __all__ = ['ObjSpace', 'OperationError', 'Wrappable', 'W_Root']
@@ -478,8 +479,8 @@ class ObjSpace(object):
 
     def getexecutioncontext(self):
         "Return what we consider to be the active execution context."
-        # Important: the annotator must not see a prebuilt ExecutionContext
-        # for reasons related to the specialization of the framestack attribute
+        # Important: the annotator must not see a prebuilt ExecutionContext:
+        # you should not see frames while you translate
         # so we make sure that the threadlocals never *have* an
         # ExecutionContext during translation.
         if self.config.translating and not we_are_translated():
@@ -728,15 +729,12 @@ class ObjSpace(object):
 
     def call_valuestack(self, w_func, nargs, frame):
         from pypy.interpreter.function import Function, Method, is_builtin_code
-        if frame.is_being_profiled and is_builtin_code(w_func):
+        if (not we_are_jitted() and frame.is_being_profiled and
+            is_builtin_code(w_func)):
             # XXX: this code is copied&pasted :-( from the slow path below
             # call_valuestack().
             args = frame.make_arguments(nargs)
-            try:
-                return self.call_args_and_c_profile(frame, w_func, args)
-            finally:
-                if isinstance(args, ArgumentsFromValuestack):
-                    args.frame = None
+            return self.call_args_and_c_profile(frame, w_func, args)
 
         if not self.config.objspace.disable_call_speedhacks:
             # XXX start of hack for performance
@@ -757,12 +755,9 @@ class ObjSpace(object):
             # XXX end of hack for performance
 
         args = frame.make_arguments(nargs)
-        try:
-            return self.call_args(w_func, args)
-        finally:
-            if isinstance(args, ArgumentsFromValuestack):
-                args.frame = None
+        return self.call_args(w_func, args)
 
+    @dont_look_inside 
     def call_args_and_c_profile(self, frame, w_func, args):
         ec = self.getexecutioncontext()
         ec.c_call_trace(frame, w_func)

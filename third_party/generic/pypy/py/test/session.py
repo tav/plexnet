@@ -6,12 +6,11 @@
 """
 
 import py
-from py.__.test import event, outcome
+from py.__.test import outcome
 
 # imports used for genitems()
 Item = py.test.collect.Item
 Collector = py.test.collect.Collector
-from runner import basic_collect_report
 
 class Session(object): 
     """ 
@@ -20,8 +19,8 @@ class Session(object):
     """ 
     def __init__(self, config):
         self.config = config
-        self.bus = config.bus # shortcut 
-        self.bus.register(self)
+        self.pluginmanager = config.pluginmanager # shortcut 
+        self.pluginmanager.register(self)
         self._testsfailed = False
         self._nomatch = False
         self.shouldstop = False
@@ -33,21 +32,20 @@ class Session(object):
             if isinstance(next, (tuple, list)):
                 colitems[:] = list(next) + colitems 
                 continue
-            assert self.bus is next.config.bus
-            notify = self.bus.notify 
+            assert self.pluginmanager is next.config.pluginmanager
             if isinstance(next, Item):
                 remaining = self.filteritems([next])
                 if remaining:
-                    notify("itemstart", next)
+                    self.config.hook.pytest_itemstart(item=next)
                     yield next 
             else:
                 assert isinstance(next, Collector)
-                notify("collectionstart", event.CollectionStart(next))
-                ev = basic_collect_report(next)
-                if ev.passed:
-                    for x in self.genitems(ev.result, keywordexpr):
+                self.config.hook.pytest_collectstart(collector=next)
+                rep = self.config.hook.pytest_make_collect_report(collector=next)
+                if rep.passed:
+                    for x in self.genitems(rep.result, keywordexpr):
                         yield x 
-                notify("collectionreport", ev)
+                self.config.hook.pytest_collectreport(report=rep)
             if self.shouldstop:
                 break
 
@@ -67,7 +65,7 @@ class Session(object):
                     continue
             remaining.append(colitem)
         if deselected: 
-            self.bus.notify("deselected", event.Deselected(deselected, ))
+            self.config.hook.pytest_deselected(items=deselected)
             if self.config.option.keyword.endswith(":"):
                 self._nomatch = True
         return remaining 
@@ -79,19 +77,21 @@ class Session(object):
 
     def sessionstarts(self):
         """ setup any neccessary resources ahead of the test run. """
-        self.bus.notify("testrunstart", event.TestrunStart())
+        self.config.hook.pytest_sessionstart(session=self)
         
-    def pyevent_itemtestreport(self, rep):
-        if rep.failed:
+    def pytest_runtest_logreport(self, report):
+        if report.failed:
             self._testsfailed = True
             if self.config.option.exitfirst:
                 self.shouldstop = True
-    pyevent_collectionreport = pyevent_itemtestreport
+    pytest_collectreport = pytest_runtest_logreport
 
-    def sessionfinishes(self, exitstatus=0, excinfo=None):
+    def sessionfinishes(self, exitstatus):
         """ teardown any resources after a test run. """ 
-        self.bus.notify("testrunfinish", 
-                        event.TestrunFinish(exitstatus=exitstatus, excinfo=excinfo))
+        self.config.hook.pytest_sessionfinish(
+            session=self, 
+            exitstatus=exitstatus, 
+        )
 
     def getinitialitems(self, colitems):
         if colitems is None:
@@ -104,7 +104,6 @@ class Session(object):
         colitems = self.getinitialitems(colitems)
         self.shouldstop = False 
         self.sessionstarts()
-        #self.bus.notify("testnodeready", maketestnodeready())
         exitstatus = outcome.EXIT_OK
         captured_excinfo = None
         try:
@@ -112,27 +111,16 @@ class Session(object):
                 if self.shouldstop: 
                     break 
                 if not self.config.option.collectonly: 
-                    self.runtest(item)
-
-            self.config._setupstate.teardown_all()
+                    item.config.hook.pytest_runtest_protocol(item=item)
         except KeyboardInterrupt:
-            captured_excinfo = py.code.ExceptionInfo()
+            excinfo = py.code.ExceptionInfo()
+            self.config.hook.pytest_keyboard_interrupt(excinfo=excinfo)
             exitstatus = outcome.EXIT_INTERRUPTED
         except:
-            captured_excinfo = py.code.ExceptionInfo()
-            self.bus.notify("internalerror", event.InternalException(captured_excinfo))
+            excinfo = py.code.ExceptionInfo()
+            self.config.pluginmanager.notify_exception(captured_excinfo)
             exitstatus = outcome.EXIT_INTERNALERROR
         if exitstatus == 0 and self._testsfailed:
             exitstatus = outcome.EXIT_TESTSFAILED
-        self.sessionfinishes(exitstatus=exitstatus, excinfo=captured_excinfo)
+        self.sessionfinishes(exitstatus=exitstatus)
         return exitstatus
-
-    def runpdb(self, excinfo):
-        from py.__.test.custompdb import post_mortem
-        post_mortem(excinfo._excinfo[2])
-
-    def runtest(self, item):
-        runner = item._getrunner()
-        pdb = self.config.option.usepdb and self.runpdb or None
-        testrep = runner(item, pdb=pdb) 
-        self.bus.notify("itemtestreport", testrep)

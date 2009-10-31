@@ -6,7 +6,8 @@ class TestModule:
     def test_module_file_not_found(self, testdir):
         tmpdir = testdir.tmpdir
         fn = tmpdir.join('nada','no')
-        col = py.test.collect.Module(fn, config=testdir.parseconfig(tmpdir))
+        col = py.test.collect.Module(fn)
+        col.config = testdir.parseconfig(tmpdir)
         py.test.raises(py.error.ENOENT, col.collect) 
 
     def test_failing_import(self, testdir):
@@ -21,36 +22,37 @@ class TestModule:
         py.test.raises(SyntaxError, modcol.collect)
         py.test.raises(SyntaxError, modcol.run)
 
-    def test_module_assertion_setup(self, testdir):
+    def test_module_assertion_setup(self, testdir, monkeypatch):
         modcol = testdir.getmodulecol("pass")
         from py.__.magic import assertion
         l = []
-        py.magic.patch(assertion, "invoke", lambda: l.append(None))
-        try:
-            modcol.setup()
-        finally:
-            py.magic.revert(assertion, "invoke")
-        x = l.pop()
-        assert x is None
-        py.magic.patch(assertion, "revoke", lambda: l.append(None))
-        try:
-            modcol.teardown()
-        finally:
-            py.magic.revert(assertion, "revoke")
-        x = l.pop()
-        assert x is None
-
-    def test_module_participates_as_plugin(self, testdir):
-        modcol = testdir.getmodulecol("")
+        monkeypatch.setattr(assertion, "invoke", lambda: l.append(None))
         modcol.setup()
-        assert modcol.config.pytestplugins.isregistered(modcol.obj)
+        x = l.pop()
+        assert x is None
+        monkeypatch.setattr(assertion, "revoke", lambda: l.append(None))
         modcol.teardown()
-        assert not modcol.config.pytestplugins.isregistered(modcol.obj)
+        x = l.pop()
+        assert x is None
 
-    def test_module_considers_pytestplugins_at_import(self, testdir):
+    def test_module_considers_pluginmanager_at_import(self, testdir):
         modcol = testdir.getmodulecol("pytest_plugins='xasdlkj',")
         py.test.raises(ImportError, "modcol.obj")
 
+class TestClass:
+    def test_class_with_init_not_collected(self, testdir):
+        modcol = testdir.getmodulecol("""
+            class TestClass1:
+                def __init__(self):
+                    pass 
+            class TestClass2(object):
+                def __init__(self):
+                    pass 
+        """)
+        l = modcol.collect() 
+        assert len(l) == 0
+    
+class TestDisabled:
     def test_disabled_module(self, testdir):
         modcol = testdir.getmodulecol("""
             disabled = True
@@ -63,7 +65,6 @@ class TestModule:
         assert len(l) == 1
         py.test.raises(Skipped, "modcol.setup()")
 
-class TestClass:
     def test_disabled_class(self, testdir):
         modcol = testdir.getmodulecol("""
             class TestClass:
@@ -78,6 +79,15 @@ class TestClass:
         l = modcol.collect() 
         assert len(l) == 1
         py.test.raises(Skipped, "modcol.setup()")
+
+    def test_disabled_class_functional(self, testdir):
+        reprec = testdir.inline_runsource("""
+            class TestSimpleClassSetup:
+                disabled = True
+                def test_classlevel(self): pass
+                def test_classlevel2(self): pass
+        """)
+        reprec.assertoutcome(skipped=2)
 
 class TestGenerator:
     def test_generative_functions(self, testdir): 
@@ -192,8 +202,8 @@ class TestGenerator:
                     yield list_append, i
                 yield assert_order_of_execution
         """)
-        sorter = testdir.inline_run(o)
-        passed, skipped, failed = sorter.countoutcomes() 
+        reprec = testdir.inline_run(o)
+        passed, skipped, failed = reprec.countoutcomes() 
         assert passed == 7
         assert not skipped and not failed 
 
@@ -222,21 +232,27 @@ class TestGenerator:
                 yield list_append_2
                 yield assert_order_of_execution   
         """)
-        sorter = testdir.inline_run(o) # .events_from_cmdline([o])
-        passed, skipped, failed = sorter.countoutcomes() 
+        reprec = testdir.inline_run(o) 
+        passed, skipped, failed = reprec.countoutcomes() 
         assert passed == 4
         assert not skipped and not failed 
 
 class TestFunction:
+    def test_getmodulecollector(self, testdir):
+        item = testdir.getitem("def test_func(): pass")
+        modcol = item.getparent(py.test.collect.Module)
+        assert isinstance(modcol, py.test.collect.Module)
+        assert hasattr(modcol.obj, 'test_func')
+        
     def test_function_equality(self, tmpdir):
         config = py.test.config._reparse([tmpdir])
-        f1 = py.test.collect.Function(name="name", config=config, 
+        f1 = py.test.collect.Function(name="name", 
                                       args=(1,), callobj=isinstance)
-        f2 = py.test.collect.Function(name="name", config=config, 
+        f2 = py.test.collect.Function(name="name",
                                       args=(1,), callobj=callable)
         assert not f1 == f2
         assert f1 != f2
-        f3 = py.test.collect.Function(name="name", config=config, 
+        f3 = py.test.collect.Function(name="name", 
                                       args=(1,2), callobj=callable)
         assert not f3 == f2
         assert f3 != f2
@@ -244,95 +260,43 @@ class TestFunction:
         assert not f3 == f1
         assert f3 != f1
 
-        f1_b = py.test.collect.Function(name="name", config=config, 
+        f1_b = py.test.collect.Function(name="name", 
                                       args=(1,), callobj=isinstance)
         assert f1 == f1_b
         assert not f1 != f1_b
 
-    def test_funcarg_lookupfails(self, testdir):
-        testdir.makeconftest("""
-            class ConftestPlugin:
-                def pytest_funcarg__something(self, pyfuncitem):
-                    return 42
-        """)
-        item = testdir.getitem("def test_func(some): pass")
-        exc = py.test.raises(LookupError, "item.lookup_allargs()")
-        s = str(exc.value)
-        assert s.find("something") != -1
+    def test_function_equality_with_callspec(self, tmpdir):
+        config = py.test.config._reparse([tmpdir])
+        class callspec1:
+            param = 1
+            funcargs = {}
+            id = "hello"
+        class callspec2:
+            param = 1
+            funcargs = {}
+            id = "world"
+        f5 = py.test.collect.Function(name="name", 
+                                      callspec=callspec1, callobj=isinstance)
+        f5b = py.test.collect.Function(name="name", 
+                                      callspec=callspec2, callobj=isinstance)
+        assert f5 != f5b
+        assert not (f5 == f5b)
 
-    def test_funcarg_lookup_default(self, testdir):
-        item = testdir.getitem("def test_func(some, other=42): pass")
-        class Provider:
-            def pytest_funcarg__some(self, pyfuncitem):
-                return pyfuncitem.name 
-        item.config.pytestplugins.register(Provider())
-        kw = item.lookup_allargs()
-        assert len(kw) == 1
-
-    def test_funcarg_lookup_default_gets_overriden(self, testdir):
-        item = testdir.getitem("def test_func(some=42, other=13): pass")
-        class Provider:
-            def pytest_funcarg__other(self, pyfuncitem):
-                return pyfuncitem.name 
-        item.config.pytestplugins.register(Provider())
-        kw = item.lookup_allargs()
-        assert len(kw) == 1
-        name, value = kw.popitem()
-        assert name == "other"
-        assert value == item.name 
-
-    def test_funcarg_basic(self, testdir):
-        item = testdir.getitem("def test_func(some, other): pass")
-        class Provider:
-            def pytest_funcarg__some(self, pyfuncitem):
-                return pyfuncitem.name 
-            def pytest_funcarg__other(self, pyfuncitem):
-                return 42
-        item.config.pytestplugins.register(Provider())
-        kw = item.lookup_allargs()
-        assert len(kw) == 2
-        assert kw['some'] == "test_func"
-        assert kw['other'] == 42
-
-    def test_funcarg_addfinalizer(self, testdir):
-        item = testdir.getitem("def test_func(some): pass")
-        l = []
-        class Provider:
-            def pytest_funcarg__some(self, pyfuncitem):
-                pyfuncitem.addfinalizer(lambda: l.append(42))
-                return 3
-        item.config.pytestplugins.register(Provider())
-        kw = item.lookup_allargs()
-        assert len(kw) == 1
-        assert kw['some'] == 3
-        assert len(l) == 0
-        item.teardown()
-        assert len(l) == 1
-        assert l[0] == 42
-
-    def test_funcarg_lookup_modulelevel(self, testdir):
-        modcol = testdir.getmodulecol("""
-            def pytest_funcarg__something(pyfuncitem):
-                return pyfuncitem.name
-
-            class TestClass:
-                def test_method(self, something):
-                    pass 
-            def test_func(something):
-                pass 
-        """)
-        item1, item2 = testdir.genitems([modcol])
-        modcol.setup()
-        assert modcol.config.pytestplugins.isregistered(modcol.obj)
-        kwargs = item1.lookup_allargs()
-        assert kwargs['something'] ==  "test_method"
-        kwargs = item2.lookup_allargs()
-        assert kwargs['something'] ==  "test_func"
-        modcol.teardown()
-        assert not modcol.config.pytestplugins.isregistered(modcol.obj)
+    def test_pyfunc_call(self, testdir):
+        item = testdir.getitem("def test_func(): raise ValueError")
+        config = item.config
+        class MyPlugin1:
+            def pytest_pyfunc_call(self, pyfuncitem):
+                raise ValueError
+        class MyPlugin2:
+            def pytest_pyfunc_call(self, pyfuncitem):
+                return True
+        config.pluginmanager.register(MyPlugin1())
+        config.pluginmanager.register(MyPlugin2())
+        config.hook.pytest_pyfunc_call(pyfuncitem=item)
 
 class TestSorting:
-    def test_check_equality_and_cmp_basic(self, testdir):
+    def test_check_equality(self, testdir):
         modcol = testdir.getmodulecol("""
             def test_pass(): pass
             def test_fail(): assert 0
@@ -351,11 +315,7 @@ class TestSorting:
         assert isinstance(fn3, py.test.collect.Function)
         assert not (fn1 == fn3) 
         assert fn1 != fn3
-        assert cmp(fn1, fn3) == -1
 
-        assert cmp(fn1, 10) == -1 
-        assert cmp(fn2, 10) == -1 
-        assert cmp(fn3, 10) == -1 
         for fn in fn1,fn2,fn3:
             assert fn != 3
             assert fn != modcol
@@ -371,18 +331,18 @@ class TestSorting:
                 return g
 
 
-            def test_a(y):
-                pass
-            test_a = dec(test_a)
-
             def test_b(y):
                 pass
             test_b = dec(test_b)
+
+            def test_a(y):
+                pass
+            test_a = dec(test_a)
         """)
         colitems = modcol.collect()
         assert len(colitems) == 2
-        f1, f2 = colitems
-        assert cmp(f2, f1) > 0
+        assert [item.name for item in colitems] == ['test_b', 'test_a']
+
 
 class TestConftestCustomization:
     def test_extra_python_files_and_functions(self, testdir):
@@ -434,3 +394,55 @@ class TestConftestCustomization:
         assert len(colitems) == 1
         assert colitems[0].name == "check_method"
 
+
+class TestReportinfo:
+        
+    def test_func_reportinfo(self, testdir):
+        item = testdir.getitem("def test_func(): pass")
+        fspath, lineno, modpath = item.reportinfo()
+        assert fspath == item.fspath 
+        assert lineno == 0
+        assert modpath == "test_func"
+
+    def test_class_reportinfo(self, testdir):
+        modcol = testdir.getmodulecol("""
+            # lineno 0
+            class TestClass:
+                def test_hello(self): pass
+        """)
+        classcol = modcol.collect_by_name("TestClass")
+        fspath, lineno, msg = classcol.reportinfo()
+        assert fspath == modcol.fspath 
+        assert lineno == 1
+        assert msg == "TestClass"
+
+    def test_generator_reportinfo(self, testdir):
+        modcol = testdir.getmodulecol("""
+            # lineno 0
+            def test_gen(): 
+                def check(x): 
+                    assert x
+                yield check, 3
+        """)
+        gencol = modcol.collect_by_name("test_gen")
+        fspath, lineno, modpath = gencol.reportinfo()
+        assert fspath == modcol.fspath
+        assert lineno == 1
+        assert modpath == "test_gen"
+
+        genitem = gencol.collect()[0]
+        fspath, lineno, modpath = genitem.reportinfo()
+        assert fspath == modcol.fspath
+        assert lineno == 2
+        assert modpath == "test_gen[0]"
+        """
+            def test_func():
+                pass
+            def test_genfunc():
+                def check(x):
+                    pass
+                yield check, 3
+            class TestClass:
+                def test_method(self):
+                    pass
+       """

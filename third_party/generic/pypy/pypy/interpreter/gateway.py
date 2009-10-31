@@ -18,14 +18,14 @@ from pypy.interpreter import eval
 from pypy.interpreter.function import Function, Method, ClassMethod
 from pypy.interpreter.baseobjspace import W_Root, ObjSpace, Wrappable
 from pypy.interpreter.baseobjspace import Wrappable, SpaceCache, DescrMismatch
-from pypy.interpreter.argument import Arguments, AbstractArguments
+from pypy.interpreter.argument import Arguments, Signature
 from pypy.tool.sourcetools import NiceCompile, compile2
 from pypy.rlib.rarithmetic import r_longlong, r_int, r_ulonglong, r_uint
 
 # internal non-translatable parts: 
 import py
 
-class Signature:
+class SignatureBuilder:
     "NOT_RPYTHON"
     def __init__(self, func=None, argnames=None, varargname=None,
                  kwargname=None, name = None):
@@ -44,7 +44,7 @@ class Signature:
         self.argnames.append(argname)
 
     def signature(self):
-        return self.argnames, self.varargname, self.kwargname
+        return Signature(self.argnames, self.varargname, self.kwargname)
 
 #________________________________________________________________
 
@@ -249,12 +249,10 @@ class UnwrapSpec_EmitRun(UnwrapSpecEmit):
 
             d = {}
             source = """if 1: 
-                def _run_UWS_%s(self, space, scope_w):
+                def _run(self, space, scope_w):
                     return self.behavior(%s)
-                \n""" % (label, ', '.join(self.run_args))
+                \n""" % (', '.join(self.run_args),)
             exec compile2(source) in self.miniglobals, d
-            d['_run'] = d['_run_UWS_%s' % label]
-            del d['_run_UWS_%s' % label]
 
             activation_cls = type("BuiltinActivation_UwS_%s" % label,
                              (BuiltinActivation,), d)
@@ -448,8 +446,8 @@ class BuiltinCode(eval.Code):
                 "descrmismatch without a self-type specified")
  
 
-        orig_sig = Signature(func, argnames, varargname, kwargname)
-        app_sig = Signature(func)
+        orig_sig = SignatureBuilder(func, argnames, varargname, kwargname)
+        app_sig = SignatureBuilder(func)
 
         UnwrapSpec_Check(orig_sig).apply_over(unwrap_spec,
                                               app_sig #to populate
@@ -535,6 +533,7 @@ class BuiltinCode(eval.Code):
 # (verbose) performance hack below
 
 class BuiltinCodePassThroughArguments0(BuiltinCode):
+    _immutable_ = True
 
     def funcrun(self, func, args):
         space = func.space
@@ -559,7 +558,8 @@ class BuiltinCodePassThroughArguments0(BuiltinCode):
         return w_result
 
 class BuiltinCodePassThroughArguments1(BuiltinCode):
-    fast_natural_arity = -1
+    _immutable_ = True
+    fast_natural_arity = eval.Code.PASSTHROUGHARGS1
 
     def funcrun_obj(self, func, w_obj, args):
         space = func.space
@@ -584,10 +584,10 @@ class BuiltinCodePassThroughArguments1(BuiltinCode):
         return w_result
 
 class BuiltinCode0(BuiltinCode):
+    _immutable_ = True
     fast_natural_arity = 0
     
     def fastcall_0(self, space, w_func):
-        #self = hint(self, deepfreeze=True)
         try:
             w_result = self.fastfunc_0(space)
         except KeyboardInterrupt: 
@@ -604,10 +604,10 @@ class BuiltinCode0(BuiltinCode):
         return w_result
 
 class BuiltinCode1(BuiltinCode):
+    _immutable_ = True
     fast_natural_arity = 1
     
     def fastcall_1(self, space, w_func, w1):
-        #self = hint(self, deepfreeze=True)
         try:
             w_result = self.fastfunc_1(space, w1)
         except KeyboardInterrupt: 
@@ -629,10 +629,10 @@ class BuiltinCode1(BuiltinCode):
         return w_result
 
 class BuiltinCode2(BuiltinCode):
+    _immutable_ = True
     fast_natural_arity = 2
     
     def fastcall_2(self, space, w_func, w1, w2):
-        #self = hint(self, deepfreeze=True)
         try:
             w_result = self.fastfunc_2(space, w1, w2)
         except KeyboardInterrupt: 
@@ -654,10 +654,10 @@ class BuiltinCode2(BuiltinCode):
         return w_result
 
 class BuiltinCode3(BuiltinCode):
+    _immutable_ = True
     fast_natural_arity = 3
     
     def fastcall_3(self, space, func, w1, w2, w3):
-        #self = hint(self, deepfreeze=True)
         try:
             w_result = self.fastfunc_3(space, w1, w2, w3)
         except KeyboardInterrupt: 
@@ -679,10 +679,10 @@ class BuiltinCode3(BuiltinCode):
         return w_result
 
 class BuiltinCode4(BuiltinCode):
+    _immutable_ = True
     fast_natural_arity = 4
     
     def fastcall_4(self, space, func, w1, w2, w3, w4):
-        #self = hint(self, deepfreeze=True)
         try:
             w_result = self.fastfunc_4(space, w1, w2, w3, w4)
         except KeyboardInterrupt: 
@@ -860,21 +860,22 @@ class ApplevelClass:
                     if ret_w is not None: # it was RPython
                         return ret_w
             # the last argument can be an Arguments
+            w_func = self.wget(space, name)
             if not args_w:
-                args = Arguments(space, [])
+                return space.call_function(w_func)
             else:
                 args = args_w[-1]
                 assert args is not None
-                if not isinstance(args, AbstractArguments):
-                    args = Arguments(space, list(args_w))
+                if not isinstance(args, Arguments):
+                    return space.call_function(w_func, *args_w)
                 else:
-                    # ...which is merged with the previous arguments, if any
-                    if len(args_w) > 1:
-                        more_args_w, more_kwds_w = args.unpack()
-                        args = Arguments(space,
-                                         list(args_w[:-1]) + more_args_w,
-                                         more_kwds_w)
-            w_func = self.wget(space, name) 
+                    if len(args_w) == 2:
+                        return space.call_obj_args(w_func, args_w[0], args)
+                    elif len(args_w) > 2:
+                        # xxx is this used at all?
+                        # ...which is merged with the previous arguments, if any
+                        args = args.replace_arguments(list(args_w[:-1]) +
+                                                      args.arguments_w)
             return space.call_args(w_func, args)
         def get_function(space):
             w_func = self.wget(space, name) 

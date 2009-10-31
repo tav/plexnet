@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Runtime.Serialization.Formatters.Binary;
 using System.Runtime.Serialization;
 using System.IO;
+using System.Reflection;
 using System.Reflection.Emit;
 using pypy.runtime;
 
@@ -17,6 +18,7 @@ namespace pypy.test
         public static string ToPython(uint x)   { return x.ToString(); }
         public static string ToPython(long x)   { return x.ToString(); }
         public static string ToPython(ulong x)  { return x.ToString(); }
+        public static string ToPython(short x)  { return x.ToString(); }
         // XXX: it does not support strings containing "'".
         public static string ToPython(string x) { 
             if (x == null)
@@ -86,6 +88,12 @@ namespace pypy.test
         }
     }
 
+    public delegate double DelegateType_int__0();
+    public delegate double DelegateType_double__double_1(double a);
+    public delegate double DelegateType_double_int_double(int a, double b);
+    public delegate void DelegateType_void_int_1(int a);
+    public delegate bool DelegateType_bool_bool_1(bool a);
+    public delegate char DelegateType_char_char_1(char a);
     public delegate int DelegateType_int__int_1(int a);
     public delegate int DelegateType_int__int_2(int a, int b);
     public delegate int DelegateType_int__int_3(int a, int b, int c);
@@ -102,27 +110,314 @@ namespace pypy.test
 namespace pypy.runtime
 {
 
+    public delegate void LoopDelegate(InputArgs args);
+
+    public class InputArgs {
+      public int[] ints = new int[32];
+      public double[] floats = new double[32];
+      public object[] objs = new object[32];
+      public object exc_value = null;
+      public int failed_op = -1;
+
+      public int get_int(int i)
+      {
+        return ints[i];
+      }
+
+      public void set_int(int i, int n)
+      {
+        ints[i] = n;
+      }
+
+      public double get_float(int i)
+      {
+        return floats[i];
+      }
+
+      public void set_float(int i, double n)
+      {
+        floats[i] = n;
+      }
+
+      public object get_obj(int i)
+      {
+        return objs[i];
+      }
+
+      public void set_obj(int i, object o)
+      {
+        objs[i] = o;
+      }
+
+      public object get_exc_value()
+      {
+        return exc_value;
+      }
+
+      public void set_exc_value(object v)
+      {
+        exc_value = v;
+      }
+
+      public int get_failed_op()
+      {
+        return failed_op;
+      }
+
+      public void ensure_ints(int n)
+      {
+        if (ints.Length < n)
+          ints = new int[n];
+      }
+
+      public void ensure_floats(int n)
+      {
+        if (floats.Length < n)
+          floats = new double[n];
+      }
+
+      public void ensure_objs(int n)
+      {
+        if (objs.Length < n)
+          objs = new object[n];
+
+      }
+    }
+
+  /*
+    public delegate uint FlexSwitchCase(uint block, InputArgs args);
+
+    // XXX: there is a lot of code duplication between the next three classes,
+    // but it's hard to share the code in a way that it's both efficient and
+    // supported by gencli
+    public class MethodIdMap
+    { 
+      public FlexSwitchCase[] cases = new FlexSwitchCase[4];
+
+      public void add_case(int method_id, FlexSwitchCase c)
+      {
+        if (cases.Length <= method_id)
+          grow();
+        cases[method_id] = c;
+      }
+
+      public uint jumpto(uint blockid, InputArgs args)
+      {
+        uint method_id = (blockid & 0xFFFF0000) >> 16;
+        return cases[method_id](blockid, args);
+      }
+
+      private void grow()
+      {
+        int newsize = cases.Length * 2;
+        FlexSwitchCase[] newcases = new FlexSwitchCase[newsize];
+        Array.Copy(cases, newcases, cases.Length);
+        cases = newcases;
+      }
+    }
+
+    public class BaseLowLevelFlexSwitch
+    {
+        public uint default_blockid = 0xFFFFFFFF;
+        public void set_default_blockid(uint blockid)
+        {
+            this.default_blockid = blockid;
+        }
+    }
+
+    public class IntLowLevelFlexSwitch: BaseLowLevelFlexSwitch
+    {
+        public int numcases = 0;
+        public int[] values = new int[4];
+        public FlexSwitchCase[] cases = new FlexSwitchCase[4];
+
+        public void add_case(int value, FlexSwitchCase c)
+        {
+            if (numcases >= values.Length)
+                grow();
+            values[numcases] = value;
+            cases[numcases] = c;
+            numcases++;
+        }
+
+        private void grow()
+        {
+            int newsize = values.Length * 2;
+            int[] newvalues = new int[newsize];
+            Array.Copy(values, newvalues, values.Length);
+            values = newvalues;
+            
+            FlexSwitchCase[] newcases = new FlexSwitchCase[newsize];
+            Array.Copy(cases, newcases, cases.Length);
+            cases = newcases;
+        }
+        
+        public uint execute(int value, InputArgs args)
+        {
+            for(int i=0; i<numcases; i++)
+              if (values[i] == value) {
+                  // 0 stands for "the first block of the function", see the comment
+                  // in rgenop.FlexCaseMethod.emit_preamble
+                  return cases[i](0, args); 
+                }
+            return default_blockid;
+        }
+    }
+
+    public class ObjectLowLevelFlexSwitch: BaseLowLevelFlexSwitch
+    {
+        public int numcases = 0;
+        public object[] values = new object[4];
+        public FlexSwitchCase[] cases = new FlexSwitchCase[4];
+
+        public void add_case(object value, FlexSwitchCase c)
+        {
+            if (numcases >= values.Length)
+                grow();
+            values[numcases] = value;
+            cases[numcases] = c;
+            numcases++;
+        }
+
+        private void grow()
+        {
+            int newsize = values.Length * 2;
+            object[] newvalues = new object[newsize];
+            Array.Copy(values, newvalues, values.Length);
+            values = newvalues;
+            
+            FlexSwitchCase[] newcases = new FlexSwitchCase[newsize];
+            Array.Copy(cases, newcases, cases.Length);
+            cases = newcases;
+        }
+        
+        public uint execute(object value, InputArgs args)
+        {
+            for(int i=0; i<numcases; i++)
+              if (values[i] == value) {
+                  // 0 stands for "the first block of the function", see the comment
+                  // in rgenop.FlexCaseMethod.emit_preamble
+                  return cases[i](0, args); 
+                }
+            return default_blockid;
+        }
+    }
+  */
+        
     public class DelegateHolder
     {
-        public Delegate func;
+        public LoopDelegate func;
 
         // we need getter and setter because we can't directly access fields from RPython
-        public void SetFunc(Delegate func)
+        public void SetFunc(LoopDelegate func)
         {
             this.func = func;
         }
 
-        public Delegate GetFunc()
+        public LoopDelegate GetFunc()
         {
             return this.func;
         }
     }
 
+
+
+    public class AutoSaveAssembly
+    {
+        private AssemblyBuilder assembly;
+        private bool saved = false;
+        private string name;
+
+        public static AutoSaveAssembly Create(string name)
+        {
+            return new AutoSaveAssembly(name);
+        }
+
+        public AutoSaveAssembly(string name)
+        {
+            this.name = name;
+            AssemblyName assemblyName = new AssemblyName(); 
+            assemblyName.Name = name;
+            this.assembly = AppDomain.CurrentDomain.DefineDynamicAssembly(assemblyName, AssemblyBuilderAccess.RunAndSave);
+        }
+
+        public void Save()
+        {
+            if (this.saved)
+                return;
+            this.assembly.Save(this.name);
+            this.saved = true;
+        }
+
+        ~AutoSaveAssembly()
+        {
+            this.Save();
+        }
+
+        public AssemblyBuilder GetAssemblyBuilder()
+        {
+            return this.assembly;
+        }
+
+        public static TypeBuilder DefineType(ModuleBuilder module, string name)
+        {
+            return module.DefineType(name,
+                                     TypeAttributes.Public |
+                                     TypeAttributes.Class);
+        }
+
+        public static MethodBuilder DefineMethod(TypeBuilder typeBuilder, string name, Type res, Type[] args)
+        {
+            return typeBuilder.DefineMethod("invoke",
+                                            MethodAttributes.HideBySig | 
+                                            MethodAttributes.Static | 
+                                            MethodAttributes.Public, 
+                                            res, 
+                                            args);
+        }
+
+        
+    }
+
     public class Utils
     {
+
+        public static void debug_fatalerror(string msg)
+        {
+          throw new Exception("debug_fatalerror: " + msg);
+        }
+
+        public static void debug_print(object a)
+        {
+            Console.Error.WriteLine(a);
+        }
+
+        public static void debug_print(object a, object b)
+        {
+            Console.Error.WriteLine("{0} {1}", a, b);
+        }
+
+        public static void debug_print(object a, object b, object c)
+        {
+            Console.Error.WriteLine("{0} {1} {2}", a, b, c);
+        }
+
+        public static void debug_print(object a, object b, object c, object d)
+        {
+            Console.Error.WriteLine("{0} {1} {2} {3}", a, b, c, d);
+        }
+
         public static DynamicMethod CreateDynamicMethod(string name, Type res, Type[] args)
         {
             return new DynamicMethod(name, res, args, typeof(Utils).Module);
+        }
+
+        // if you call il.Emit(OpCodes.Ldc_R8, mydouble) from pythonnet, it
+        // selects the wrong overload. To work around it, we call it from C# and
+        // live happy
+        public static void Emit_Ldc_R8(ILGenerator il, double val) 
+        {
+            il.Emit(OpCodes.Ldc_R8, val);
         }
 
         public static object RuntimeNew(Type t)
@@ -159,6 +454,9 @@ namespace pypy.runtime
 
         public static string OOString(object obj, int base_)
         {
+          if (obj == null)
+            return "<null object>";
+          else
             return string.Format("<{0} object>", obj.GetType().FullName);
         }
 
@@ -227,6 +525,15 @@ namespace pypy.runtime
               return obj.GetHashCode();
         }
 
+        public static void throwInvalidBlockId(uint blockid)
+        {
+            uint method_id = (blockid & 0xFFFF0000) >> 16;
+            uint block_num = (blockid & 0x0000FFFF);
+            string msg = string.Format("Invalid block id: 0x{0:X} ({1}, {2})", 
+                                       blockid, method_id, block_num);
+            throw new Exception(msg);
+        }
+
         public static void Serialize(object obj, string filename)
         {
             FileStream fs = new FileStream(filename, FileMode.Create);
@@ -277,6 +584,10 @@ namespace pypy.runtime
 
     public class String
     {
+        public static int ll_hash(string s)
+        {
+            return s.GetHashCode();
+        }
         public static char ll_stritem_nonneg(string s, int index)
         {
             return s[index];
@@ -559,7 +870,7 @@ namespace pypy.runtime
 
         public DictItemsIterator<TKey, TValue> ll_get_items_iterator()
         {
-            return new DictItemsIterator<TKey, TValue>(this.GetEnumerator());
+            return new DictItemsIterator<TKey, TValue>(this);
         }
 
         // XXX: this is CustomDict specific, maybe we should have a separate class for it
@@ -593,7 +904,7 @@ namespace pypy.runtime
 
         public DictItemsIterator<TKey, TValue> ll_get_items_iterator()
         {
-            return new DictItemsIterator<TKey, TValue>(this.GetEnumerator());
+            return new DictItemsIterator<TKey, TValue>(this);
         }
 
         public DictOfVoid<TKey, TValue> ll_copy() // XXX: why it should return a Dict?
@@ -602,6 +913,44 @@ namespace pypy.runtime
             foreach(KeyValuePair<TKey, TValue> item in this)
                 res[item.Key] = item.Value;
             return res;            
+        }
+    }
+
+    // it assumes TKey is a placeholder, it's not really used
+    public class DictOfVoidKey<TKey, TValue>
+    {
+        private int length = 0;
+        private TValue elem = default(TValue);
+
+        public DictOfVoidKey() {}
+        public DictOfVoidKey(IEqualityComparer<TKey> comparer) {}
+
+        public int ll_length() { return this.length; }
+        public TValue ll_get() { return this.elem; }
+        
+        public void ll_set(TValue value) { 
+            this.length = 1;
+            this.elem = value;
+        }
+
+        public bool ll_remove() {
+            if (this.length > 0) {
+                this.length = 0;
+                return true;
+            }
+            return false;
+        }
+
+        public bool ll_contains() { return (this.length > 0); }
+        public void ll_contains_get() { }
+        public void ll_clear() { this.length = 0; }
+
+        public DictItemsIterator<TKey, TValue> ll_get_items_iterator()
+        {
+            Dictionary<TKey, TValue> foo = new Dictionary<TKey, TValue>();
+            if (length == 1)
+                foo[default(TKey)] = this.elem;
+            return new DictItemsIterator<TKey, TValue>(foo);
         }
     }
 
@@ -624,34 +973,46 @@ namespace pypy.runtime
 
         public DictItemsIterator<int, int> ll_get_items_iterator()
         {
-            List<KeyValuePair<int, int>> foo = new List<KeyValuePair<int, int>>();
+            Dictionary<int, int> foo = new Dictionary<int, int>();
             if (length == 1)
-                foo.Add(new KeyValuePair<int, int>(0, 0));
-            return new DictItemsIterator<int, int>(foo.GetEnumerator());
+                foo[0] = 0;
+            return new DictItemsIterator<int, int>(foo);
         }
     }
 
     public class DictItemsIterator<TKey, TValue>
     {
-        IEnumerator<KeyValuePair<TKey, TValue>> it;
+        Dictionary<TKey, TValue> dict;
+        int size;
+        TKey[] keys;
+        int pos;
 
-        public DictItemsIterator(IEnumerator<KeyValuePair<TKey, TValue>> it)
+        public DictItemsIterator(Dictionary<TKey, TValue> dict)
         {
-            this.it = it;
+            this.dict = dict;
+            this.size = dict.Count;
+            this.keys = new TKey[this.size];
+            dict.Keys.CopyTo(this.keys, 0);
+            this.pos = -1;
         }
 
         public bool ll_go_next() { 
-            try {
-                return it.MoveNext();
-            }
-            catch(InvalidOperationException e) {
+            if (this.size != this.dict.Count)
                 Helpers.raise_RuntimeError();
+            if (this.pos >= this.size-1)
                 return false;
-            }
+            pos++;
+            return true;
         }
 
-        public TKey ll_current_key() { return it.Current.Key; }
-        public TValue ll_current_value() { return it.Current.Value; }
+        public TKey ll_current_key() { 
+            return this.keys[this.pos]; 
+        }
+
+        public TValue ll_current_value() { 
+            TKey key = this.ll_current_key();
+            return this.dict[key];
+        }
     }
 
     public class WeakReference
@@ -760,10 +1121,9 @@ namespace pypy.builtin
             return t.TotalSeconds;
         }
 
-        static DateTime ClockStart = DateTime.UtcNow;
         public static double ll_time_clock()
         {
-            return (DateTime.UtcNow - ClockStart).TotalSeconds;
+          return DateTime.UtcNow.Ticks * 1e-7;
         }
 
         public static void ll_time_sleep(double seconds)

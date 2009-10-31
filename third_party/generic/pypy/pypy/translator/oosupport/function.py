@@ -157,9 +157,8 @@ class Function(object):
         for link in block.exits:
             if link.exitcase is None:
                 continue
-            if not self._is_raise_block(link.target):
-                anyHandler = True
-        anyHandler = anyHandler or not self.auto_propagate_exceptions
+            anyHandler = anyHandler or \
+                not self._auto_propagate(link, block)
         
         # render the last one (if any!) and prepend a .try
         if block.operations:
@@ -188,7 +187,7 @@ class Function(object):
             if link.exitcase is None:
                 continue # see above
             assert issubclass(link.exitcase, py.builtin.BaseException)
-            if self._is_raise_block(link.target) and self.auto_propagate_exceptions:
+            if self._auto_propagate(link, block):
                 continue # let the exception propagate
             ll_meta_exc = link.llexitcase
             self.record_ll_meta_exc(ll_meta_exc)
@@ -198,6 +197,26 @@ class Function(object):
             self.end_catch(target_label)
 
         self.after_except_block()
+
+    def _auto_propagate(self, link, block):
+        assert block.exitswitch is flowmodel.c_last_exception
+        if not self.auto_propagate_exceptions:
+            return False
+        if not self._is_raise_block(link.target):
+            return False
+        llexc = link.llexitcase
+        i = list(block.exits).index(link)
+        next_links = block.exits[i+1:]
+        for next_link in next_links:
+            # if one of the next links catches a superclass of llexc, we
+            # *have* to insert a catch block here, else the exception might be
+            # caught by the wrong one
+            if ootype.subclassof(llexc, next_link.llexitcase):
+                return False
+
+        # if all the checks were ok, it's safe to avoid the catch block and
+        # let the exception propagate
+        return True
 
     def introduce_exception_conversions(self, llexitcases):
         """ Called before any catch blocks are emitted with the full set of

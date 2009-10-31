@@ -342,7 +342,19 @@ def test_overrides_require_as_default():
     config.set(backend='cli')
     assert config.backend == 'cli'
     assert config.type_system == 'oo'
-    
+
+def test_overrides_require_as_default_boolopt():
+    descr = OptionDescription("test", "", [
+        BoolOption("backend", "", default=False,
+                   requires=[('type_system', True)]),
+        BoolOption("type_system", "", default=False)
+        ])
+    config = Config(descr, backend=True)
+    config.set(backend=False)
+    config.set(type_system=False)
+    assert config.backend == False
+    assert config.type_system == False
+
 def test_overrides_dont_change_user_options():
     descr = OptionDescription("test", "", [
         BoolOption("b", "", default=False)])
@@ -502,6 +514,41 @@ def test_suggests_can_fail():
     assert not c.t3
     assert not c.t2
 
+def test_suggests_can_fail_choiceopt():
+    # this is what occurs in "./translate.py --gcrootfinder=asmgcc --jit"
+    # with --jit suggesting the boehm gc, but --gcrootfinder requiring the
+    # framework gctransformer.
+    descr = OptionDescription("test", '', [
+        ChoiceOption("t1", "", ["a", "b"], default="a"),
+        ChoiceOption("t2", "", ["c", "d"], default="c",
+                     requires={"d": [("t3", "f")]}),
+        ChoiceOption("t3", "", ["e", "f"], default="e"),
+        ChoiceOption("opt", "", ["g", "h"], default="g",
+                     suggests={"h": [("t1", "b"), ("t2", "d")]})
+    ])
+    c = Config(descr)
+    assert c.t1 == 'a'
+    assert c.t2 == 'c'
+    assert c.t3 == 'e'
+    assert c.opt == 'g'
+    c.opt = "h"
+    assert c.opt == 'h'
+    assert c.t1 == 'b'
+    assert c.t2 == 'd'
+    assert c.t3 == 'f'
+    # does not crash
+    c.t2 = 'c'
+    assert c.t2 == 'c'
+
+    c = Config(descr)
+    c.t3 = 'e'
+    assert c.t3 == 'e'
+    # does not crash
+    c.opt = 'h'
+    assert c.opt == 'h'
+    assert c.t3 == 'e'
+    assert c.t2 == 'c'
+
 
 def test_choice_suggests():
     descr = OptionDescription("test", '', [
@@ -579,3 +626,19 @@ def test_validator():
     assert c.booloption2 is False
     c.booloption2 = False
     assert c.booloption2 is False
+
+def test_suggested_owner_does_not_override():
+    descr = OptionDescription("test", '', [
+        BoolOption("toplevel", "", default=False),
+        BoolOption("opt", "", default=False,
+                   suggests=[("toplevel", False)]),
+        BoolOption("opt2", "", default=False,
+                   suggests=[("toplevel", True)]),
+    ])
+    c = Config(descr)
+    c.toplevel = False
+    c.opt = True      # bug: sets owner of toplevel back to 'suggested'
+    c.opt2 = True     # and this overrides toplevel because it's only suggested
+    assert c.toplevel == False
+    assert c.opt == True
+    assert c.opt2 == True

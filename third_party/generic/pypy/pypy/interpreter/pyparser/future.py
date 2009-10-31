@@ -6,8 +6,8 @@ would prevent more future imports, the analysis is aborted.
 The resulting legal futures are avaliable in self.flags after the
 pass has ended.
 
-Invocation is through getFutures(src), which returns a field of flags,
-one per found correct future import.
+Invocation is through get_futures(src), which returns a field of flags, one per
+found correct future import.
 
 The flags can then be used to set up the parser.
 All error detection is left to the parser.
@@ -27,13 +27,13 @@ the "in" comparisons with explicit numeric comparisons.
 from pypy.interpreter.astcompiler.consts import CO_GENERATOR_ALLOWED, \
     CO_FUTURE_DIVISION, CO_FUTURE_WITH_STATEMENT, CO_FUTURE_ABSOLUTE_IMPORT
             
-def getFutures(futureFlags, source):
-    futures = FutureAutomaton(futureFlags, source)
+def get_futures(future_flags, source):
+    futures = FutureAutomaton(future_flags, source)
     try:
         futures.start()
     except DoneException, e:
         pass
-    return futures.flags
+    return futures.flags, (futures.lineno, futures.col_offset)
     
 class DoneException(Exception):
     pass
@@ -63,12 +63,17 @@ class FutureAutomaton(object):
     precede a future statement.
     """
     
-    def __init__(self, futureFlags, string):
-        self.futureFlags = futureFlags
+    def __init__(self, future_flags, string):
+        self.future_flags = future_flags
         self.s = string
         self.pos = 0
-        self.docstringConsumed = False
+        self.current_lineno = 1
+        self.lineno = -1
+        self.line_start_pos = 0
+        self.col_offset = 0
+        self.docstring_consumed = False
         self.flags = 0
+        self.got_features = 0
 
     def getc(self, offset=0):
         try:
@@ -78,19 +83,23 @@ class FutureAutomaton(object):
 
     def start(self):
         c = self.getc()
-        if c in ["'", '"'] and not self.docstringConsumed:
-            self.consumeDocstring()
+        if c in ["'", '"'] and not self.docstring_consumed:
+            self.consume_docstring()
         elif c in whitespace_or_newline:
-            self.consumeEmptyLine()
+            self.consume_empty_line()
         elif c == '#':
-            self.consumeComment()
+            self.consume_comment()
         elif c == 'f':
-            self.consumeFrom()
+            self.consume_from()
         else:
             return
 
-    def consumeDocstring(self):
-        self.docstringConsumed = True
+    def atbol(self):
+        self.current_lineno += 1
+        self.line_start_pos = self.pos
+
+    def consume_docstring(self):
+        self.docstring_consumed = True
         endchar = self.getc()
         if (self.getc() == self.getc(+1) and
             self.getc() == self.getc(+2)):
@@ -98,15 +107,23 @@ class FutureAutomaton(object):
             while 1: # Deal with a triple quoted docstring
                 if self.getc() == '\\':
                     self.pos += 2
-                elif self.getc() != endchar:
-                    self.pos += 1
                 else:
-                    self.pos += 1
-                    if (self.getc() == endchar and
-                        self.getc(+1) == endchar):
-                        self.pos += 2
-                        self.consumeEmptyLine()
-                        break
+                    c = self.getc()
+                    if c != endchar:
+                        self.pos += 1
+                        if c == '\n':
+                            self.atbol()
+                        elif c == '\r':
+                            if self.getc() == '\n':
+                                self.pos += 1
+                                self.atbol()
+                    else:
+                        self.pos += 1
+                        if (self.getc() == endchar and
+                            self.getc(+1) == endchar):
+                            self.pos += 2
+                            self.consume_empty_line()
+                            break
 
         else: # Deal with a single quoted docstring
             self.pos += 1
@@ -114,7 +131,7 @@ class FutureAutomaton(object):
                 c = self.getc()
                 self.pos += 1
                 if c == endchar:
-                    self.consumeEmptyLine()
+                    self.consume_empty_line()
                     return
                 elif c == '\\':
                     # Deal with linefeeds
@@ -128,7 +145,7 @@ class FutureAutomaton(object):
                     # Syntax error
                     return
 
-    def consumeEmptyLine(self):
+    def consume_empty_line(self):
         """
         Called when the remainder of the line can only contain whitespace
         and comments.
@@ -136,56 +153,67 @@ class FutureAutomaton(object):
         while self.getc() in whitespace:
             self.pos += 1
         if self.getc() == '#':
-            self.consumeComment()
+            self.consume_comment()
         elif self.getc() == ';':
             self.pos += 1
-            self.consumeWhitespace()
+            self.consume_whitespace()
             self.start()
         elif self.getc() in '\r\n':
+            c = self.getc()
             self.pos += 1
-            if self.getc() == '\n':
-                self.pos += 1
+            if c == '\r':
+                if self.getc() == '\n':
+                    self.pos += 1
+                    self.atbol()
+            else:
+                self.atbol()
             self.start()
-            
-    def consumeComment(self):
+
+    def consume_comment(self):
         self.pos += 1
         while self.getc() not in '\r\n':
             self.pos += 1
-        self.consumeEmptyLine()
+        self.consume_empty_line()
 
-    def consumeFrom(self):
+    def consume_from(self):
+        col_offset = self.pos - self.line_start_pos
+        line = self.current_lineno
         self.pos += 1
         if self.getc() == 'r' and self.getc(+1) == 'o' and self.getc(+2) == 'm':
-            self.docstringConsumed = True
+            self.docstring_consumed = True
             self.pos += 3
-            self.consumeMandatoryWhitespace()
+            self.consume_mandatory_whitespace()
             if self.s[self.pos:self.pos+10] != '__future__':
                 raise DoneException
             self.pos += 10
-            self.consumeMandatoryWhitespace()
+            self.consume_mandatory_whitespace()
             if self.s[self.pos:self.pos+6] != 'import':
                 raise DoneException
             self.pos += 6
-            self.consumeWhitespace()
-            if self.getc() == '(':
-                self.pos += 1
-                self.consumeWhitespace()
-                self.setFlag(self.getName())
-                # Set flag corresponding to name
-                self.getMore(parenList=True)
-            else:
-                self.setFlag(self.getName())
-                self.getMore()
-            self.consumeEmptyLine()
-        else:
-            return
-        
-    def consumeMandatoryWhitespace(self):
+            self.consume_whitespace()
+            old_got = self.got_features
+            try:
+                if self.getc() == '(':
+                    self.pos += 1
+                    self.consume_whitespace()
+                    self.set_flag(self.get_name())
+                    # Set flag corresponding to name
+                    self.get_more(paren_list=True)
+                else:
+                    self.set_flag(self.get_name())
+                    self.get_more()
+            finally:
+                if self.got_features > old_got:
+                    self.col_offset = col_offset
+                    self.lineno = line
+            self.consume_empty_line()
+
+    def consume_mandatory_whitespace(self):
         if self.getc() not in whitespace + '\\':
             raise DoneException
-        self.consumeWhitespace()
+        self.consume_whitespace()
         
-    def consumeWhitespace(self):
+    def consume_whitespace(self):
         while 1:
             c = self.getc()
             if c in whitespace:
@@ -196,54 +224,63 @@ class FutureAutomaton(object):
                 c = self.getc()
                 if c == '\n':
                     self.pos += 1
+                    self.atbol()
                     continue
                 elif c == '\r':
                     self.pos += 1
                     if self.getc() == '\n':
                         self.pos += 1
+                        self.atbol()
                 else:
                     raise DoneException
             else:
                 return
 
-    def getName(self):
+    def get_name(self):
         if self.getc() not in letters:
             raise DoneException
         p = self.pos
-        while 1:
-            self.pos += 1
-            if self.getc() not in alphanumerics:
-                break
-        name = self.s[p:self.pos]
-        self.consumeWhitespace()
-        return name
+        try:
+            while self.getc() in alphanumerics:
+                self.pos += 1
+        except DoneException:
+            # If there's any name at all, we want to call self.set_flag().
+            # Something else while get the DoneException again.
+            if self.pos == p:
+                raise
+            end = self.pos
+        else:
+            end = self.pos
+            self.consume_whitespace()
+        return self.s[p:end]
 
-    def getMore(self, parenList=False):
-        if parenList and self.getc() == ')':
+    def get_more(self, paren_list=False):
+        if paren_list and self.getc() == ')':
             self.pos += 1
             return
         
         if (self.getc() == 'a' and
             self.getc(+1) == 's' and
             self.getc(+2) in whitespace):
-            self.getName()
-            self.getName()
-            self.getMore(parenList=parenList)
+            self.get_name()
+            self.get_name()
+            self.get_more(paren_list=paren_list)
             return
         elif self.getc() != ',':
             return
         else:
             self.pos += 1
-            self.consumeWhitespace()
-            if parenList and self.getc() == ')':
+            self.consume_whitespace()
+            if paren_list and self.getc() == ')':
                 self.pos += 1
                 return # Handles trailing comma inside parenthesis
-            self.setFlag(self.getName())
-            self.getMore(parenList=parenList)
+            self.set_flag(self.get_name())
+            self.get_more(paren_list=paren_list)
 
-    def setFlag(self, feature):
+    def set_flag(self, feature):
+        self.got_features += 1
         try:
-            self.flags |= self.futureFlags.compiler_features[feature]
+            self.flags |= self.future_flags.compiler_features[feature]
         except KeyError:
             pass
 
@@ -253,6 +290,7 @@ from pypy.interpreter.error import OperationError
 from pypy.tool import stdlib___future__ as future
 
 class FutureFlags(object):
+
     def __init__(self, version):
         compiler_flags = 0
         self.compiler_features = {}
@@ -265,12 +303,9 @@ class FutureFlags(object):
                 self.compiler_features[fname] = flag
             if version >= feature.getMandatoryRelease():
                 self.mandatory_flags |= feature.compiler_flag
-        self.allowed_flags = compiler_flags | PyCF_DONT_IMPLY_DEDENT
+        self.allowed_flags = compiler_flags
 
     def get_flag_names(self, space, flags):
-        if flags & ~self.allowed_flags:
-            raise OperationError(space.w_ValueError,
-                                 space.wrap("compile(): unrecognized flags"))
         flag_names = []
         for name, value in self.compiler_features.items():
             if flags & value:

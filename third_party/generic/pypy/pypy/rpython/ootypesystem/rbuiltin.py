@@ -36,16 +36,17 @@ def rtype_subclassof(hop):
     return hop.genop('subclassof', vlist,
                      resulttype = ootype.Bool)
 
+def rtype_instanceof(hop):
+    INSTANCE = hop.args_v[1].value
+    v_inst = hop.inputarg(hop.args_r[0], arg=0)
+    c_cls = hop.inputconst(ootype.Void, INSTANCE)
+    return hop.genop('instanceof', [v_inst, c_cls],
+                     resulttype=ootype.Bool)
+
 def rtype_runtimenew(hop):
     vlist = hop.inputargs(rootype.ooclass_repr)
     return hop.genop('runtimenew', vlist,
                      resulttype = hop.r_result.lowleveltype)
-
-def rtype_ooidentityhash(hop):
-    assert isinstance(hop.args_s[0], annmodel.SomeOOInstance)
-    vlist = hop.inputargs(hop.args_r[0])
-    return hop.genop('ooidentityhash', vlist,
-                     resulttype = ootype.Signed)
 
 def rtype_ooupcast(hop):
     assert isinstance(hop.args_s[0].const, ootype.Instance)
@@ -58,6 +59,19 @@ def rtype_oodowncast(hop):
     assert isinstance(hop.args_s[1], annmodel.SomeOOInstance)
     v_inst = hop.inputarg(hop.args_r[1], arg=1)
     return hop.genop('oodowncast', [v_inst], resulttype = hop.r_result.lowleveltype)
+
+def rtype_cast_to_object(hop):
+    assert isinstance(hop.args_s[0], annmodel.SomeOOStaticMeth) or \
+           isinstance(hop.args_s[0], annmodel.SomeOOClass) or \
+           isinstance(hop.args_s[0].ootype, ootype.OOType)
+    v_inst = hop.inputarg(hop.args_r[0], arg=0)
+    return hop.genop('cast_to_object', [v_inst], resulttype = hop.r_result.lowleveltype)
+
+def rtype_cast_from_object(hop):
+    assert isinstance(hop.args_s[0].const, ootype.OOType)
+    assert isinstance(hop.args_s[1], annmodel.SomeOOObject)
+    v_inst = hop.inputarg(hop.args_r[1], arg=1)
+    return hop.genop('cast_from_object', [v_inst], resulttype = hop.r_result.lowleveltype)
 
 def rtype_builtin_isinstance(hop):
     if hop.s_result.is_constant():
@@ -110,10 +124,12 @@ BUILTIN_TYPER[ootype.oonewarray] = rtype_oonewarray
 BUILTIN_TYPER[ootype.null] = rtype_null
 BUILTIN_TYPER[ootype.classof] = rtype_classof
 BUILTIN_TYPER[ootype.subclassof] = rtype_subclassof
+BUILTIN_TYPER[ootype.instanceof] = rtype_instanceof
 BUILTIN_TYPER[ootype.runtimenew] = rtype_runtimenew
-BUILTIN_TYPER[ootype.ooidentityhash] = rtype_ooidentityhash
 BUILTIN_TYPER[ootype.ooupcast] = rtype_ooupcast
 BUILTIN_TYPER[ootype.oodowncast] = rtype_oodowncast
+BUILTIN_TYPER[ootype.cast_from_object] = rtype_cast_from_object
+BUILTIN_TYPER[ootype.cast_to_object] = rtype_cast_to_object
 BUILTIN_TYPER[isinstance] = rtype_builtin_isinstance
 BUILTIN_TYPER[objectmodel.r_dict] = rtype_r_dict
 BUILTIN_TYPER[objectmodel.instantiate] = rtype_instantiate

@@ -4,6 +4,7 @@ from pypy.rpython import rint
 from pypy.rpython.lltypesystem import rdict, rstr
 from pypy.rpython.test.tool import BaseRtypingTest, LLRtypeMixin, OORtypeMixin
 from pypy.rlib.objectmodel import r_dict
+from pypy.rlib.rarithmetic import r_uint, r_longlong, r_ulonglong
 
 import py
 py.log.setconsumer("rtyper", py.log.STDOUT)
@@ -451,9 +452,9 @@ class BaseTestRdict(BaseRtypingTest):
     def test_tuple_dict(self):
         def f(i):
             d = {}
-            d[(1, 2)] = 4
-            d[(1, 3)] = 6
-            return d[(1, i)]
+            d[(1, 4.5, (str(i), 2), 2)] = 4
+            d[(1, 4.5, (str(i), 2), 3)] = 6
+            return d[(1, 4.5, (str(i), 2), i)]
 
         res = self.interpret(f, [2])
         assert res == f(2)
@@ -532,6 +533,49 @@ class BaseTestRdict(BaseRtypingTest):
                     value4)
         res = self.interpret(f, [5])
         assert res == 25019999
+
+    def test_resize_during_iteration(self):
+        def func():
+            d = {5: 1, 6: 2, 7: 3}
+            try:
+                for key, value in d.iteritems():
+                    d[key^16] = value*2
+            except RuntimeError:
+                pass
+            total = 0
+            for key in d:
+                total += key
+            return total
+        res = self.interpret(func, [])
+        assert 5 + 6 + 7 <= res <= 5 + 6 + 7 + (5^16) + (6^16) + (7^16)
+
+    def test_change_during_iteration(self):
+        def func():
+            d = {'a': 1, 'b': 2}
+            for key in d:
+                d[key] = 42
+            return d['a']
+        assert self.interpret(func, []) == 42
+
+    def test_dict_of_floats(self):
+        d = {3.0: 42, 3.1: 43, 3.2: 44, 3.3: 45, 3.4: 46}
+        def fn(f):
+            return d[f]
+
+        res = self.interpret(fn, [3.0])
+        assert res == 42
+
+    def test_dict_of_r_uint(self):
+        for r_t in [r_uint, r_longlong, r_ulonglong]:
+            d = {r_t(2): 3, r_t(4): 5}
+            def fn(x, y):
+                d[r_t(x)] = 123
+                return d[r_t(y)]
+            res = self.interpret(fn, [4, 2])
+            assert res == 3
+            res = self.interpret(fn, [3, 3])
+            assert res == 123
+
 
 class TestLLtype(BaseTestRdict, LLRtypeMixin):
     def test_dict_but_not_with_char_keys(self):
@@ -735,21 +779,6 @@ class TestLLtype(BaseTestRdict, LLRtypeMixin):
         assert lltype.typeOf(res.item1) == lltype.typeOf(res.item2)
         assert lltype.typeOf(res.item1) == lltype.typeOf(res.item3)
 
-    def test_resize_during_iteration(self):
-        def func():
-            d = {5: 1, 6: 2, 7: 3}
-            try:
-                for key, value in d.iteritems():
-                    d[key^16] = value*2
-            except RuntimeError:
-                pass
-            total = 0
-            for key in d:
-                total += key
-            return total
-        res = self.interpret(func, [])
-        assert 5 + 6 + 7 <= res <= 5 + 6 + 7 + (5^16) + (6^16) + (7^16)
-
     def test_prebuilt_list_of_addresses(self):
         from pypy.rpython.lltypesystem import llmemory
         
@@ -804,17 +833,6 @@ class TestOOtype(BaseTestRdict, OORtypeMixin):
             return dic[i]
         res = self.interpret(func, [5])
         assert res.ll_get(5) is res
-
-    def test_invalid_iterator(self):
-        def func():
-            try:
-                d = {'a': 1, 'b': 2}
-                for key in d:
-                    d[key] = 0
-                return True
-            except RuntimeError:
-                return False
-        assert self.interpret(func, []) == False
 
     # ____________________________________________________________
 

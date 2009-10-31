@@ -6,7 +6,6 @@ from pypy.translator.backendopt.constfold import constant_fold_graph
 from pypy.translator.backendopt.stat import print_statistics
 from pypy.translator.backendopt.merge_if_blocks import merge_if_blocks
 from pypy.translator import simplify
-from pypy.translator.backendopt.escape import malloc_to_stack
 from pypy.translator.backendopt import mallocprediction
 from pypy.translator.backendopt.removeassert import remove_asserts
 from pypy.translator.backendopt.support import log
@@ -54,6 +53,15 @@ def backend_optimizations(translator, graphs=None, secondary=False, **kwds):
 
     if translator.rtyper.type_system.name == 'ootypesystem':
         check_virtual_methods()
+
+    if config.remove_asserts:
+        constfold(config, graphs)
+        remove_asserts(translator, graphs)
+
+    if config.really_remove_asserts:
+        for graph in graphs:
+            removenoops.remove_debug_assert(graph)
+        # the dead operations will be killed by the remove_obvious_noops below
 
     # remove obvious no-ops
     def remove_obvious_noops():
@@ -113,13 +121,6 @@ def backend_optimizations(translator, graphs=None, secondary=False, **kwds):
                                     inline_heuristic=heuristic,
                                     call_count_pred=call_count_pred)
     constfold(config, graphs)
-
-    if config.remove_asserts:
-        remove_asserts(translator, graphs)
-
-    if config.heap2stack:
-        assert graphs is translator.graphs  # XXX for now
-        malloc_to_stack(translator)
 
     if config.merge_if_blocks:
         log.mergeifblocks("starting to merge if blocks")

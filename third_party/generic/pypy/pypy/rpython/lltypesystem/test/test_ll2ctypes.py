@@ -43,6 +43,8 @@ class TestLL2Ctypes(object):
         assert lltype2ctypes(rffi.r_ulong(-1)) == sys.maxint * 2 + 1
         res = ctypes2lltype(lltype.Unsigned, sys.maxint * 2 + 1)
         assert (res, type(res)) == (rffi.r_ulong(-1), rffi.r_ulong)
+        assert ctypes2lltype(lltype.Bool, 0) is False
+        assert ctypes2lltype(lltype.Bool, 1) is True
 
         res = lltype2ctypes(llmemory.sizeof(lltype.Signed))
         assert res == struct.calcsize("l")
@@ -106,6 +108,7 @@ class TestLL2Ctypes(object):
         ac = lltype2ctypes(a, normalize=False)
         assert isinstance(ac.contents, ctypes.Structure)
         assert ac.contents.length == 10
+        assert ac.contents._fields_[0] == ('length', ctypes.c_long)
         assert ac.contents.items[1] == 101
         ac.contents.items[2] = 456
         assert a[2] == 456
@@ -121,7 +124,10 @@ class TestLL2Ctypes(object):
         a.y[0] = 'x'
         a.y[1] = 'y'
         a.y[2] = 'z'
-        ac = lltype2ctypes(a)
+        # we need to pass normalize=False, otherwise 'ac' is returned of
+        # a normalized standard type, which complains about IndexError
+        # when doing 'ac.contents.y.items[2]'.
+        ac = lltype2ctypes(a, normalize=False)
         assert ac.contents.y.length == 3
         assert ac.contents.y.items[2] == ord('z')
         lltype.free(a, flavor='raw')
@@ -746,7 +752,8 @@ class TestLL2Ctypes(object):
         
         #include <stdlib.h>
         
-        static int x = 3;
+        static long x = 3;
+        static int y = 5;
         char **z = NULL;
 
         #endif  /* _SOME_H */
@@ -757,13 +764,19 @@ class TestLL2Ctypes(object):
         eci = ExternalCompilationInfo(includes=['stdio.h', str(h_file.basename)],
                                       include_dirs=[str(udir)])
         
-        get_x, set_x = rffi.CExternVariable(rffi.LONG, 'x', eci)
+        get_x, set_x = rffi.CExternVariable(rffi.LONG, 'x', eci, c_type='long')
+        get_y, set_y = rffi.CExternVariable(rffi.INT, 'y', eci, c_type='int')
         get_z, set_z = rffi.CExternVariable(rffi.CCHARPP, 'z', eci)
 
         def f():
             one = get_x()
             set_x(13)
             return one + get_x()
+
+        def fy():
+            one = rffi.cast(lltype.Signed, get_y())
+            set_y(rffi.cast(rffi.INT, 13))
+            return one + rffi.cast(lltype.Signed, get_y())
 
         def g():
             l = rffi.liststr2charpp(["a", "b", "c"])
@@ -775,7 +788,10 @@ class TestLL2Ctypes(object):
 
         res = f()
         assert res == 16
-        assert g() == "c"
+        res = fy()
+        assert res == 18
+        res = g()
+        assert res == "c"
 
     def test_c_callback(self):
         c_source = py.code.Source("""
@@ -800,24 +816,24 @@ class TestLL2Ctypes(object):
 
         assert f() == 6
 
-    def test_qsort(self):
+    def test_qsort_callback(self):
         TP = rffi.CArrayPtr(rffi.INT)
         a = lltype.malloc(TP.TO, 5, flavor='raw')
-        a[0] = 5
-        a[1] = 3
-        a[2] = 2
-        a[3] = 1
-        a[4] = 4
+        a[0] = rffi.r_int(5)
+        a[1] = rffi.r_int(3)
+        a[2] = rffi.r_int(2)
+        a[3] = rffi.r_int(1)
+        a[4] = rffi.r_int(4)
 
         def compare(a, b):
             if a[0] > b[0]:
-                return 1
+                return rffi.r_int(1)
             else:
-                return -1
+                return rffi.r_int(-1)
 
         CALLBACK = rffi.CCallback([rffi.VOIDP, rffi.VOIDP], rffi.INT)
-        qsort = rffi.llexternal('qsort', [rffi.VOIDP, rffi.INT,
-                                          rffi.INT, CALLBACK], lltype.Void)
+        qsort = rffi.llexternal('qsort', [rffi.VOIDP, rffi.SIZE_T,
+                                          rffi.SIZE_T, CALLBACK], lltype.Void)
 
         qsort(rffi.cast(rffi.VOIDP, a), 5, rffi.sizeof(rffi.INT), compare)
         for i in range(5):
@@ -924,7 +940,7 @@ class TestLL2Ctypes(object):
             return x.x
 
         c_source = py.code.Source("""
-        int eating_callback(void *arg, int(*call)(int))
+        long eating_callback(void *arg, long(*call)(void*))
         {
             return call(arg);
         }
@@ -933,8 +949,8 @@ class TestLL2Ctypes(object):
         eci = ExternalCompilationInfo(separate_module_sources=[c_source],
                                       export_symbols=['eating_callback'])
 
-        args = [T, rffi.CCallback([T], rffi.INT)]
-        eating_callback = rffi.llexternal('eating_callback', args, rffi.INT,
+        args = [T, rffi.CCallback([T], rffi.LONG)]
+        eating_callback = rffi.llexternal('eating_callback', args, rffi.LONG,
                                           compilation_info=eci)
 
         res = eating_callback(X(), callback)
@@ -994,6 +1010,130 @@ class TestLL2Ctypes(object):
         assert v
         v2 = ctypes2lltype(llmemory.GCREF, ctypes.c_void_p(1235))
         assert v2 != v
+
+    def test_gcref_type(self):
+        NODE = lltype.GcStruct('NODE')
+        node = lltype.malloc(NODE)
+        ref = lltype.cast_opaque_ptr(llmemory.GCREF, node)
+        v = lltype2ctypes(ref)
+        assert isinstance(v, ctypes.c_void_p)
+
+    def test_gcref_null(self):
+        ref = lltype.nullptr(llmemory.GCREF.TO)
+        v = lltype2ctypes(ref)
+        assert isinstance(v, ctypes.c_void_p)
+
+    def test_cast_null_gcref(self):
+        ref = lltype.nullptr(llmemory.GCREF.TO)
+        value = rffi.cast(lltype.Signed, ref)
+        assert value == 0
+
+    def test_cast_null_fakeaddr(self):
+        ref = llmemory.NULL
+        value = rffi.cast(lltype.Signed, ref)
+        assert value == 0
+
+    def test_gcref_truth(self):
+        p0 = ctypes.c_void_p(0)
+        ref0 = ctypes2lltype(llmemory.GCREF, p0)
+        assert not ref0
+
+        p1234 = ctypes.c_void_p(1234)
+        ref1234 = ctypes2lltype(llmemory.GCREF, p1234)        
+        assert p1234
+
+    def test_gcref_casts(self):
+        p0 = ctypes.c_void_p(0)
+        ref0 = ctypes2lltype(llmemory.GCREF, p0)
+
+        assert lltype.cast_ptr_to_int(ref0) == 0
+        assert llmemory.cast_ptr_to_adr(ref0) == llmemory.NULL
+
+        NODE = lltype.GcStruct('NODE')
+        assert lltype.cast_opaque_ptr(lltype.Ptr(NODE), ref0) == lltype.nullptr(NODE)
+
+        node = lltype.malloc(NODE)
+        ref1 = lltype.cast_opaque_ptr(llmemory.GCREF, node)
+
+        intval  = rffi.cast(lltype.Signed, node)
+        intval1 = rffi.cast(lltype.Signed, ref1)
+
+        assert intval == intval1
+
+        ref2 = ctypes2lltype(llmemory.GCREF, intval1)
+
+        assert lltype.cast_opaque_ptr(lltype.Ptr(NODE), ref2) == node
+        
+        #addr = llmemory.cast_ptr_to_adr(ref1)
+        #assert llmemory.cast_adr_to_int(addr) == intval
+
+        #assert lltype.cast_ptr_to_int(ref1) == intval
+
+    def test_mixed_gcref_comparison(self):
+        NODE = lltype.GcStruct('NODE')
+        node = lltype.malloc(NODE)
+        ref1 = lltype.cast_opaque_ptr(llmemory.GCREF, node)
+        ref2 = rffi.cast(llmemory.GCREF, 123)
+
+        assert ref1 != ref2
+        assert not (ref1 == ref2)
+
+        assert ref2 != ref1
+        assert not (ref2 == ref1)
+
+        assert node._obj._storage is True
+
+        # forced!
+        rffi.cast(lltype.Signed, ref1)
+        assert node._obj._storage not in (True, None)
+
+        assert ref1 != ref2
+        assert not (ref1 == ref2)
+
+        assert ref2 != ref1
+        assert not (ref2 == ref1)
+
+    def test_gcref_comparisons_back_and_forth(self):
+        NODE = lltype.GcStruct('NODE')
+        node = lltype.malloc(NODE)
+        ref1 = lltype.cast_opaque_ptr(llmemory.GCREF, node)
+        numb = rffi.cast(lltype.Signed, ref1)
+        ref2 = rffi.cast(llmemory.GCREF, numb)
+        assert ref1 == ref2
+        assert ref2 == ref1
+        assert not (ref1 != ref2)
+        assert not (ref2 != ref1)
+
+    def test_convert_subarray(self):
+        A = lltype.GcArray(lltype.Signed)
+        a = lltype.malloc(A, 20)
+        inside = lltype.direct_ptradd(lltype.direct_arrayitems(a), 3)
+ 
+        lltype2ctypes(inside)
+
+        start = rffi.cast(lltype.Signed, lltype.direct_arrayitems(a))
+        inside_int = rffi.cast(lltype.Signed, inside)
+
+        assert inside_int == start+rffi.sizeof(lltype.Signed)*3
+
+    def test_gcref_comparisons_through_addresses(self):
+        NODE = lltype.GcStruct('NODE')
+        n0 = lltype.malloc(NODE)
+        adr0 = llmemory.cast_ptr_to_adr(n0)
+
+        n1 = lltype.malloc(NODE)
+        i1 = rffi.cast(lltype.Signed, n1)
+        ref1 = rffi.cast(llmemory.GCREF, i1)        
+        adr1 = llmemory.cast_ptr_to_adr(ref1)
+
+        assert adr1 != adr0
+        assert adr0 != adr1
+
+        adr1_2 = llmemory.cast_ptr_to_adr(n1)
+
+        #import pdb; pdb.set_trace()
+        assert adr1_2 == adr1
+        assert adr1 == adr1_2
         
 class TestPlatform(object):
     def test_lib_on_libpaths(self):
@@ -1037,4 +1177,3 @@ class TestPlatform(object):
         f = rffi.llexternal('f', [rffi.INT, rffi.INT], rffi.INT,
                             compilation_info=eci)
         assert f(3, 4) == 7
-        

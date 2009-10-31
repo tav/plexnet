@@ -36,11 +36,11 @@ class ExceptionFailure(Failed):
         self.expr = expr 
         self.expected = expected
 
-class Exit(Exception):
+class Exit(KeyboardInterrupt):
     """ for immediate program exits without tracebacks and reporter/summary. """
     def __init__(self, msg="unknown reason"):
         self.msg = msg 
-        Exception.__init__(self, msg)
+        KeyboardInterrupt.__init__(self, msg)
 
 # exposed helper methods 
 
@@ -112,62 +112,6 @@ def raises(ExpectedException, *args, **kwargs):
     raise ExceptionFailure(msg="DID NOT RAISE", 
                            expr=args, expected=ExpectedException) 
 
-def deprecated_call(func, *args, **kwargs):
-    """ assert that calling func(*args, **kwargs)
-        triggers a DeprecationWarning. 
-    """ 
-    warningmodule = py.std.warnings
-    l = []
-    oldwarn_explicit = getattr(warningmodule, 'warn_explicit')
-    def warn_explicit(*args, **kwargs): 
-        l.append(args) 
-        oldwarn_explicit(*args, **kwargs)
-    oldwarn = getattr(warningmodule, 'warn')
-    def warn(*args, **kwargs): 
-        l.append(args) 
-        oldwarn(*args, **kwargs)
-        
-    warningmodule.warn_explicit = warn_explicit
-    warningmodule.warn = warn
-    try:
-        ret = func(*args, **kwargs)
-    finally:
-        warningmodule.warn_explicit = warn_explicit
-        warningmodule.warn = warn
-    if not l:
-        #print warningmodule
-        raise AssertionError("%r did not produce DeprecationWarning" %(func,))
-    return ret
-
-class KeywordDecorator:
-    """ decorator for setting function attributes. """
-    def __init__(self, keywords, lastname=None):
-        self._keywords = keywords
-        self._lastname = lastname
-
-    def __call__(self, func=None, **kwargs):
-        if func is None:
-            kw = self._keywords.copy()
-            kw.update(kwargs)
-            return KeywordDecorator(kw)
-        elif not hasattr(func, 'func_dict'):
-            kw = self._keywords.copy()
-            name = self._lastname
-            if name is None:
-                name = "mark"
-            kw[name] = func
-            return KeywordDecorator(kw)
-        func.func_dict.update(self._keywords)
-        return func 
-
-    def __getattr__(self, name):
-        if name[0] == "_":
-            raise AttributeError(name)
-        kw = self._keywords.copy()
-        kw[name] = True
-        return self.__class__(kw, lastname=name)
-
-mark = KeywordDecorator({})
 
 # exitcodes for the command line
 EXIT_OK = 0

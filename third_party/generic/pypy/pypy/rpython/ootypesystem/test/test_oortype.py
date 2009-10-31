@@ -337,3 +337,171 @@ def test_oodowncast():
         return oodowncast(A, c)
 
     py.test.raises(AnnotatorError, interpret, fn, [], type_system='ootype')
+
+def test_method_wrapper():
+    L = List(Signed)
+    _, meth = L._lookup('ll_getitem_fast')
+    wrapper = build_unbound_method_wrapper(meth)
+
+    def fn():
+        lst = L.ll_newlist(1)
+        lst.ll_setitem_fast(0, 42)
+        return wrapper(lst, 0)
+    
+    res = interpret(fn, [], type_system='ootype')
+    assert res == 42
+
+def test_identityhash():
+    L = List(Signed)
+
+    def fn():
+        lst1 = new(L)
+        lst2 = new(L)
+        obj1 = cast_to_object(lst1)
+        obj2 = cast_to_object(lst2)
+        return identityhash(obj1) == identityhash(obj2)
+
+    res = interpret(fn, [], type_system='ootype')
+    assert not res
+
+def test_mix_class_record_instance():
+    I = Instance("test", ROOT, {"a": Signed})
+    R = Record({"x": Signed})
+    L = List(Signed)
+
+    c1 = runtimeClass(I)
+    c2 = runtimeClass(R)
+    c3 = runtimeClass(L)
+    c4 = runtimeClass(Class)
+    def fn(flag):
+        if flag == 0:
+            return c1
+        elif flag == 1:
+            return c2
+        elif flag == 2:
+            return c3
+        else:
+            return c4
+
+    res = interpret(fn, [0], type_system='ootype')
+    assert res is c1
+    res = interpret(fn, [1], type_system='ootype')
+    assert res is c2
+    res = interpret(fn, [2], type_system='ootype')
+    assert res is c3
+    res = interpret(fn, [3], type_system='ootype')
+    assert res is c4
+
+def test_immutable_hint():
+    class I(object):
+        _immutable_ = True
+
+    i = I()
+    def f():
+        return i
+
+    g = gengraph(f)
+    rettype = g.getreturnvar().concretetype
+    assert rettype._hints['immutable']
+
+
+def test_compare_classes():
+    A = ootype.Instance("A", ootype.ROOT)
+    B = ootype.Instance("B", ootype.ROOT)
+
+    cls1 = ootype.runtimeClass(A)
+    def fn(n):
+        if n:
+            cls2 = ootype.runtimeClass(A)
+        else:
+            cls2 = ootype.runtimeClass(B)
+
+        assert (cls1 == cls2) == (not (cls1 != cls2))
+        return cls1 == cls2
+
+    res = interpret(fn, [1], type_system='ootype')
+    assert res
+
+
+def test_boundmeth_callargs():
+    A = Instance("A", ROOT, {'a': (Signed, 3)})
+    M = Meth([Signed, Signed], Signed)
+    def m_(self, x, y):
+       return self.a + x + y
+    m = meth(M, _name="m", _callable=m_)
+    addMethods(A, {"m": m})
+
+    def fn(x, y):
+        a = ootype.new(A)
+        meth = a.m
+        args = (x, y)
+        return meth(*args)
+
+    res = interpret(fn, [4, 5], type_system='ootype')
+    assert res == 3+4+5
+
+def test_boundmeth_callargs_stritem_nonneg():
+    def fn(i):
+        s = ootype.oostring(42, -1)
+        meth = s.ll_stritem_nonneg
+        args = (i,)
+        return meth(*args)
+
+    res = interpret(fn, [0], type_system='ootype')
+    assert res == '4'
+
+def test_bool_class():
+    A = Instance("Foo", ROOT)
+    cls = runtimeClass(A)
+    def fn(x):
+        if x:
+            obj = cls
+        else:
+            obj = nullruntimeclass
+        return bool(obj)
+
+    res = interpret(fn, [0], type_system='ootype')
+    assert not res
+    res = interpret(fn, [1], type_system='ootype')
+    assert res
+
+def test_cast_to_object_nullruntimeclass():
+    def fn():
+        return cast_to_object(nullruntimeclass)
+
+    res = interpret(fn, [], type_system='ootype')
+    assert cast_from_object(Class, res) == nullruntimeclass
+
+def test_cast_to_object_static_meth():
+    from pypy.rpython.annlowlevel import llhelper
+    FUNC = StaticMethod([Signed], Signed)
+    def f(x):
+        return x+1
+    fptr = llhelper(FUNC, f)
+
+    def fn(x):
+        if x:
+            obj = cast_to_object(fptr)
+        else:
+            obj = NULL
+        myfunc = cast_from_object(FUNC, obj)
+        return myfunc(x)
+
+    res = interpret(fn, [1], type_system='ootype')
+    assert res == 2
+
+def test_instanceof():
+    A = Instance('A', ootype.ROOT, {})
+    B = Instance('B', A, {})
+
+    def fn(x):
+        if x:
+            obj = ooupcast(A, new(B))
+        else:
+            obj = new(A)
+        return instanceof(obj, B)
+
+    res = interpret(fn, [0], type_system='ootype')
+    assert not res
+    res = interpret(fn, [1], type_system='ootype')
+    assert res

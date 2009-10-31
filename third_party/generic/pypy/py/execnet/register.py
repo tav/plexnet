@@ -2,7 +2,6 @@
 import os, inspect, socket
 import sys
 from py.magic import autopath ; mypath = autopath()
-from py.__.misc.warn import APIWARN
 
 try:
     from subprocess import Popen, PIPE
@@ -41,7 +40,7 @@ class InstallableGateway(gateway.Gateway):
         super(InstallableGateway, self).__init__(io=io, _startcount=1) 
         # XXX we dissallow execution form the other side
         self._initreceive(requestqueue=False) 
-        py._com.pyplugins.notify("gateway_init", self)
+        self.hook.pyexecnet_gateway_init(gateway=self)
 
     def _remote_bootstrap_gateway(self, io, extra=''):
         """ return Gateway with a asynchronously remotely
@@ -64,12 +63,15 @@ class PopenCmdGateway(InstallableGateway):
     def __init__(self, cmd):
         # on win close_fds=True does not work, not sure it'd needed
         #p = Popen(cmd, shell=True, stdin=PIPE, stdout=PIPE, close_fds=True)
-        p = Popen(cmd, shell=True, stdin=PIPE, stdout=PIPE) 
+        self._popen = p = Popen(cmd, shell=True, stdin=PIPE, stdout=PIPE) 
         infile, outfile = p.stdin, p.stdout
         self._cmd = cmd
         io = inputoutput.Popen2IO(infile, outfile)
         super(PopenCmdGateway, self).__init__(io=io)
 
+    def exit(self):
+        super(PopenCmdGateway, self).exit()
+        self._popen.poll()
 
 class PopenGateway(PopenCmdGateway):
     """ This Gateway provides interaction with a newly started
@@ -165,7 +167,7 @@ class SshGateway(PopenCmdGateway):
             cmdline[i] = "'" + cmdline[i].replace("'", "'\\''") + "'"
         cmd = 'ssh -C'
         if identity is not None: 
-            APIWARN("1.0", "pass in 'ssh_config' file instead of identity")
+            py.log._apiwarn("1.0", "pass in 'ssh_config' file instead of identity")
             cmd += ' -i %s' % (identity,)
         if ssh_config is not None:
             cmd += ' -F %s' % (ssh_config)

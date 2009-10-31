@@ -365,8 +365,10 @@ def box(x):
             TYPE = x._FUNC
             assert isinstance(TYPE, ootype.StaticMethod)
             return typeof(TYPE)
+        elif x is ootype.nullruntimeclass:
+            return None
         else:
-            name = '%s.%s' % (x._INSTANCE._namespace, x._INSTANCE._classname)
+            name = x._INSTANCE._assembly_qualified_name
             t = CLR.System.Type.GetType(name)
             assert t is not None
             return t
@@ -508,11 +510,23 @@ class Entry(ExtRegistryEntry):
         return hop.genop('same_as', [v_obj], hop.r_result.lowleveltype)
 
 def new_array(type, length):
-    return [None] * length
+    # PythonNet doesn't provide a straightforward way to create arrays,
+    # let's use reflection instead
+
+    # hack to produce the array type name from the member type name
+    typename = type._INSTANCE._assembly_qualified_name
+    parts = typename.split(',')
+    parts[0] = parts[0] + '[]'
+    typename = ','.join(parts)
+    t = PythonNet.System.Type.GetType(typename)
+    ctor = t.GetConstructors()[0]
+    return ctor.Invoke([length])
 
 def init_array(type, *args):
-    # PythonNet doesn't provide a straightforward way to create arrays... fake it with a list
-    return list(args)
+    array = new_array(type, len(args))
+    for i, arg in enumerate(args):
+        array[i] = arg
+    return array
 
 class Entry(ExtRegistryEntry):
     _about_ = new_array
@@ -635,88 +649,92 @@ class Entry(ExtRegistryEntry):
         v_inst = hop.inputarg(hop.args_r[0], arg=0)
         return hop.genop('oodowncast', [v_inst], resulttype = hop.r_result.lowleveltype)
 
-def cast_record_to_object(record):
-    T = ootype.typeOf(record)
-    assert isinstance(T, ootype.Record)
-    return ootype._view(CLR.System.Object._INSTANCE, record)
 
-def cast_object_to_record(T, obj):
-    assert isinstance(T, ootype.Record)
-    assert isinstance(obj, ootype._view)
-    assert isinstance(obj._inst, ootype._record)
-    record = obj._inst
-    assert ootype.typeOf(record) == T
-    return record
+def cliupcast(obj, TYPE):
+    return obj
 
 class Entry(ExtRegistryEntry):
-    _about_ = cast_record_to_object
+    _about_ = cliupcast
 
-    def compute_result_annotation(self, s_value):
-        T = s_value.ootype
-        assert isinstance(T, ootype.Record)
-        can_be_None = getattr(s_value, 'can_be_None', False)
-        return SomeOOInstance(CLR.System.Object._INSTANCE, can_be_None=can_be_None)
+    def compute_result_annotation(self, s_value, s_type):
+        if isinstance(s_type.const, ootype.OOType):
+            TYPE = s_type.const
+        else:
+            cliClass = s_type.const
+            TYPE = cliClass._INSTANCE
+        assert ootype.isSubclass(s_value.ootype, TYPE)
+        return SomeOOInstance(TYPE)
 
     def specialize_call(self, hop):
         assert isinstance(hop.args_s[0], annmodel.SomeOOInstance)
+        v_inst = hop.inputarg(hop.args_r[0], arg=0)
+        return hop.genop('ooupcast', [v_inst], resulttype = hop.r_result.lowleveltype)
+
+
+def cast_to_native_object(obj):
+    raise TypeError, "cast_to_native_object is meant to be rtyped and not called direclty"
+
+def cast_from_native_object(obj):
+    raise TypeError, "cast_from_native_object is meant to be rtyped and not called direclty"
+
+class Entry(ExtRegistryEntry):
+    _about_ = cast_to_native_object
+
+    def compute_result_annotation(self, s_value):
+        assert isinstance(s_value, annmodel.SomeOOObject)
+        assert s_value.ootype is ootype.Object
+        return SomeOOInstance(CLR.System.Object._INSTANCE)
+
+    def specialize_call(self, hop):
+        assert isinstance(hop.args_s[0], annmodel.SomeOOObject)
         v_obj, = hop.inputargs(*hop.args_r)
         hop.exception_cannot_occur()
         return hop.genop('ooupcast', [v_obj], hop.r_result.lowleveltype)
 
 class Entry(ExtRegistryEntry):
-    _about_ = cast_object_to_record
+    _about_ = cast_from_native_object
 
-    def compute_result_annotation(self, s_type, s_value):
-        assert s_type.is_constant()
-        T = s_type.const
-        assert isinstance(T, ootype.Record)
-        can_be_None = getattr(s_value, 'can_be_None', False)
-        return SomeOOInstance(T, can_be_None)
+    def compute_result_annotation(self, s_value):
+        assert isinstance(s_value, annmodel.SomeOOInstance)
+        assert s_value.ootype is CLR.System.Object._INSTANCE
+        return annmodel.SomeOOObject()
 
     def specialize_call(self, hop):
-        assert hop.args_s[0].is_constant()
-        TYPE = hop.args_s[0].const
-        v_obj = hop.inputarg(hop.args_r[1], arg=1)
+        v_obj = hop.inputarg(hop.args_r[0], arg=0)
         return hop.genop('oodowncast', [v_obj], hop.r_result.lowleveltype)
 
-class _fieldinfo(object):
-    def __init__(self, llvalue):
-        self._TYPE = CLR.System.Reflection.FieldInfo._INSTANCE
-        self.llvalue = llvalue
 
-def fieldinfo_for_const(const):
-    return _fieldinfo(const)
-
-class Entry(ExtRegistryEntry):
-    _about_ = fieldinfo_for_const
-
-    def compute_result_annotation(self, s_const):
-        assert s_const.is_constant()
-        return SomeOOInstance(CLR.System.Reflection.FieldInfo._INSTANCE)
-
-    def specialize_call(self, hop):
-        llvalue = hop.args_v[0].value
-        c_llvalue = hop.inputconst(ootype.Void, llvalue)
-        return hop.genop('cli_fieldinfo_for_const', [c_llvalue], resulttype = hop.r_result.lowleveltype)
-
-
-class Entry(ExtRegistryEntry):
-    _type_ = _fieldinfo
-
-    def compute_annotation(self):
-        return SomeOOInstance(CLR.System.Reflection.FieldInfo._INSTANCE)
 
 from pypy.translator.cli.query import CliNamespace
 CLR = CliNamespace(None)
 CLR._buildtree()
 
 known_delegates = {
+    ootype.StaticMethod([], ootype.Signed): CLR.pypy.test.DelegateType_int__0,
+    ootype.StaticMethod([ootype.Signed, ootype.Float], ootype.Float): CLR.pypy.test.DelegateType_double_int_double,
+    ootype.StaticMethod([ootype.Float], ootype.Float):         CLR.pypy.test.DelegateType_double__double_1,
+    ootype.StaticMethod([ootype.Bool], ootype.Bool):           CLR.pypy.test.DelegateType_bool_bool_1,
+    ootype.StaticMethod([ootype.Char], ootype.Char):           CLR.pypy.test.DelegateType_char_char_1,
+    ootype.StaticMethod([ootype.Signed], ootype.Void):         CLR.pypy.test.DelegateType_void_int_1,
     ootype.StaticMethod([ootype.Signed], ootype.Signed):       CLR.pypy.test.DelegateType_int__int_1,
     ootype.StaticMethod([ootype.Signed] * 2, ootype.Signed):   CLR.pypy.test.DelegateType_int__int_2,
     ootype.StaticMethod([ootype.Signed] * 3, ootype.Signed):   CLR.pypy.test.DelegateType_int__int_3,
     ootype.StaticMethod([ootype.Signed] * 5, ootype.Signed):   CLR.pypy.test.DelegateType_int__int_5,
-    ootype.StaticMethod([ootype.Signed] * 27, ootype.Signed):   CLR.pypy.test.DelegateType_int__int_27,
+    ootype.StaticMethod([ootype.Signed] * 27, ootype.Signed):  CLR.pypy.test.DelegateType_int__int_27,
     ootype.StaticMethod([ootype.Signed] * 100, ootype.Signed): CLR.pypy.test.DelegateType_int__int_100
     }
 
 known_delegates_class = {}
+
+cVoid = classof(CLR.System.Void)
+def class2type(cls):
+    'Cast a PBC of type ootype.Class into a System.Type instance'
+    if cls is cVoid:
+        return None
+    return clidowncast(box(cls), CLR.System.Type)
+
+def type2class(clitype):
+    'Cast a System.Type instance to a PBC of type ootype.Class'
+##     if clitype is None:
+##         return cVoid
+    return unbox(clitype, ootype.Class)

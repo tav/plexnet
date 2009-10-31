@@ -1,31 +1,33 @@
 import py
 import os, sys
 from py.__.io import terminalwriter 
+import StringIO
 
 def skip_win32():
     if sys.platform == 'win32':
         py.test.skip('Not relevant on win32')
 
-def test_terminalwriter_computes_width():
-    py.magic.patch(terminalwriter, 'get_terminal_width', lambda: 42)
-    try:
-        tw = py.io.TerminalWriter()  
-        assert tw.fullwidth == 42
-    finally:         
-        py.magic.revert(terminalwriter, 'get_terminal_width')
+def test_terminalwriter_computes_width(monkeypatch):
+    monkeypatch.setattr(terminalwriter, 'get_terminal_width', lambda: 42)
+    tw = py.io.TerminalWriter()  
+    assert tw.fullwidth == 42
 
-def test_terminalwriter_defaultwidth_80():
-    py.magic.patch(terminalwriter, '_getdimensions', lambda: 0/0)
-    try:
-        tw = py.io.TerminalWriter()  
-        assert tw.fullwidth == int(os.environ.get('COLUMNS', 80)) -1
-    finally:         
-        py.magic.revert(terminalwriter, '_getdimensions')
-        
+def test_terminalwriter_defaultwidth_80(monkeypatch):
+    monkeypatch.setattr(terminalwriter, '_getdimensions', lambda: 0/0)
+    tw = py.io.TerminalWriter()  
+    assert tw.fullwidth == int(os.environ.get('COLUMNS', 80)) -1
     
 def test_terminalwriter_default_instantiation():
     tw = py.io.TerminalWriter(stringio=True)
     assert hasattr(tw, 'stringio')
+
+def test_terminalwriter_dumb_term_no_markup(monkeypatch):
+    monkeypatch.setattr(os, 'environ', {'TERM': 'dumb', 'PATH': ''})
+    monkeypatch.setattr(sys, 'stdout', StringIO.StringIO())
+    monkeypatch.setattr(sys.stdout, 'isatty', lambda:True)
+    assert sys.stdout.isatty()
+    tw = py.io.TerminalWriter()
+    assert not tw.hasmarkup
 
 class BaseTests:
     def test_line(self):    
@@ -34,6 +36,16 @@ class BaseTests:
         l = self.getlines()
         assert len(l) == 1
         assert l[0] == "hello\n"
+
+    def test_line_unicode(self):    
+        tw = self.getwriter()
+        for encoding in 'utf8', 'latin1':
+            tw._encoding = encoding 
+            msg = unicode('b\u00f6y', 'utf8')
+            tw.line(msg)
+            l = self.getlines()
+            assert not isinstance(l[0], unicode) 
+            assert unicode(l[0], encoding) == msg + "\n"
 
     def test_sep_no_title(self):
         tw = self.getwriter()
@@ -82,6 +94,16 @@ class BaseTests:
         tw.sep("-", "hello")
         l = self.getlines()
         assert len(l[0]) == len(l[1])
+
+class TestTmpfile(BaseTests):
+    def getwriter(self):
+        self.path = py.test.config.ensuretemp("terminalwriter").ensure("tmpfile")
+        self.tw = py.io.TerminalWriter(self.path.open('w+'))
+        return self.tw
+    def getlines(self):
+        io = self.tw._file
+        io.flush()
+        return self.path.open('r').readlines()
 
 class TestStringIO(BaseTests):
     def getwriter(self):
