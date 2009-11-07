@@ -56,13 +56,15 @@ _set_target() {
 _uncompress_tarball() {
     echo ${action} Installing $TARGET ${normal}
     cd $PLEXNET_ROOT/third_party/distfiles/$TNAME
-    TARBALL_FILENAME=$TNAME-$TVERS.tar.gz
-    if [ ! -f $TARBALL_FILENAME ]; then
+    TARBALL_FILENAME=$TNAME-$TVERS.tar
+    TARBALL_ZIPPED_FILENAME=$TARBALL_FILENAME.$TARBALL_SUFFIX
+    if [ ! -f $TARBALL_ZIPPED_FILENAME ]; then
         echo ${progress} Downloading the $TARGET Source Code ${normal}
-        ${_downloader} ${DISTFILES_SERVER}/${TARBALL_FILENAME}
+        ${_downloader} ${DISTFILES_SERVER}/${TARBALL_ZIPPED_FILENAME}
     fi
     echo ${progress} Unpacking the $TARGET Source Code ${normal}
-    tar -xzf $TARBALL_FILENAME
+    $TARBALL_UNZIP -c $TARBALL_ZIPPED_FILENAME > $TARBALL_FILENAME
+    tar -xf $TARBALL_FILENAME
     cd $TNAME
     echo ${progress} Compiling $TARGET ${normal}
 }
@@ -78,11 +80,15 @@ _remove_directory() {
     echo ${success} Successfully installed $TARGET ${normal}
     cd ..
     rm -rf $TNAME
+    rm $TARBALL_FILENAME
 }
 
 if [ ! -f $PLEXNET_LOCAL/bin/python2.6 ]; then
 
     CURDIR=`pwd`
+
+    TARBALL_SUFFIX="gz"
+    TARBALL_UNZIP="gunzip"
 
     if [ "$UNAME" == "Darwin" ]; then
         EXTRA_PY_ARGS="--enable-toolbox-glue --enable-framework=$PLEXNET_LOCAL/framework"
@@ -107,7 +113,10 @@ if [ ! -f $PLEXNET_LOCAL/bin/python2.6 ]; then
     make -f $BZIP2_MAKEFILE all PREFIX=$PLEXNET_LOCAL || _exit_on_error
     _remove_directory
 
-    _set_target "python" "2.6.2"
+    TARBALL_SUFFIX="bz2"
+    TARBALL_UNZIP="bunzip2"
+
+    _set_target "python" "2.6.4"
     CONFIG_FLAGS="--enable-ipv6 --enable-unicode=ucs2 $EXTRA_PY_ARGS"
     _compile_tarball
 
