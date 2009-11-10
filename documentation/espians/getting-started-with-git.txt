@@ -204,7 +204,7 @@ repositories which all core developers have write access to. The main
 repositories are:
 
 * http://github.com/tav/plexnet/
-* http://github.com/tav/webkit_titanium/
+* http://github.com/tav/webkit/
 
 If you would like write access, just ask `tav <http://tav.espians.com>`_. If
 you're not a core developer, you can simply fork the project. GitHub makes this
@@ -289,10 +289,9 @@ repositories is generally limited to simply fetching/pushing changes.
 And since these remotes are in relation to just *your* local repository, you can
 set up as many of these as is relevant without affecting anyone else's setup.
 Now you might wonder why you need multiple remotes to be configured. For this,
-let's take a look at the ``webkit_titanium`` repository.
+let's take a look at the ``webkit`` repository.
 
-Our `webkit_titanium <http://github.com/tav/webkit_titanium/>`_ repository is
-actually a fork of:
+Our `webkit <http://github.com/tav/webkit/>`_ repository is actually a fork of:
 
 * http://github.com/appcelerator/webkit_titanium
 
@@ -301,7 +300,7 @@ fork ``appcelerator/webkit_titanium`` since we only have read-only access to it.
 But when we run the following command to clone our repository it doesn't come
 with any references to the original Appcelerator repository::
 
-  $ git clone git@github.com:tav/webkit_titanium.git
+  $ git clone git@github.com:tav/webkit.git
 
 The ``.git/config`` in the newly created repository directory would have
 something like the following in it:
@@ -309,7 +308,7 @@ something like the following in it:
   .. syntax:: ini
 
     [remote "origin"]
-        url = git@github.com:tav/webkit_titanium.git
+        url = git@github.com:tav/webkit.git
         fetch = +refs/heads/*:refs/remotes/origin/*
 
 Now if a developer wants to keep an eye on changes that Appcelerator make -- and
@@ -339,17 +338,17 @@ And get further detail on any of them using::
 
   $ git remote show origin
   * remote origin
-    URL: git@github.com:tav/webkit_titanium.git
-    HEAD branch: titanium_pr4
+    Fetch URL: git@github.com:tav/webkit.git
+    Push  URL: git@github.com:tav/webkit.git
+    HEAD branch: master
     Remote branches:
-      master                 tracked
-      titanium_1.0           tracked
-      titanium_1.0_win32_osx tracked
-      titanium_pr4           tracked
+      master           tracked
+      pypy-integration tracked
     Local branch configured for 'git pull':
       master merges with remote master
-    Local ref configured for 'git push':
-      master pushes to master (up to date)
+    Local refs configured for 'git push':
+      master           pushes to master           (up to date)
+      pypy-integration pushes to pypy-integration (up to date)
 
 The previous command does a remote query over the network, so you can pass an
 additional ``-n`` parameter to just use the cached data instead, i.e.
@@ -367,8 +366,8 @@ simply run::
   remote: Compressing objects: 100% (59/59), done.
   remote: Total 64 (delta 38), reused 0 (delta 0)
   Unpacking objects: 100% (64/64), done.
-  From git@github.com:tav/webkit_titanium
-     7e329e4..d262952  titanium_pr4 -> origin/titanium_pr4
+  From git@github.com:tav/webkit
+     7e329e4..d262952  master -> origin/master
   Updating upstream
   From git://github.com/appcelerator/webkit_titanium
    * [new branch]      master     -> upstream/master
@@ -966,11 +965,9 @@ command is of the form ``git fetch <remote>`` -- and by default it uses "origin"
 if no remote was specified::
 
   $ git fetch -v
-  From git://github.com/tav/webkit_titanium
+  From github.com:tav/webkit
    = [up to date]      master     -> origin/master
-   = [up to date]      titanium_1.0 -> origin/titanium_1.0
-   = [up to date]      titanium_1.0_win32_osx -> origin/titanium_1.0_win32_osx
-   = [up to date]      titanium_pr4 -> origin/titanium_pr4
+   = [up to date]      pypy-integration -> origin/pypy-integration
 
 But even better than doing several git fetch commands is to run the following
 which updates your copies of *all* of your remote repositories, i.e. equivalent
@@ -1321,14 +1318,14 @@ can only point to a *specific* commit identifier.
 
 References to submodules are stored in a special ``.gitmodules`` file at the
 root of the repository. For example, our plexnet repository has a reference to
-our webkit_titanium repository::
+our webkit repository::
 
   $ cat plexnet/.gitmodules
-  [submodule "third_party/generic/webkit_titanium"]
-      path = third_party/generic/webkit_titanium
-      url = git://github.com/tav/webkit_titanium.git
+  [submodule "third_party/generic/webkit"]
+      path = third_party/generic/webkit
+      url = git://github.com/tav/webkit.git
 
-The specified path ``third_party/generic/webkit_titanium`` will be an empty
+The specified path ``third_party/generic/webkit`` will be an empty
 directory until you initialise it using::
 
   $ git submodule init
@@ -1337,17 +1334,16 @@ All this does is update your ``.git/config`` file with the info it finds in the
 .gitmodules file::
 
   $ tail -2 plexnet/.git/config
-  [submodule "third_party/generic/webkit_titanium"]
-      url = git://github.com/tav/webkit_titanium.git
+  [submodule "third_party/generic/webkit"]
+      url = git://github.com/tav/webkit.git
 
 You can then modify this file to use a different repository url. For example if
-you had read/write access to the webkit_titanium repository you can change it
-to:
+you had read/write access to the webkit repository you can change it to:
 
   .. syntax:: ini
 
-    [submodule "third_party/generic/webkit_titanium"]
-        url = git@github.com:tav/webkit_titanium.git
+    [submodule "third_party/generic/webkit"]
+        url = git@github.com:tav/webkit.git
 
 And then to clone the missing submodules and checkout the commit specified in
 the index of the containing repository, do::
@@ -1359,9 +1355,9 @@ You can combine both of the above commands into one using::
   $ git submodule update --init
 
 You'll now see a full repository checked out under
-``third_party/generic/webkit_titanium`` with its own .git subdirectory and
-everything. You can now make changes to this repository just like you would in
-any normal Git repository.
+``third_party/generic/webkit`` with its own .git subdirectory and everything.
+You can now make changes to this repository just like you would in any normal
+Git repository.
 
 You can execute commands on all of the submodules of a repository using::
 
@@ -1380,15 +1376,15 @@ If you want to update the commit reference to an existing submodule, then simply
 update the submodule repository to the state you want to refer to and then do a
 ``git add``::
 
-  $ git add third_party/generic/webkit_titanium
+  $ git add third_party/generic/webkit
 
 ::
 
   $ git-diff --staged
-  diff --git a/third_party/generic/webkit_titanium b/third_party/generic/webkit_titanium
+  diff --git a/third_party/generic/webkit b/third_party/generic/webkit
   index cb03eaa..d262952 160000
-  --- a/third_party/generic/webkit_titanium
-  +++ b/third_party/generic/webkit_titanium
+  --- a/third_party/generic/webkit
+  +++ b/third_party/generic/webkit
   @@ -1 +1 @@
   -Subproject commit cb03eaa72b885500cde35952de93bbf1b831af3f
   +Subproject commit d2629522d30b737c0efa5ddcc445339513f6ce33
@@ -1397,13 +1393,13 @@ Note: DO NOT put a trailing slash after the submodule name, e.g.
 
 ::
 
-  $ git add third_party/generic/webkit_titanium/
+  $ git add third_party/generic/webkit/
 
 Git will then think that you want to delete the submodule and add all the files
 in the directory instead! Leave out any trailing slashes and everything will be
 fine::
 
-  $ git add third_party/generic/webkit_titanium
+  $ git add third_party/generic/webkit
 
 Also, make sure to have PUSHED ANY COMMITS you made in the submodule repository
 before updating the containing repository's references. Otherwise you'd be
