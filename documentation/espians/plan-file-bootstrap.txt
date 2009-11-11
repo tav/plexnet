@@ -1,11 +1,15 @@
----------------------
+=====================
 Plan File / Bootstrap
----------------------
+=====================
 
 :Abstract:
 
-    This is the plan file for the Bootstrap phase of [[Iteration X]] -- it will
-    be updated regularly as progress is made.
+    This is the plan file for the final bootstrap phase of Espra -- it will be
+    updated regularly as progress is made.
+
+    As of November 2009, this is the most authoritative document and obsoletes
+    any other specification or todo file relating to Espra that you might find
+    elsewhere on the internet.
 
 .. contents::   Table of Contents
                 :depth: 2
@@ -13,16 +17,398 @@ Plan File / Bootstrap
 
 .. plan:: bootstrap
 
+.. raw:: html
+
+  <style type="text/css">
+    .single-line .literal-block {
+      line-height: 1em !important;
+    }
+    .cmd-line {
+      background-color: #000;
+      color: #fff;
+      padding: 5px;
+      margin-left: 2em;
+      margin-right: 2em;
+    }
+    .cmd-ps1 {
+      color: #999;
+    }
+  </style>
+
+
+Overview
+========
+
+The bootstrap phase will be primarily focused on the development and launch of
+Espra Protoplex.
+
+.. class:: single-line
+..
+
+  ::
+
+                          _                  _                
+                         ( )_               (_ )              
+       _ _    _ __   _   | ,_)   _    _ _    | |    __        
+      ( '_`\ ( '__)/'_`\ | |   /'_`\ ( '_`\  | |  /'__`\(`\/')
+      | (_) )| |  ( (_) )| |_ ( (_) )| (_) ) | | (  ___/ >  < 
+      | ,__/'(_)  `\___/'`\__)`\___/'| ,__/'(___)`\____)(_/\_)
+      | |                            | |                      
+      (_)                            (_)                      
+
+Unlike the totally decentralised Espra `Plexnet
+<http://www.espians.com/plexnet.html>`_, the Protoplex variant will be
+centralised and specifically designed in order to be deployed in the context of
+`Amazon EC2 <http://aws.amazon.com/ec2/>`_, `S3 <http://aws.amazon.com/s3/>`_
+and `Google App Engine <http://code.google.com/appengine/>`_.
+
+Development will be taking place at our `plexnet repository
+<http://github.com/tav/plexnet/>`_ on GitHub since the repository is already
+established and it is imagined that there will be a lot of code sharing between
+the two variants.
+
+If you are not familiar with `git version control <http://git-scm.com/>`_, you
+might want to read my article on `getting started with git
+<http://www.espians.com/getting-started-with-git.html>`_.
+
+Those of you who have write access to the repository should use the private
+clone URL:
+
+.. raw:: html
+
+  <pre class="cmd-line">
+  <span class="cmd-ps1">$</span> git clone git@github.com:tav/plexnet.git
+  </pre>
+
+Even if you don't, you can still hack on the code base by using the public clone
+URL:
+
+.. raw:: html
+
+  <pre class="cmd-line">
+  <span class="cmd-ps1">$</span> git clone git://github.com/tav/plexnet.git
+  </pre>
+
+Once you've made your great commits, you can contribute back by `forking
+<http://help.github.com/forking/>`_ the repository and sending me a `pull
+request <http://github.com/guides/pull-requests>`_ for your patches.
+
+Please note that by either committing to the main repository or by sending a
+pull request, you agree to `documentation/legal.txt
+<http://github.com/tav/plexnet/blob/master/documentation/legal.txt>`_. That is,
+you agree to place your contributions into the `public domain
+<http://creativecommons.org/publicdomain/zero/1.0/>`_.
+
+You can also commit compatible (i.e. non-copyleft) open source code by others,
+but these should be clearly marked with specific license headers at the top of
+files or with ``LICENSE.txt`` files in enclosing directories.
+
+And, finally, details relating to Espra deployment -- e.g. SSH keys, API keys,
+security tokens, etc. -- will be stored in a private `espra repository
+<http://github.com/tav/espra/>`_. The contents of this repository will not be
+public domain for obvious reasons and will only be accessible to Espra admins.
+
+Feel free to contact me or the others involved at any time. Until Espra itself
+is developed, you should be able to engage everyone on:
+
+* IRC: irc://irc.freenode.net/esp [`chatlogs
+  <http://www.openideaproject.org/irclogs/browse/esp/latest>`_]
+
+* Mailing List: http://groups.google.com/group/plexnet
+
+Welcome and hope you enjoy the journey. It's been over 10 years in the making
+and I hope we've worked out enough of the kinks to make it a smooth one for
+everyone.
+
+.. class:: right
+
+  -- with love, tav@espians.com, `BDFL
+  <http://en.wikipedia.org/wiki/Benevolent_Dictator_For_Life>`_
+
+
+Redpill
+=======
+
+The ``redpill`` app inside ``environ/startup`` will 
+
+Unread counts are 
+
+`Homebrew <http://github.com/mxcl/homebrew>`_, the Ruby-based package management
+system for OS X, comes surprisingly close.
+
+http://en.wikipedia.org/wiki/X_Window_System
+
+http://en.wikipedia.org/wiki/Moblin
+
+There are 7 types of Nodes which will be running on top of EC2:
+
+* Proxy
+* Fileserver
+* App
+* Mail
+* Live
+* Seed
+* Admin
+
+These will be complemented by 2 App Engine applications:
+
+* Espra
+* EspraLog
+
+And a number of "off-site" services running on Virtual Private Server (VPS)
+providers like Linode and Slicehost:
+
+* DNS
+* Redirects
+* Monitoring
+
+
+Node Structure
+==============
+
+A Node is started up using the ``environ/startup/plexnode`` script. 
+
+On startup all nodes establish a connection to the Seed node.
+
+::
+
+   +----------------+
+   | Internet Horde |
+   +----------------+
+         |                                  +-------------+
+         |             +-----------+        | Other Nodes |
+         ±             | Seed Node |        +-------------+
+         |             +-----------+              |
+         |              |     \                   |
+     +-------------+    |      \                  |
+     | Public Port |    |     +----------------------------------+
+     +-------------+    |     | Meta Port (Internal Access Only) |
+            \           |     +----------------------------------+
+             \          |       /
+              \         |      /
+   +===========\========|=====/=================================+
+   |            \       |    /                                  |
+   |          +----------------------+                          |
+   |          | Node: Parent Process |                          |
+   |          +----------------------+                          |
+   |                   |                                        |
+   |                   |                                        |
+   |    +-----------------------+-----------------------+       |
+   |    |                       |                       |       |
+   |  +---------------+         |            +---------------+  |
+   |  | Child Process |  +---------------+   | Child Process |  |
+   |  +---------------+  | Child Process |   +---------------+  |
+   |                     +---------------+                      |
+   |                                                            |
+   +============================================================+
+
+
+Proxy Nodes
+===========
+
+:Protocols: HTTP, HTTPS
+:ELB: Yes
+:LocalPorts: 8080, 8443
+:RemotePorts: 80, 443
+
+Proxy nodes are intelligent proxies to the Live nodes. They:
+
+* Parse enough of the request according to predefined handlers.
+
+* Query the Seed node to find out which particular Live node they should be
+  relaying the request to.
+
+* Stop any further processing and simply proxy to and from the target Live node.
+
+In order to facilitate high throughput, Proxy nodes will use the multi-process
+single-threaded coroutines-based HTTP server.
+
+Depending on whether they are in the ``us-east`` or ``eu-west`` region, the
+Proxy nodes will respectively respond to requests on either
+``us-1.live.espra.com`` or ``eu-1.live.espra.com``.
+
+For scalability, the Proxy nodes will sit behind Auto Scaling enabled Elastic
+Load Balancers (ELB) in both regions.
+
+
+Fileserver Nodes
+================
+
+:Protocols: HTTP, HTTPS
+:ELB: Yes
+:LocalPorts: 8080, 8443
+:RemotePorts: 80, 443
+
+Fileserver nodes handle static files in a variety of different ways. Initially,
+four specific handlers would be specified:
+
+1. The ``AppFilesHandler`` will serve the main Espra app related assets from
+   memory, e.g. javascript, css, images, etc. These in-memory caches would be
+   invalidated when a new app build is pushed out by the Seed node.
+
+2. The ``S3FilesHandler`` will look for the requested file in a local disk cache
+   before querying S3 for the source file if it's not found. If found, the
+   source file will be cached locally and (if appropriate) uncompressed before
+   being served as a response. If not found, the handler will register for an
+   update from the Live nodes and store the file key in an in-memory cache so as
+   to minimise unnecessary S3 requests.
+
+3. The ``VhostFilesHandler`` will query the Main Datastore for the storage
+   reference for the file key and Host combination and then use the
+   S3FilesHandler to do the actual serving. Any found or not found storage
+   references will be saved in local caches and invalidated from registrations
+   from the Live nodes.
+
+4. The ``UploadHandler`` will first validate the upload token sent with a POST
+   request. And if it's valid according to the Main Datastore, it will start
+   saving the uploaded file locally. As the upload progresses, a combined
+   (sha256+whirlpool) hash will be created and the Live nodes notified so that
+   upload progress can be relayed back to the uploader. Once the upload is
+   complete, the handler will in turn compress the file if it's compressible,
+   before updating the Main Datastore and uploading it to S3.
+
+All responses will be aggressively cached with HTTP headers with a minimum
+expiration set to at least 1 month. And the nodes will be using the same HTTP
+server as the Proxy nodes and similarly sit behind an Auto Scaling ELB.
+
+However, since latency isn't too critical an issue with file serving, the
+Fileserver nodes and the S3 storage will only exist in the ``us-east`` region
+and will respond to requests on ``*.espfile.com`` or appropriately CNAME'd
+hosts.
+
+
+App Nodes
+=========
+
+:Protocols: HTTP, HTTPS
+:ELB: Yes
+:LocalPorts: 8080, 8443
+:RemotePorts: 80, 443
+
+The App nodes are more CPU-bound and therefore will use a slightly different
+server to the other nodes: a multi-process multi-threaded HTTP server.
+
+
+Main Datastore
+==============
+
+:Protocols: HTTP, HTTPS
+:RemotePorts: 80, 443
+
+The Main Datastore application will be running on the ``espra`` App Engine
+application. It will be accessed only via SSL and with a token and will have two minimal handlers:
+
+This is where all the structured data will be stored and we rely on
+App Engine to provide a query-able and 
+
+
+* Provide access to App Engine's Remote API for access by the various nodes.
+
+Mail
+
+Image
+
+Datastore
+
+Taskqueue
+
+Remote Access
+=============
+
+
+
+Load Balancing
+==============
+
+
+Multi process
+
+Queue
+
+SSL
+
+Update
+
+Accounting/Quota
+
+Planned Maintenance
+GAE
+
+* (Buildbot)
+* Urlfetch
+* Memcache
+
+Thus will get load balanced by the kernel.
+
+Worker
+Queue
+
+cpus -- core
+
+I/O bound
+
+Understudy
+
+node roles
+
+
+Failure and crashes
+
+
+
+
+DNS
+===
+
+DNS for the various Espra domains will be delegated to the DNS services provided
+by Linode and Slicehost.
+
+This should be sufficient protection for now in case of extreme failure at
+either provider. Both providers also offer relatively decent APIs which can be
+used to update the zone records.
+
+
+Support Services
+================
+
+A number of support services will be running on the Linode and Slicehost VPS
+servers:
+
+* Since the ``espra.com`` zone apex cannot be CNAME'd onto the ELB, it will
+  instead round-robin to Apache instances at the various VPS servers. Apache
+  will then redirect the request to the ``www.espra.com`` host on EC2.
+
+* Off-site monitoring apps will test the responsiveness of the various node
+  services on EC2 as well as the App Engine applications. The data will be
+  logged locally and if any service stops responding, a priority SMS will be
+  sent to the Admins.
+
+
 
 Embedded Interpreter
 ====================
 
-We will be using PyPy to build our own interpreter called Naaga.
+.. tag:: id:1, done, @fijal, milestone:FirstRelease, #naaga
 
-.. tag:: id:1, done, @fijal
+  We need to extend PyPy's translator so that it can create a embeddable/library
+  version of interpreters supporting the following C API:
 
-  We need to extend PyPy so that it can create a library version of interpreters.
-  To start with it should produce ``libnaaga`` on both Linux and OS X.
+    .. syntax:: c
+
+      char *RPython_StartupCode();
+      long interpret(const char *, char *);
+
+.. tag:: wip, @fijal, @oierw, milestone:FirstRelease, #naaga, #client
+
+  There needs to be a comprehensive bi-directional ``webkit_bridge``
+  implementation which will map objects and calls between WebKit and our
+  PyPy-based Naaga interpreter -- with special consideration given to
+  implications on garbage collection.
+
+.. tag:: id:10, needsreview, @fijal, @oierw
+
+  A ``libnaaga`` version of our Naaga interpreter needs to be buildable on both
+  Linux and OS X.
 
 .. tag:: wip, @fijal
 
@@ -39,23 +425,27 @@ We will be using PyPy to build our own interpreter called Naaga.
   The Naaga interpreter needs to compile cleanly on OS X 10.4 (Tiger) and 10.5
   (Leopard).
 
-.. tag:: todo, @fijal, @JohnMW, @happyseaurchin, @jeffarch, @sbp, @thruflo,
-         @cre8radix, @evangineer, #design, #testing, #ui, #outreach, #backend
+.. tag:: todo, @fijal, @JohnMW, @happyseaurchin, @jeffarch, @sbp, @thruflo, @Mut1ey,
+         @cre8radix, @evangineer, #design, #testing, #ui, #outreach, #backend,
+         #naaga, #client, #sysadmin, @GReaper, @olasofia
 
   We need to extend PyPy so that it can create a library version of interpreters.
   To start with it should produce ``libnaaga`` on both Linux and OS X.
+
+We will be embedding our Naaga interpreter directly into the Plexnet browser.
+
 
 
 Optimisations
 =============
 
-.. tag:: id:3, inreview, @tav, dep:2, #foo, milestone:FirstRelease
+.. tag:: id:3, inreview, @tav, dep:2, milestone:FirstRelease
 
   The ``validation.validate`` decorator should create a decorated version of the
   service function by generating the appropriate bytecode for the new function
   instead of creating it by exec-ing generated source code.
 
-.. tag:: id:4, todo, @tav, dep:2, #foo, milestone:FirstRelease
+.. tag:: id:4, todo, @tav, dep:2, milestone:FirstRelease
 
   The ``validation.validate`` decorator should create a decorated version of the
   service function by generating the appropriate bytecode for the new function
@@ -87,3 +477,55 @@ maybe a way to would categorize pages automatically — in my case, a quick scan
 of the page would put pages with “ruby” “rails”, “javascript” etc in one
 category, “markets” “capitalism”, “stimulus” etc in another, and so on.
 
+--------------------------------------------------------------------------------
+
+::
+
+  <?xml version="1.0" encoding="UTF-8"?>
+  <group>
+  <action>create</action>
+  <controller>session</controller>
+  <created-at type="datetime">2008-07-09T20:06:44-07:00</created-at>
+  <error-class>NoMethodError</error-class>
+  <error-message>NoMethodError: undefined method `password' for nil:NilClass</error-message>
+
+  <file>[RAILS_ROOT]/app/models/user.rb</file>
+  <id type="integer">5529</id>
+  <last-notice-at type="datetime">2008-07-31T04:21:52-07:00</last-notice-at>
+  <last-notice-id type="integer">203799</last-notice-id>
+  <line-number type="integer">186</line-number>
+  <notices-count type="integer">30</notices-count>
+
+  <project-id type="integer">2</project-id>
+  <rails-env>production</rails-env>
+  <updated-at type="datetime">2008-07-31T04:21:52-07:00</updated-at>
+  <visible type="boolean">true</visible>
+  </group>
+
+Chrome OS
+
+Hopefully they will come up with X
+
+We will be conducting a media blitz.
+
+.. latest used id: 1
+.. PLEASE UPDATE THIS WHENEVER YOU CREATE A NEW ITEM !!
+
+
+Launch
+======
+
+.. tag:: wip, priority:1, milestone:FirstRelease
+
+  Generate a spreadsheet of 1,000 thought leaders and cultural creatives to
+  contact from around the world.
+
+http://0install.net/
+
+http://github.com/mxcl/homebrew/tree/master/Library/Homebrew
+
+Wave history
+
+Geographical boundaries make little sense
+
+DKIM for sender authentication
