@@ -1,3 +1,6 @@
 [submodule "third_party/generic/webkit"]
 	path = third_party/generic/webkit
 	url = git://github.com/tav/webkit.git
+[submodule "third_party/generic/redis"]
+	path = third_party/generic/redis
+	url = /Users/tav/work/third_party/generic/redis
