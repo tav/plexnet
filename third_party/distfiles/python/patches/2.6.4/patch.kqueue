@@ -1,0 +1,47 @@
+diff -r fc6cf749b544 Lib/test/test_kqueue.py
+--- a/Lib/test/test_kqueue.py	Sat May 02 22:26:53 2009 +0200
++++ b/Lib/test/test_kqueue.py	Sat May 02 23:47:13 2009 +0200
+@@ -162,6 +162,22 @@
+         server.close()
+         serverSocket.close()
+ 
++    def testPair(self):
++        kq = select.kqueue()
++        a, b = socket.socketpair()
++
++        a.send(b'foo')
++        event1 = select.kevent(a, select.KQ_FILTER_READ, select.KQ_EV_ADD | select.KQ_EV_ENABLE)
++        event2 = select.kevent(b, select.KQ_FILTER_READ, select.KQ_EV_ADD | select.KQ_EV_ENABLE)
++        r = kq.control([event1, event2], 1, 1)
++        self.assertTrue(r)
++        self.assertFalse(r[0].flags & select.KQ_EV_ERROR)
++        self.assertEquals(b.recv(r[0].data), b'foo') 
++
++        a.close()
++        b.close()
++        kq.close()
++
+ def test_main():
+     test_support.run_unittest(TestKQueue)
+ 
+diff -r fc6cf749b544 Modules/selectmodule.c
+--- a/Modules/selectmodule.c	Sat May 02 22:26:53 2009 +0200
++++ b/Modules/selectmodule.c	Sat May 02 23:47:13 2009 +0200
+@@ -1487,7 +1487,7 @@
+ 	if (nevents < 0) {
+ 		PyErr_Format(PyExc_ValueError,
+ 			"Length of eventlist must be 0 or positive, got %d",
+-			nchanges);
++			nevents);
+ 		return NULL;
+ 	}
+ 
+@@ -1553,7 +1553,7 @@
+ 				 	"select.kevent objects");
+ 				goto error;
+ 			} else {
+-				chl[i] = ((kqueue_event_Object *)ei)->e;
++				chl[i++] = ((kqueue_event_Object *)ei)->e;
+ 			}
+ 			Py_DECREF(ei);
+ 		}
