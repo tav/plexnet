@@ -39,6 +39,8 @@
 
 UNAME=$(uname -s)
 
+((uname -m | grep "64") > /dev/null) && UARCH="64" || UARCH="32"
+
 # ------------------------------------------------------------------------------
 # exit if PLEXNET_ROOT is not set
 # ------------------------------------------------------------------------------
@@ -57,9 +59,9 @@ if [ "$PLEXNET_ROOT" ]; then
     export PLEXNET_LOCAL=$PLEXNET_ROOT/environ/local
 
     if [ $PATH ]; then
-        export PATH=$PLEXNET_ROOT/environ/startup:$PLEXNET_LOCAL/bin:$PLEXNET_LOCAL/freeswitch/bin:$PATH
+        export PATH=$PLEXNET_ROOT/environ/startup:$PLEXNET_LOCAL/bin:$PLEXNET_LOCAL/freeswitch/bin:$PLEXNET_ROOT/third_party/generic/depot_tools:$PATH
     else
-        export PATH=$PLEXNET_ROOT/environ/startup:$PLEXNET_LOCAL/bin:$PLEXNET_LOCAL/freeswitch/bin
+        export PATH=$PLEXNET_ROOT/environ/startup:$PLEXNET_LOCAL/bin:$PLEXNET_LOCAL/freeswitch/bin:$PLEXNET_ROOT/third_party/generic/depot_tools
     fi
 
     if [ $UNAME == "Darwin" ]; then
@@ -84,6 +86,41 @@ if [ "$PLEXNET_ROOT" ]; then
         export MANPATH=$PLEXNET_ROOT/documentation/manpage:$PLEXNET_LOCAL/man
     fi
 
+fi
+
+# ------------------------------------------------------------------------------
+# go related variables
+# ------------------------------------------------------------------------------
+
+if [ ! "$GOROOT" ]; then
+	export GOROOT=$PLEXNET_ROOT/third_party/generic/go
+	export GOBIN=$PLEXNET_LOCAL/bin
+fi
+
+if [ ! "$GOARCH" ]; then
+	if [ "$UARCH" == "64" ]; then
+		export GOARCH="amd64"
+	else
+		export GOARCH="386"
+	fi
+fi
+
+
+if [ ! "$GOOS" ]; then
+    if [ $UNAME == "Darwin" ]; then
+		export GOOS="darwin"
+	fi
+    if [ $UNAME == "Linux" ]; then
+		export GOOS="linux"
+	fi
+fi
+
+# ------------------------------------------------------------------------------
+# nativeclient related variables
+# ------------------------------------------------------------------------------
+
+if [ ! "$NACL_ROOT" ]; then
+	export NACL_ROOT=$PLEXNET_LOCAL/third_party/generic/nativeclient
 fi
 
 if [ "$1" == "install" ]; then
