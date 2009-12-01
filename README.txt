@@ -30,9 +30,9 @@ You can checkout this repository by using::
 And then, assuming you have the usual dev environment (gcc, make, etc.), run
 ``./plexnet/environ/startup/redpill init`` in a shell/terminal to get started...
 
-All of the work, except for the bits in the ``third_party`` directory, have been
-placed into the Public Domain. See ``documentation/legal.txt`` for the full
-Public Domain Dedication.
+All of the work, except for the bits in ``third_party`` directories and files
+with specific license headers, have been placed into the Public Domain. See
+``documentation/legal.txt`` for the full Public Domain Dedication.
 
 -- 
 Enjoy, tav
