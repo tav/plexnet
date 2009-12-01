@@ -33,7 +33,6 @@ import tarfile
 import traceback
 
 import plexnetenv
-import gclient
 
 from glob import glob
 from os import stat, getcwd, listdir
@@ -44,6 +43,8 @@ from shutil import rmtree
 from subprocess import Popen, PIPE
 from time import time
 from urllib import urlopen
+
+from gclient_utils import RemoveDirectory
 
 # ------------------------------------------------------------------------------
 # distutils klassifiers and dependensies
@@ -296,7 +297,7 @@ def install_python_package_in_directory(directory):
     path = join_path(PYTHON_SITE_PACKAGES, directory)
     os.chdir(path)
     os.system("%s setup.py install" % sys.executable)
-    gclient.RemoveDirectory(path, 'build')
+    RemoveDirectory(path, 'build')
     os.chdir(CURRENT_DIRECTORY)
 
 def get_extensions(directory, source='.c', compiled=LIB_EXTENSION, filename_only=0):
@@ -767,7 +768,7 @@ def install_packages(types=types, altered=False):
         os.chdir(dest_dir)
 
         if distfile.endswith('.tar.bz2'):
-            # gclient.RemoveDirectory(name)
+            # RemoveDirectory(name)
             rmtree(join_path(dest_dir, name))
 
         if info['after_install']:
@@ -778,7 +779,12 @@ def install_packages(types=types, altered=False):
 def setup_role(role):
     """Setup the installation requirements for the given ``role``."""
 
-    role_info_file = open(join_path(ROLES_DIRECTORY, '%s.role' % role), 'rb')
+    try:
+        role_info_file = open(join_path(ROLES_DIRECTORY, '%s.role' % role), 'rb')
+    except IOError, error:
+        print_message("%s: %s" % (error[1], error.filename), ERROR)
+        sys.exit(1)
+
     for package in map(str.strip, role_info_file.readlines()):
         if (not package) or package.startswith('#'):
             continue
@@ -803,7 +809,9 @@ if FIRST_RUN:
 
 if get_flag('init'):
 
-    for role in sys.argv[1:]:
+    roles = sys.argv[1:] or ['default']
+
+    for role in roles:
         setup_role(role)
 
     install_packages()
@@ -857,7 +865,7 @@ if get_flag('init'):
             "Compiling Extensions", "Compiled", PYTHON_SITE_PACKAGES,
             lambda : setup(ext_modules=pyc_extensions),
             )
-        gclient.RemoveDirectory(join_path(PYTHON_SITE_PACKAGES, 'build'))
+        RemoveDirectory(join_path(PYTHON_SITE_PACKAGES, 'build'))
 
     import plexnet as PACKAGE
     from Cython.Compiler.Main import main as compile_cython
@@ -904,7 +912,7 @@ if get_flag('init'):
                 lambda : setup(name=PACKAGE.__name__, ext_modules=pyc_extensions),
                 )
 
-        gclient.RemoveDirectory(join_path(PKG_DIRECTORY, 'build'))
+        RemoveDirectory(join_path(PKG_DIRECTORY, 'build'))
 
     sys.argv = original_argv
 
@@ -970,53 +978,3 @@ if CURRENT_DIRECTORY != STARTUP_DIRECTORY:
         sys.exit()
 
 print __doc__ % locals()
-
-# _compile_tarball() {
-#     _uncompress_tarball
-#     CPPFLAGS="-I$PLEXNET_LOCAL/include" LDFLAGS="-L$PLEXNET_LOCAL/lib" ./configure --prefix=$PLEXNET_LOCAL $CONFIG_FLAGS || _exit_on_error
-#     CPPFLAGS="-I$PLEXNET_LOCAL/include" LDFLAGS="-L$PLEXNET_LOCAL/lib" make install || _exit_on_error
-#     _remove_directory
-# }
-
-# _remove_directory() {
-#     echo ${success} Successfully installed $TARGET ${normal}
-#     cd ..
-#     rm -rf $TNAME
-#     rm $TARBALL_FILENAME
-# }
-
-#     TARBALL_SUFFIX="gz"
-#     TARBALL_UNZIP="gunzip"
-
-#     if [ "$UNAME" == "Darwin" ]; then
-#         EXTRA_PY_ARGS="--enable-toolbox-glue --enable-framework=$PLEXNET_LOCAL/framework"
-#         BZIP2_MAKEFILE="Makefile-libbz2_dylib"
-#     else
-#         EXTRA_PY_ARGS=""
-#         BZIP2_MAKEFILE="Makefile-libbz2_so"
-#     fi
-
-#     _set_target "zlib" "1.2.3"
-#     CONFIG_FLAGS="--shared"
-#     _compile_tarball
-
-#     _set_target "libreadline" "5.2"
-#     CONFIG_FLAGS="--infodir=$PLEXNET_LOCAL/share/info"
-#     _compile_tarball
-
-#     _set_target "bzip2" "1.0.5"
-#     _uncompress_tarball
-#     make install PREFIX=$PLEXNET_LOCAL || _exit_on_error
-#     make clean
-#     make -f $BZIP2_MAKEFILE all PREFIX=$PLEXNET_LOCAL || _exit_on_error
-#     _remove_directory
-
-#     TARBALL_SUFFIX="bz2"
-#     TARBALL_UNZIP="bunzip2"
-
-#     _set_target "python" "2.6.4"
-#     CONFIG_FLAGS="--enable-ipv6 --enable-unicode=ucs2 $EXTRA_PY_ARGS"
-#     _compile_tarball
-
-#     cd $CURDIR
-

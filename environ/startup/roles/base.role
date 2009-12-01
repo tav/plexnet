@@ -1,5 +1,5 @@
-zlib
-libreadline
 bzip2
-openssl
+libreadline
 python
+openssl
+zlib
