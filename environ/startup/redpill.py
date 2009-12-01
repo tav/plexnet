@@ -46,55 +46,6 @@ from time import time
 from urllib import urlopen
 
 # ------------------------------------------------------------------------------
-# do a chek for the required minimal python version and get out early if not met
-# ------------------------------------------------------------------------------
-
-__min_python_version__ = (2, 6, 1)
-
-if not hasattr(sys, 'hexversion') or sys.version_info < __min_python_version__:
-
-    try:
-        print >> sys.stderr, "You need to have at least Python version",
-        print >> sys.stderr, '.'.join(map(str, __min_python_version__)),
-    except:
-        sys.stderr.write("You do not have the required Python version.")
-
-    sys.stderr.write('\n')
-
-    version = __min_python_version__
-
-    if len(version) == 3 and (version[-1] == 0):
-        version = version[:2]
-
-    version = '.'.join(map(str, version))
-
-    if sys.platform == "darwin":
-
-        print """
-You can download a Universal build here:
-
-  <http://www.python.org/ftp/python/%s/python-%s-macosx.dmg>
-""" % (version, version)
-
-    elif sys.platform == "win32":
-        print """
-You can download it here:
-
-  <http://www.python.org/ftp/python/%s/python-%s.msi>
-""" % (version, version)
-
-    else:
-        print """
-This is often available in your operating system's native package format (via
-apt-get or yum, for instance). You can also easily build Python from source on
-Unix-like systems. Here is the source download link for Python:
-
-  <http://www.python.org/ftp/python/%s/Python-%s.tgz>
-""" % (version, version)
-
-    sys.exit(1)
-
-# ------------------------------------------------------------------------------
 # distutils klassifiers and dependensies
 # ------------------------------------------------------------------------------
 
@@ -130,7 +81,7 @@ DEPENDENCIES = [(isinstance(i, tuple) and i[0] or i) for i in DOWNLOAD_MAP]
 # some konstants
 # ------------------------------------------------------------------------------
 
-__version__ = '0.1'
+__version__ = '0.2'
 __additional__ = ''
 
 DISTFILES_SERVER = (
@@ -145,6 +96,7 @@ PLEXNET_INCLUDE = join_path(PLEXNET_LOCAL, 'include')
 PLEXNET_INSTALLED = join_path(PLEXNET_LOCAL, 'share', 'installed')
 PLEXNET_SOURCE = plexnetenv.PLEXNET_SOURCE
 PYTHON_SITE_PACKAGES = plexnetenv.PYTHON_SITE_PACKAGES
+ROLES_DIRECTORY = join_path(STARTUP_DIRECTORY, 'roles')
 THIRD_PARTY = plexnetenv.THIRD_PARTY
 THIRD_PARTY_PACKAGES_ROOT = join_path(THIRD_PARTY, 'distfiles')
 
@@ -153,6 +105,7 @@ source $PLEXNET_ROOT/environ/startup/plexnetenv.sh install
 """ % PLEXNET_ROOT
 
 CURRENT_DIRECTORY = os.getcwd()
+FIRST_RUN = not exists(join_path(PLEXNET_LOCAL, 'bin', 'python'))
 HOME = expanduser('~')
 LIB_EXTENSION = ['.so', '.dll'][os.name == 'nt']
 
@@ -257,22 +210,22 @@ def install_dot_file(file, force=False, directory=False):
     dest = join_path(HOME, *posix_split('.'+file))
     if directory:
         if (not isdir(dest)) or force:
-            print('Writing: %s' % dest)
+            print 'Writing: %s' % dest
             shutil.copytree(source, dest)
         else:
-            print('Already Exists: %s' % dest)
+            print 'Already Exists: %s' % dest
     else:
         if (not isfile(dest)) or force:
-            print('Writing: %s' % dest)
+            print 'Writing: %s' % dest
             shutil.copy(source, dest)
         else:
-            print('Already Exists: %s' % dest)
+            print 'Already Exists: %s' % dest
 
 def print_message(message, type=ACTION):
     """Pretty print the given ``message`` in nice colours."""
 
-    print(type + message + NORMAL)
-    print('')
+    print type + message + NORMAL
+    print ''
 
 def set_term_title(title):
     """Set the Terminal with the given title."""
@@ -389,7 +342,7 @@ def install_setuptools():
     try:
         import pkg_resources
     except:
-        SETUPTOOLS = 'setuptools-0.6c9'
+        SETUPTOOLS = 'setuptools-0.6c11'
         EGG_PATH = '%s-py2.6.egg' % SETUPTOOLS
         print_message("Installing %s" % EGG_PATH, ACTION)
         os.chdir(join_path(THIRD_PARTY, 'distfiles', 'setuptools'))
@@ -651,7 +604,7 @@ def uninstall_packages(uninstall, installed):
         os.remove(receipt_path)
         del installed[name]
 
-def install_packages(types=types):
+def install_packages(types=types, altered=False):
     """Handle the actual installation/uninstallation of appropriate packages."""
 
     if not exists(PLEXNET_INSTALLED):
@@ -820,6 +773,28 @@ def install_packages(types=types):
         if info['after_install']:
             info['after_install']()
 
+    return altered
+
+def setup_role(role):
+    """Setup the installation requirements for the given ``role``."""
+
+    role_info_file = open(join_path(ROLES_DIRECTORY, '%s.role' % role), 'rb')
+    for package in map(str.strip, role_info_file.readlines()):
+        if (not package) or package.startswith('#'):
+            continue
+        install_package(package)
+    role_info_file.close()
+
+# ------------------------------------------------------------------------------
+# install or update the "base" redpill installation if need be...
+# ------------------------------------------------------------------------------
+
+setup_role('base')
+
+if FIRST_RUN:
+    install_packages()
+    sys.exit(1)
+
 # ------------------------------------------------------------------------------
 # init
 # ------------------------------------------------------------------------------
@@ -828,11 +803,8 @@ def install_packages(types=types):
 
 if get_flag('init'):
 
-    if not sys.argv[1:]:
-        install_package('boost')
-    else:
-        for package in sys.argv[1:]:
-            install_package(package)
+    for role in sys.argv[1:]:
+        setup_role(role)
 
     install_packages()
 
@@ -952,15 +924,14 @@ if get_flag('startupfiles'): # @/@ generate startup tarballs/zipfiles
 
 if not os.environ.get('PLEXNET_INSTALLED', ''):
     if os.name == 'posix':
-        for i in xrange(1):
-            print
-            print_message(
-                "Add the following %i lines to %s !!"
-                % (len(BASH_MESSAGE.splitlines()),
-                   join_path(HOME, '.bash_profile')
-                   ), INSTRUCTION
-                )
-            print(BASH_MESSAGE)
+        print
+        print_message(
+            "Add the following %i lines to %s !!"
+            % (len(BASH_MESSAGE.splitlines()),
+               join_path(HOME, '.bash_profile')
+               ), INSTRUCTION
+            )
+        print BASH_MESSAGE
 
 # ------------------------------------------------------------------------------
 # emulate ``scons`` when not called from the enklosing direktory
@@ -999,3 +970,53 @@ if CURRENT_DIRECTORY != STARTUP_DIRECTORY:
         sys.exit()
 
 print __doc__ % locals()
+
+# _compile_tarball() {
+#     _uncompress_tarball
+#     CPPFLAGS="-I$PLEXNET_LOCAL/include" LDFLAGS="-L$PLEXNET_LOCAL/lib" ./configure --prefix=$PLEXNET_LOCAL $CONFIG_FLAGS || _exit_on_error
+#     CPPFLAGS="-I$PLEXNET_LOCAL/include" LDFLAGS="-L$PLEXNET_LOCAL/lib" make install || _exit_on_error
+#     _remove_directory
+# }
+
+# _remove_directory() {
+#     echo ${success} Successfully installed $TARGET ${normal}
+#     cd ..
+#     rm -rf $TNAME
+#     rm $TARBALL_FILENAME
+# }
+
+#     TARBALL_SUFFIX="gz"
+#     TARBALL_UNZIP="gunzip"
+
+#     if [ "$UNAME" == "Darwin" ]; then
+#         EXTRA_PY_ARGS="--enable-toolbox-glue --enable-framework=$PLEXNET_LOCAL/framework"
+#         BZIP2_MAKEFILE="Makefile-libbz2_dylib"
+#     else
+#         EXTRA_PY_ARGS=""
+#         BZIP2_MAKEFILE="Makefile-libbz2_so"
+#     fi
+
+#     _set_target "zlib" "1.2.3"
+#     CONFIG_FLAGS="--shared"
+#     _compile_tarball
+
+#     _set_target "libreadline" "5.2"
+#     CONFIG_FLAGS="--infodir=$PLEXNET_LOCAL/share/info"
+#     _compile_tarball
+
+#     _set_target "bzip2" "1.0.5"
+#     _uncompress_tarball
+#     make install PREFIX=$PLEXNET_LOCAL || _exit_on_error
+#     make clean
+#     make -f $BZIP2_MAKEFILE all PREFIX=$PLEXNET_LOCAL || _exit_on_error
+#     _remove_directory
+
+#     TARBALL_SUFFIX="bz2"
+#     TARBALL_UNZIP="bunzip2"
+
+#     _set_target "python" "2.6.4"
+#     CONFIG_FLAGS="--enable-ipv6 --enable-unicode=ucs2 $EXTRA_PY_ARGS"
+#     _compile_tarball
+
+#     cd $CURDIR
+
