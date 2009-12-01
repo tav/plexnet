@@ -45,6 +45,7 @@ from time import time
 from urllib import urlopen
 
 from gclient_utils import RemoveDirectory
+from lockfile import LockFile, LockError
 
 # ------------------------------------------------------------------------------
 # distutils klassifiers and dependensies
@@ -332,6 +333,16 @@ def do_action_in_directory(action, past_action, directory, function):
                 past_action, ' '.join(action.split()[1:]), directory
                 ),
             SUCCESS)
+
+# ------------------------------------------------------------------------------
+# try getting a lock to avoid concurrent redpill use
+# ------------------------------------------------------------------------------
+
+try:
+    LOCK = LockFile(join_path(STARTUP_DIRECTORY, 'redpill.lock'))
+except LockError:
+    print_message("Another redpill process is already running", ERROR)
+    sys.exit(1)
 
 # ------------------------------------------------------------------------------
 # egg dependencies
@@ -816,7 +827,7 @@ if get_flag('init'):
 
     install_packages()
 
-    # libxml2, libiconv, openssl/crypto, libexpat | curl, ncurses
+    # libxml2, libiconv, libexpat | curl, ncurses
 
     original_argv = sys.argv
 

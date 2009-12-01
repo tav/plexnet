@@ -1,10 +1,12 @@
 # specific directories
 
 environ/local
+environ/startup/redpill.lock
 source/client/iphone/Espra/build
 source/client/osx/Espra/build
 third_party/python/docutils/writers/s5_html
 third_party/python/gdata/Crypto
+third_party/generic/hg-go
 third_party/generic/pypy/demo
 third_party/generic/pypy/pypy/lang
 third_party/generic/pypy/pypy/_cache
