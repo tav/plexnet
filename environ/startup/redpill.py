@@ -86,6 +86,10 @@ DEPENDENCIES = [(isinstance(i, tuple) and i[0] or i) for i in DOWNLOAD_MAP]
 __version__ = '0.2'
 __additional__ = ''
 
+DISTFILES_SERVER_BASE = (
+    "http://cloud.github.com/downloads/tav/plexnet/distfile."
+    )
+
 DISTFILES_SERVER = (
     "http://cloud.github.com/downloads/tav/plexnet/distfile."
     "%(name)s-%(version)s.tar.bz2"
@@ -94,6 +98,7 @@ DISTFILES_SERVER = (
 STARTUP_DIRECTORY = plexnetenv.STARTUP_DIRECTORY
 PLEXNET_ROOT = plexnetenv.PLEXNET_ROOT
 PLEXNET_LOCAL = plexnetenv.PLEXNET_LOCAL
+PLEXNET_BIN = join_path(PLEXNET_LOCAL, 'bin')
 PLEXNET_INCLUDE = join_path(PLEXNET_LOCAL, 'include')
 PLEXNET_INSTALLED = join_path(PLEXNET_LOCAL, 'share', 'installed')
 PLEXNET_SOURCE = plexnetenv.PLEXNET_SOURCE
@@ -356,8 +361,12 @@ def install_setuptools():
     except:
         SETUPTOOLS = 'setuptools-0.6c11'
         EGG_PATH = '%s-py2.6.egg' % SETUPTOOLS
+        SETUPTOOLS_DIR = join_path(THIRD_PARTY, 'distfiles', 'setuptools')
         print_message("Installing %s" % EGG_PATH, ACTION)
-        os.chdir(join_path(THIRD_PARTY, 'distfiles', 'setuptools'))
+        os.chdir(SETUPTOOLS_DIR)
+        download_distfile(
+            join_path(SETUPTOOLS_DIR, EGG_PATH), DISTFILES_SERVER_BASE+EGG_PATH
+            )
         proc = Popen(
             'sh %s --script-dir=%s -O2' % (EGG_PATH, PLEXNET_BIN),
             shell=True
@@ -437,7 +446,7 @@ BUILTINS = {
     'LIB_EXTENSION': LIB_EXTENSION,
     'PARALLEL': PARALLEL,
 
-    'PLEXNET_BIN': join_path(PLEXNET_LOCAL, 'bin'),
+    'PLEXNET_BIN': PLEXNET_BIN,
     'PLEXNET_FRAMEWORK': join_path(PLEXNET_LOCAL, 'framework'),
     'PLEXNET_INCLUDE': PLEXNET_INCLUDE,
     'PLEXNET_LIB': join_path(PLEXNET_LOCAL, 'lib'),
@@ -555,7 +564,8 @@ def install_package(name, packages_root=THIRD_PARTY_PACKAGES_ROOT):
     PACKAGES[package_name] = {
         'latest': latest,
         'packages': packages,
-        'versions': versions
+        'versions': versions,
+        'type': local.get('type', 'default')
         }
 
     if 'deps' in packages:
@@ -826,6 +836,7 @@ if get_flag('init'):
         setup_role(role)
 
     install_packages()
+    install_setuptools()
 
     # libxml2, libiconv, libexpat | curl, ncurses
 
