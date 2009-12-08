@@ -23,6 +23,7 @@ third_party/generic/pypy/pypy/_cache
 # file patterns
 
 *.dylib
+*.egg
 *.la
 *.lo
 *.o
