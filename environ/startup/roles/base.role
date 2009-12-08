@@ -1,5 +1,7 @@
 bzip2
 libreadline
-python
 openssl
+pyev
+python
+redis
 zlib
