@@ -37,7 +37,7 @@ you:
 Git is also a `distributed version control system
 <http://en.wikipedia.org/wiki/Distributed_revision_control>`_ (DVCS) and allows
 for decentralised development without much hassle. Not only does this reflect
-the Plexnet ethos, but it paves the way for an eventual PlexSource system.
+the Espian ethos, but it paves the way for an eventual Ampify-based DVCS system.
 
 Git also outshines centralised version control system like `Subversion
 <http://subversion.tigris.org/>`_ in terms of performance. This is mainly due to
@@ -100,7 +100,7 @@ service `Gravatar <http://www.gravatar.com/>`_. And, finally, upload your SSH
 key to GitHub and you're all set to go!
 
 The next step is to install Git if you don't already have it. It is RECOMMENDED
-that you install version 1.6.3+ of Git as its user interface is much much
+that you install version 1.6.6+ of Git as its user interface is much much
 better:
 
 * http://git-scm.com/download
@@ -135,22 +135,23 @@ want to extend this file with something like the following:
         lp = log -p
         diffall = diff HEAD
         diffstaged = diff --staged
-        graph = log --oneline --graph
+        graph = log --date=\"short\" --format=\"%C(yellow)%h%Creset [%cN] %C(white)%ad%Creset %s\" --graph
         filelog = log --oneline --no-merges --
         unstage = reset HEAD
     [push]
         default = matching
     [core]
-        autocrlf = true
         webKitBranchBuild = true
-        plexnetBranchBuild = true
+    [ampify]
+        branch-build = true
 
 The ``[color]`` section provides colour output when you run various git commands
 which can be quite useful.
 
 The ``[alias]`` section allows you to alias shortcuts, e.g. with the above alias
 definition, you can now just run ``git graph`` instead of the full ``git log
---oneline --graph``. In combination with the Git `bash completion
+--date="short" --format="%C(yellow)%h%Creset [%cN] %C(white)%ad%Creset %s"
+--graph``. In combination with the Git `bash completion
 <http://www.simplicidade.org/notes/archives/2008/02/git_bash_comple.html>`_
 script, aliases will make life much easier for your fingers.
 
@@ -170,15 +171,17 @@ repositories! Gist also has a number of command line and editor interfaces:
 
 * `Vim :Gist support <http://github.com/mattn/gist-vim/tree/master>`_
 
-The ``core.autocrlf = true`` setting tells Git to convert newlines to the
+A ``core.autocrlf = true`` setting would tell Git to convert newlines to the
 system’s standard when checking out files, and to LF newlines when committing in
-changes.
+changes::
 
-And, finally, the ``core.webKitBranchBuild = true`` and
-``core.plexnetBranchBuild = true`` respectively tells the various WebKit and
-Plexnet build scripts to append the name of the git branch you are in to the
-build directory. This is especially useful so you don't clobber your previous
-branch's build when you switch branches.
+  git config core.autocrlf true
+
+And, finally, the ``core.webKitBranchBuild = true`` and ``ampify.branch-build =
+true`` respectively tells the various WebKit and Ampify build scripts to append
+the name of the git branch you are in to the build directory. This is especially
+useful so you don't clobber your previous branch's build when you switch
+branches.
 
 You can further configure a local Git repository using ``git config <param>
 <value>``, e.g.
@@ -201,10 +204,14 @@ Espian Repositories
 
 To simplify the development process, we are currently using centralised
 repositories which all core developers have write access to. The main
-repositories are:
+repository is:
 
-* http://github.com/tav/plexnet/
+* http://github.com/tav/ampify/
+
+And is supported by a few custom forked repositories:
+
 * http://github.com/tav/webkit/
+* http://github.com/tav/redis/
 
 If you would like write access, just ask `tav <http://tav.espians.com>`_. If
 you're not a core developer, you can simply fork the project. GitHub makes this
@@ -223,27 +230,27 @@ Cloning
 
 One usually starts off by cloning a Git repository. GitHub provides two
 different repository URIs -- one is read-only and the other provides read/write
-access. For example, if we take the Plexnet repository, the URIs are::
+access. For example, if we take the Ampify repository, the URIs are::
 
-  git://github.com/tav/plexnet.git    # read-only
-  git@github.com:tav/plexnet.git      # read/write
+  git://github.com/tav/ampify.git    # read-only
+  git@github.com:tav/ampify.git      # read/write
 
 So, if you had read/write access, you'd clone the repository by running::
 
-  $ git clone git@github.com:tav/plexnet.git
+  $ git clone git@github.com:tav/ampify.git
 
-This will create a ``plexnet`` directory in whatever directory you executed the
+This will create a ``ampify`` directory in whatever directory you executed the
 command in and grab a copy of the repository for you, e.g.
 
 ::
 
-  Initialized empty Git repository in /Users/tav/plexnet/.git/
+  Initialized empty Git repository in /Users/tav/ampify/.git/
   remote: Counting objects: 7778, done.
   remote: Compressing objects: 100% (5837/5837), done.
   Receiving objects:   7% (545/7778), 1.47 MiB | 366 KiB/s     
 
 Once the command has finished running, you'll find that there's a fresh
-"checkout" of the repository inside the plexnet directory. You'll also find a
+"checkout" of the repository inside the ampify directory. You'll also find a
 special ``.git`` directory which actually contains the repository (config,
 objects and metadata).
 
@@ -259,7 +266,7 @@ Of special note is the ``.git/config`` file which will look something like:
         ignorecase = true
     [remote "origin"]
         fetch = +refs/heads/*:refs/remotes/origin/*
-        url = git@github.com:tav/plexnet.git
+        url = git@github.com:tav/ampify.git
     [branch "master"]
         remote = origin
         merge = refs/heads/master
@@ -797,7 +804,7 @@ Tags are similar and should be used to denote public-facing versions or
 releases. You can create a annotated tag (i.e. a tag with a message/note) using
 ``git tag -a <new-tag-name> <ref>``::
 
-  $ git tag -a plexnet-0.1.3.2 -m "Alpha Release 0.1.3.2 of the Plexnet."
+  $ git tag -a ampify-0.1.3.2 -m "Alpha Release 0.1.3.2 of the Ampify."
 
 Or perhaps::
 
@@ -807,19 +814,19 @@ And you can list the various tags using::
 
   $ git tag -l
   milestone-base-layout
-  plexnet-0.1.3.2
+  ampify-0.1.3.2
 
 Or specific tags matching a certain pattern, e.g.
 
 ::
 
-  $ git tag -l plexnet*
-  plexnet-0.1.3.2
+  $ git tag -l ampify*
+  ampify-0.1.3.2
 
 And you can "switch" to a tag just like with remote branches, using ``git
 checkout``::
 
-  $ git checkout plexnet-0.1.3.2
+  $ git checkout ampify-0.1.3.2
 
 ----
 Push
@@ -841,7 +848,7 @@ branch since your last push, e.g.
   Compressing objects: 100% (5/5), done.
   Writing objects: 100% (5/5), 5.49 KiB, done.
   Total 5 (delta 3), reused 0 (delta 0)
-  To git@github.com:tav/plexnet.git
+  To git@github.com:tav/ampify.git
      ba7f069..912ce7a  master -> master
 
 For *new* branches you MUST use the above form for the very first time you push
@@ -874,7 +881,7 @@ irc://irc.frenode.net) about it and then wait... In other times you might see an
 error like::
 
   ! [rejected] master -> master (non-fast forward)
-  error: failed to push some refs to 'git@github.com:tav/plexnet.git'
+  error: failed to push some refs to 'git@github.com:tav/ampify.git'
 
 There are a number of possible causes for this. The first is simply that someone
 else has made a commit since you last updated your local repository with changes
@@ -1317,33 +1324,33 @@ calls "submodules". This is similar to ``svn:externals`` except Git submodules
 can only point to a *specific* commit identifier.
 
 References to submodules are stored in a special ``.gitmodules`` file at the
-root of the repository. For example, our plexnet repository has a reference to
-our webkit repository::
+root of the repository. For example, our Ampify repository has a reference to
+our Redis repository::
 
-  $ cat plexnet/.gitmodules
-  [submodule "third_party/generic/webkit"]
-      path = third_party/generic/webkit
-      url = git://github.com/tav/webkit.git
+  $ cat ampify/.gitmodules
+  [submodule "third_party/redis"]
+      path = third_party/redis
+      url = git://github.com/tav/redis.git
 
-The specified path ``third_party/generic/webkit`` will be an empty
-directory until you initialise it using::
+The specified path ``third_party/redis`` will be an empty directory until you
+initialise it using::
 
   $ git submodule init
 
 All this does is update your ``.git/config`` file with the info it finds in the
 .gitmodules file::
 
-  $ tail -2 plexnet/.git/config
-  [submodule "third_party/generic/webkit"]
-      url = git://github.com/tav/webkit.git
+  $ tail -2 ampify/.git/config
+  [submodule "third_party/redis"]
+      url = git://github.com/tav/redis.git
 
 You can then modify this file to use a different repository url. For example if
-you had read/write access to the webkit repository you can change it to:
+you had read/write access to the Redis repository you can change it to:
 
   .. syntax:: ini
 
-    [submodule "third_party/generic/webkit"]
-        url = git@github.com:tav/webkit.git
+    [submodule "third_party/redis"]
+        url = git@github.com:tav/redis.git
 
 And then to clone the missing submodules and checkout the commit specified in
 the index of the containing repository, do::
@@ -1354,10 +1361,9 @@ You can combine both of the above commands into one using::
 
   $ git submodule update --init
 
-You'll now see a full repository checked out under
-``third_party/generic/webkit`` with its own .git subdirectory and everything.
-You can now make changes to this repository just like you would in any normal
-Git repository.
+You'll now see a full repository checked out under ``third_party/redis`` with
+its own .git subdirectory and everything. You can now make changes to this
+repository just like you would in any normal Git repository.
 
 You can execute commands on all of the submodules of a repository using::
 
@@ -1376,15 +1382,15 @@ If you want to update the commit reference to an existing submodule, then simply
 update the submodule repository to the state you want to refer to and then do a
 ``git add``::
 
-  $ git add third_party/generic/webkit
+  $ git add third_party/redis
 
 ::
 
   $ git-diff --staged
-  diff --git a/third_party/generic/webkit b/third_party/generic/webkit
+  diff --git a/third_party/redis b/third_party/redis
   index cb03eaa..d262952 160000
-  --- a/third_party/generic/webkit
-  +++ b/third_party/generic/webkit
+  --- a/third_party/redis
+  +++ b/third_party/redis
   @@ -1 +1 @@
   -Subproject commit cb03eaa72b885500cde35952de93bbf1b831af3f
   +Subproject commit d2629522d30b737c0efa5ddcc445339513f6ce33
@@ -1393,13 +1399,13 @@ Note: DO NOT put a trailing slash after the submodule name, e.g.
 
 ::
 
-  $ git add third_party/generic/webkit/
+  $ git add third_party/redis/
 
 Git will then think that you want to delete the submodule and add all the files
 in the directory instead! Leave out any trailing slashes and everything will be
 fine::
 
-  $ git add third_party/generic/webkit
+  $ git add third_party/redis
 
 Also, make sure to have PUSHED ANY COMMITS you made in the submodule repository
 before updating the containing repository's references. Otherwise you'd be
